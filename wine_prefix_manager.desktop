@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Wine Prefix Manager
+Comment=Manage Wine prefixes on Linux
+Exec=/home/jon/Desktop/wine_prefix_manager/build/linux/x64/release/bundle/wine_prefix_manager
+Icon=/home/jon/Desktop/wine_prefix_manager/build/linux/x64/release/bundle/data/flutter_assets/assets/icon.png
+Terminal=false
+Categories=Utility;Development;

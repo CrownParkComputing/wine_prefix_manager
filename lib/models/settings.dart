@@ -1,0 +1,112 @@
+import 'dart:convert';
+import 'dart:io';
+import 'package:path/path.dart' as path;
+
+enum CoverSize {
+  small,
+  medium,
+  large,
+}
+
+class Settings {
+  final String prefixDirectory;
+  final String defaultPrefixFolder;
+  final String igdbClientId;
+  final String igdbClientSecret;
+  final String? igdbAccessToken;
+  final DateTime? igdbTokenExpiry;
+  final CoverSize coverSize;
+  final List<String> categories;
+
+  Settings({
+    required this.prefixDirectory,
+    required this.defaultPrefixFolder,
+    required this.igdbClientId,
+    required this.igdbClientSecret,
+    this.igdbAccessToken,
+    this.igdbTokenExpiry,
+    this.coverSize = CoverSize.medium,
+    required this.categories,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'prefixDirectory': prefixDirectory,
+    'defaultPrefixFolder': defaultPrefixFolder,
+    'igdbClientId': igdbClientId,
+    'igdbClientSecret': igdbClientSecret,
+    'igdbAccessToken': igdbAccessToken,
+    'igdbTokenExpiry': igdbTokenExpiry?.toIso8601String(),
+    'coverSize': coverSize.toString(),
+    'categories': categories,
+  };
+
+  factory Settings.fromJson(Map<String, dynamic> json) => Settings(
+    prefixDirectory: json['prefixDirectory'] ?? '',
+    defaultPrefixFolder: json['defaultPrefixFolder'] ?? '',
+    igdbClientId: json['igdbClientId'] ?? '',
+    igdbClientSecret: json['igdbClientSecret'] ?? '',
+    igdbAccessToken: json['igdbAccessToken'],
+    igdbTokenExpiry: json['igdbTokenExpiry'] != null 
+      ? DateTime.parse(json['igdbTokenExpiry'])
+      : null,
+    coverSize: json['coverSize'] != null 
+      ? CoverSize.values.firstWhere(
+          (e) => e.toString() == json['coverSize'],
+          orElse: () => CoverSize.medium,
+        )
+      : CoverSize.medium,
+    categories: (json['categories'] as List<dynamic>?)?.cast<String>() ?? 
+               ['Favorites', 'Currently Playing', 'Completed', 'Backlog'],
+  );
+}
+
+class AppSettings {
+  static Future<Settings> load() async {
+    try {
+      final homeDir = Platform.environment['HOME']!;
+      final file = File('$homeDir/.wine_prefix_manager_settings.json');
+      if (await file.exists()) {
+        final content = await file.readAsString();
+        return Settings.fromJson(jsonDecode(content));
+      }
+    } catch (e) {
+      print('Error loading settings: $e');
+    }
+    
+    // Return default settings
+    final homeDir = Platform.environment['HOME']!;
+    return Settings(
+      prefixDirectory: '$homeDir/.wine_prefixes',
+      defaultPrefixFolder: '',
+      igdbClientId: '',
+      igdbClientSecret: '',
+      categories: ['Favorites', 'Currently Playing', 'Completed', 'Backlog'],
+    );
+  }
+
+  static Future<void> save(Settings settings) async {
+    try {
+      final homeDir = Platform.environment['HOME']!;
+      final file = File('$homeDir/.wine_prefix_manager_settings.json');
+      await file.writeAsString(jsonEncode(settings.toJson()));
+    } catch (e) {
+      print('Error saving settings: $e');
+    }
+  }
+
+  static Future<Settings> updateToken(Settings settings, String token, Duration expiry) async {
+    final updatedSettings = Settings(
+      prefixDirectory: settings.prefixDirectory,
+      defaultPrefixFolder: settings.defaultPrefixFolder,
+      igdbClientId: settings.igdbClientId,
+      igdbClientSecret: settings.igdbClientSecret,
+      igdbAccessToken: token,
+      igdbTokenExpiry: DateTime.now().add(expiry),
+      coverSize: settings.coverSize,
+      categories: settings.categories,
+    );
+    
+    await save(updatedSettings);
+    return updatedSettings;
+  }
+}

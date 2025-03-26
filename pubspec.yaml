@@ -1,0 +1,29 @@
+name: wine_prefix_manager
+description: A Wine Prefix Manager for Linux
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # Cross-platform and Linux dependencies only
+  shared_preferences: ^2.2.0
+  provider: ^6.0.0
+  path: ^1.8.0
+  http: ^0.13.4
+  dio: ^5.0.0
+  process_run: ^0.13.0
+  file_picker: ^5.0.0
+  url_launcher: ^6.1.6
+  # ...any other dependencies you need...
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.0
+
+flutter:
+  uses-material-design: true
