@@ -5,6 +5,13 @@ A Flutter application for managing Wine/Proton prefixes on Linux.
 ## Features
 
 *   Scan for existing Wine/Proton prefixes in a specified directory.
+
+## Screenshots
+
+![Main Interface](Screenshots/Screenshot_20250327_181806.png)
+![Game Details](Screenshots/Screenshot_20250327_181821.png)  
+![Prefix Management](Screenshots/Screenshot_20250327_181841.png)
+
 *   Create new Wine/Proton prefixes using downloaded builds (e.g., GE-Proton, Wine-GE).
 *   Add Windows executables (`.exe`) to prefixes.
 *   Identify games using IGDB integration (requires API credentials).
@@ -17,12 +24,35 @@ A Flutter application for managing Wine/Proton prefixes on Linux.
 
 ## Getting Started
 
-### Prerequisites
+### Download and Run (Standalone Executable)
 
+Pre-built AppImage releases are available on the [Releases page](https://github.com/yourusername/wine_prefix_manager/releases).
+
+1. Download the latest `.AppImage` file
+2. Make it executable:
+   ```bash
+   chmod +x Wine_Prefix_Manager-*.AppImage
+   ```
+3. Run it:
+   ```bash
+   ./Wine_Prefix_Manager-*.AppImage
+   ```
+
+### Prerequisites (For Building from Source)
+
+#### Core Requirements
 *   Flutter SDK installed (Linux desktop support enabled: `flutter config --enable-linux-desktop`)
-*   `zenity` (optional, used as a fallback file picker)
+*   Wine or Proton (GE-Proton recommended) installed on your system
+*   `git` (for cloning and version control)
+
+#### Optional Tools
+*   `zenity` (used as a fallback file picker)
 *   `zip` (for creating release archives via the build script)
-*   `git` (for the Git release option in the build script)
+
+#### Recommended
+*   Vulkan drivers installed for best gaming performance
+*   GPU drivers properly configured for your hardware
+*   At least 20GB free disk space for game installations
 
 ### Building and Running
 
