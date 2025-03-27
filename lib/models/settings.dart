@@ -16,6 +16,7 @@ class Settings {
   final DateTime? igdbTokenExpiry;
   final CoverSize coverSize;
   final List<String> categories;
+  final String? gameLibraryPath; // Path to save the prefix/game data JSON
 
   Settings({
     required this.prefixDirectory,
@@ -25,6 +26,7 @@ class Settings {
     this.igdbTokenExpiry,
     this.coverSize = CoverSize.medium,
     required this.categories,
+    this.gameLibraryPath, // Add to constructor
   });
 
   Map<String, dynamic> toJson() => {
@@ -35,6 +37,7 @@ class Settings {
     'igdbTokenExpiry': igdbTokenExpiry?.toIso8601String(),
     'coverSize': coverSize.toString(),
     'categories': categories,
+    'gameLibraryPath': gameLibraryPath, // Add to toJson
   };
 
   factory Settings.fromJson(Map<String, dynamic> json) => Settings(
@@ -42,17 +45,18 @@ class Settings {
     igdbClientId: json['igdbClientId'] ?? '',
     igdbClientSecret: json['igdbClientSecret'] ?? '',
     igdbAccessToken: json['igdbAccessToken'],
-    igdbTokenExpiry: json['igdbTokenExpiry'] != null 
+    igdbTokenExpiry: json['igdbTokenExpiry'] != null
       ? DateTime.parse(json['igdbTokenExpiry'])
       : null,
-    coverSize: json['coverSize'] != null 
+    coverSize: json['coverSize'] != null
       ? CoverSize.values.firstWhere(
           (e) => e.toString() == json['coverSize'],
           orElse: () => CoverSize.medium,
         )
       : CoverSize.medium,
-    categories: (json['categories'] as List<dynamic>?)?.cast<String>() ?? 
+    categories: (json['categories'] as List<dynamic>?)?.cast<String>() ??
                ['Favorites', 'Currently Playing', 'Completed', 'Backlog'],
+    gameLibraryPath: json['gameLibraryPath'], // Add to fromJson
   );
 }
 
@@ -68,14 +72,15 @@ class AppSettings {
     } catch (e) {
       print('Error loading settings: $e');
     }
-    
+
     // Return default settings
     final homeDir = Platform.environment['HOME']!;
     return Settings(
-      prefixDirectory: '$homeDir/.wine_prefixes',
+      prefixDirectory: path.join(homeDir, '.wine_prefixes'), // Use path.join
       igdbClientId: '',
       igdbClientSecret: '',
       categories: ['Favorites', 'Currently Playing', 'Completed', 'Backlog'],
+      gameLibraryPath: null, // Default is null
     );
   }
 
@@ -98,8 +103,9 @@ class AppSettings {
       igdbTokenExpiry: DateTime.now().add(expiry),
       coverSize: settings.coverSize,
       categories: settings.categories,
+      gameLibraryPath: settings.gameLibraryPath, // Pass through gameLibraryPath
     );
-    
+
     await save(updatedSettings);
     return updatedSettings;
   }

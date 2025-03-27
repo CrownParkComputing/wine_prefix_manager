@@ -1,0 +1,53 @@
+version: 1.0.1
+
+AppDir:
+  path: ./AppDir
+
+  app_info:
+    id: com.example.wine_prefix_manager # Use a proper ID
+    name: Wine Prefix Manager
+    icon: wine_prefix_manager # Icon name without extension
+    version: 1.0.1
+    exec: usr/bin/wine_prefix_manager
+    exec_args: $@
+
+  apt:
+    arch: amd64
+    sources:
+      - sourceline: deb http://archive.ubuntu.com/ubuntu/ focal main restricted universe multiverse
+        key_url: 'http://keyserver.ubuntu.com/pks/lookup?op=get&search=0x3b4fe6acc0b21f32'
+      - sourceline: deb http://archive.ubuntu.com/ubuntu/ focal-updates main restricted universe multiverse
+        key_url: 'http://keyserver.ubuntu.com/pks/lookup?op=get&search=0x3b4fe6acc0b21f32'
+      - sourceline: deb http://archive.ubuntu.com/ubuntu/ focal-security main restricted universe multiverse
+        key_url: 'http://keyserver.ubuntu.com/pks/lookup?op=get&search=0x3b4fe6acc0b21f32'
+    include:
+      # Common dependencies for Flutter Linux apps
+      - libc6
+      - libgcc-s1
+      - libstdc++6
+      - libglib2.0-0
+      - libgtk-3-0
+      - libnotify4 # If using notifications
+      # Add other specific dependencies if needed (e.g., libssl, specific font libs)
+
+  files:
+    # Copy the entire release bundle
+    - source: ./build/linux/x64/release/bundle/
+      destination: /usr/bin/
+    # Copy the desktop file (adjust source path if needed)
+    - source: ./wine_prefix_manager.desktop
+      destination: /usr/share/applications/
+    # Copy the icon (adjust source path and destination name if needed)
+    # Assuming icon is in assets and copied during build
+    - source: ./build/linux/x64/release/bundle/data/flutter_assets/assets/icon.png
+      destination: /usr/share/icons/hicolor/512x512/apps/wine_prefix_manager.png
+
+  runtime:
+    env:
+      # Necessary for some Flutter apps if using specific plugins
+      # Example: GST_PLUGIN_SYSTEM_PATH_1_0: ${APPDIR}/usr/lib/x86_64-linux-gnu/gstreamer-1.0
+
+AppImage:
+  arch: x86_64
+  update-information: None # Or configure updates if desired
+  sign-key: None # Or configure signing if desired

@@ -1,3 +1,4 @@
+import 'dart:io'; // Import for File class
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
 import '../models/prefix_models.dart';
@@ -22,14 +23,20 @@ class GameCard extends StatelessWidget {
     return Stack(
       fit: StackFit.expand,
       children: [
-        // Cover image
-        game.exe.coverUrl != null
-            ? Image.network(
-                game.exe.coverUrl!,
+        // Cover image - Prioritize local file
+        (game.exe.localCoverPath != null && game.exe.localCoverPath!.isNotEmpty)
+            ? Image.file(
+                File(game.exe.localCoverPath!),
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => _buildFallbackCover(),
+                errorBuilder: (_, __, ___) => _buildFallbackCover(), // Fallback on file error
               )
-            : _buildFallbackCover(),
+            : (game.exe.coverUrl != null && game.exe.coverUrl!.isNotEmpty)
+                ? Image.network(
+                    game.exe.coverUrl!,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => _buildFallbackCover(), // Fallback on network error
+                  )
+                : _buildFallbackCover(), // Ultimate fallback
         
         // Bottom gradient for better text visibility
         Positioned(

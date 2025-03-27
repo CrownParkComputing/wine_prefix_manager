@@ -1,3 +1,4 @@
+import 'dart:io'; // Import for File
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/prefix_models.dart'; // Import only from prefix_models.dart
@@ -267,26 +268,43 @@ class _GameDetailsDialogState extends State<GameDetailsDialog> {
               height: 220,
               child: PageView.builder(
                 controller: _screenshotController,
-                itemCount: widget.game.exe.screenshotUrls.length,
+                // Use local paths if available, otherwise fallback to URLs
+                itemCount: widget.game.exe.localScreenshotPaths.isNotEmpty
+                           ? widget.game.exe.localScreenshotPaths.length
+                           : widget.game.exe.screenshotUrls.length,
                 onPageChanged: (index) {
                   setState(() {
                     _currentScreenshotIndex = index;
                   });
                 },
                 itemBuilder: (context, index) {
+                  final bool useLocal = widget.game.exe.localScreenshotPaths.isNotEmpty && index < widget.game.exe.localScreenshotPaths.length;
+                  final String imagePathOrUrl = useLocal
+                                                ? widget.game.exe.localScreenshotPaths[index]
+                                                : (index < widget.game.exe.screenshotUrls.length ? widget.game.exe.screenshotUrls[index] : ''); // Fallback URL
+
+                  if (imagePathOrUrl.isEmpty) {
+                    // Handle case where index might be out of bounds for URLs if local paths were expected but missing
+                    return _buildErrorPlaceholder();
+                  }
+
                   return GestureDetector(
-                    onTap: () => _showFullScreenImage(widget.game.exe.screenshotUrls[index]),
+                    // Pass both local path and URL to fullscreen view if needed, or decide priority there
+                    onTap: () => _showFullScreenImage(imagePathOrUrl, isLocal: useLocal),
                     child: Card(
                       margin: const EdgeInsets.symmetric(horizontal: 4.0),
                       clipBehavior: Clip.antiAlias,
-                      child: Image.network(
-                        widget.game.exe.screenshotUrls[index],
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Container(
-                          color: Colors.grey.shade300,
-                          child: const Center(child: Icon(Icons.broken_image, size: 48)),
-                        ),
-                      ),
+                      child: useLocal
+                          ? Image.file( // Use Image.file for local paths
+                              File(imagePathOrUrl),
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => _buildErrorPlaceholder(),
+                            )
+                          : Image.network( // Use Image.network for URLs
+                              imagePathOrUrl,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => _buildErrorPlaceholder(),
+                            ),
                     ),
                   );
                 },
@@ -348,7 +366,10 @@ class _GameDetailsDialogState extends State<GameDetailsDialog> {
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: List.generate(
-            widget.game.exe.screenshotUrls.length,
+            // Use the same logic for itemCount as the PageView
+            widget.game.exe.localScreenshotPaths.isNotEmpty
+               ? widget.game.exe.localScreenshotPaths.length
+               : widget.game.exe.screenshotUrls.length,
             (index) => Container(
               width: 8,
               height: 8,
@@ -402,7 +423,15 @@ class _GameDetailsDialogState extends State<GameDetailsDialog> {
     }
   }
 
-  void _showFullScreenImage(String imageUrl) {
+  // Add placeholder method
+  Widget _buildErrorPlaceholder() {
+    return Container(
+      color: Colors.grey.shade300,
+      child: const Center(child: Icon(Icons.broken_image, size: 48)),
+    );
+  }
+ 
+  void _showFullScreenImage(String pathOrUrl, {bool isLocal = false}) { // Updated signature
     showDialog(
       context: context,
       builder: (context) => Dialog(
@@ -412,13 +441,21 @@ class _GameDetailsDialogState extends State<GameDetailsDialog> {
           fit: StackFit.expand,
           children: [
             InteractiveViewer(
-              child: Image.network(
-                imageUrl,
-                fit: BoxFit.contain,
-                errorBuilder: (context, error, stackTrace) {
-                  return const Center(child: Icon(Icons.broken_image, size: 64));
-                },
-              ),
+              child: isLocal // Use conditional loading
+                  ? Image.file(
+                      File(pathOrUrl),
+                      fit: BoxFit.contain,
+                      errorBuilder: (context, error, stackTrace) {
+                        return const Center(child: Icon(Icons.broken_image, size: 64, color: Colors.white70));
+                      },
+                    )
+                  : Image.network(
+                      pathOrUrl,
+                      fit: BoxFit.contain,
+                      errorBuilder: (context, error, stackTrace) {
+                        return const Center(child: Icon(Icons.broken_image, size: 64, color: Colors.white70));
+                      },
+                    ),
             ),
             Positioned(
               top: 10,

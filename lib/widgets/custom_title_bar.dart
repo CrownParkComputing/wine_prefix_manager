@@ -3,11 +3,13 @@ import 'package:window_manager/window_manager.dart';
 
 class CustomTitleBar extends StatelessWidget implements PreferredSizeWidget {
   final String title;
+  final bool isConnected; // Add connectivity status
   final Color? backgroundColor; // Optional background color
-
+ 
   const CustomTitleBar({
     super.key,
     required this.title,
+    required this.isConnected, // Make it required
     this.backgroundColor,
   });
 
@@ -34,6 +36,15 @@ class CustomTitleBar extends StatelessWidget implements PreferredSizeWidget {
                 title,
                 style: theme.textTheme.titleMedium?.copyWith(color: iconColor),
                 overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            // Connectivity Indicator
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8.0),
+              child: Icon(
+                isConnected ? Icons.wifi : Icons.wifi_off,
+                color: isConnected ? iconColor : Colors.orangeAccent, // Different color when offline
+                size: 18, // Smaller icon size
               ),
             ),
             // Window Control Buttons

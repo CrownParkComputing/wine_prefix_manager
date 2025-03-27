@@ -5,41 +5,107 @@
 *.swp
 .DS_Store
 .atom/
-.build/
 .buildlog/
 .history
 .svn/
-.swiftpm/
-migrate_working_dir/
 
-# IntelliJ related
-*.iml
-*.ipr
-*.iws
-.idea/
-
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control, so this line
-# is commented out by default.
-#.vscode/
-
-# Flutter/Dart/Pub related
-**/doc/api/
-**/ios/Flutter/.last_build_id
+# Flutter/Dart
 .dart_tool/
 .flutter-plugins
 .flutter-plugins-dependencies
+.packages
 .pub-cache/
 .pub/
 /build/
+/ios/Pods/
+/ios/.symlinks/
+/ios/Flutter/App.framework
+/ios/Flutter/Flutter.framework
+/ios/Flutter/Generated.xcconfig
+/ios/Flutter/flutter_export_environment.sh
+/ios/Runner/GeneratedPluginRegistrant.*
+/ios/Runner.xcworkspace/xcshareddata/
+/ios/Runner.xcworkspace/xcuserdata/
+/ios/Flutter/ephemeral/
+/ios/Flutter/app.flx
 
-# Symbolication related
-app.*.symbols
+# Android
+/android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java
+/android/key.properties
+/android/local.properties
+/android/.gradle/
+/android/gradle/wrapper/gradle-wrapper.jar
+/android/gradlew
+/android/gradlew.bat
+/android/app/build/
+/android/build/
 
-# Obfuscation related
-app.*.map.json
+# Linux
+/linux/flutter/ephemeral/
+/linux/flutter/generated_plugin_registrant.cc
+/linux/flutter/generated_plugin_registrant.h
+/linux/flutter/generated_plugins.cmake
+/linux/build/
 
-# Android Studio will place build artifacts here
-/android/app/debug
-/android/app/profile
-/android/app/release
+# macOS
+/macos/Flutter/ephemeral/
+/macos/Flutter/GeneratedPluginRegistrant.swift
+/macos/Flutter/GeneratedPlugins.xcconfig
+/macos/Pods/
+/macos/.symlinks/
+/macos/Runner.xcworkspace/xcshareddata/
+/macos/Runner.xcworkspace/xcuserdata/
+
+# Windows
+/windows/flutter/ephemeral/
+/windows/flutter/generated_plugin_registrant.cc
+/windows/flutter/generated_plugin_registrant.h
+/windows/flutter/generated_plugins.cmake
+/windows/runner/Debug/
+/windows/runner/Release/
+/windows/runner/Profile/
+/windows/runner/GeneratedPluginsSuperfluousFile.txt
+/windows/runner/flutter_build.bat
+/windows/runner/INSTALL.vcxproj.filters
+/windows/runner/ALL_BUILD.vcxproj.filters
+/windows/runner/flutter_assemble.vcxproj.filters
+/windows/runner/runner.vcxproj.filters
+/windows/runner/flutter_wrapper_app.vcxproj.filters
+/windows/runner/flutter_wrapper_plugin.vcxproj.filters
+/windows/runner/INSTALL.vcxproj
+/windows/runner/ALL_BUILD.vcxproj
+/windows/runner/flutter_assemble.vcxproj
+/windows/runner/flutter_wrapper_app.vcxproj
+/windows/runner/flutter_wrapper_plugin.vcxproj
+/windows/runner/runner.vcxproj
+/windows/runner/flutter_build.generated.props
+/windows/runner/vs_version.cmake.in
+/windows/runner/CMakeLists.txt.user
+/windows/runner/.vs/
+/windows/runner/CMakeFiles/
+/windows/runner/cmake_install.cmake
+/windows/runner/CMakeCache.txt
+/windows/runner/Project.sln
+/windows/runner/Project.vcxproj
+/windows/runner/Project.vcxproj.filters
+/windows/runner/Project.vcxproj.user
+/windows/runner/INSTALL.vcxproj
+/windows/runner/INSTALL.vcxproj.filters
+/windows/runner/packages.config
+/windows/runner/packages.lock.json
+
+# VS Code
+.vscode/
+
+# Application specific
+*.tar.gz
+*.zip
+*.AppImage
+proton_builds/
+wine_builds/
+*.json # User settings/data files
+*.db
+*.sqlite
+*.sqlite3
+*.log
+*.lock

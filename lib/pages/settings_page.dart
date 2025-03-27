@@ -1,8 +1,11 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:file_picker/file_picker.dart'; // Import file_picker
+import 'package:path/path.dart' as path; // Import path package
 import '../models/settings.dart';
 import '../models/wine_build.dart';
+import '../services/cover_art_service.dart'; // Import CoverArtService
 import '../theme/theme_provider.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -19,9 +22,11 @@ class _SettingsPageState extends State<SettingsPage> {
   late TextEditingController _prefixDirController;
   late TextEditingController _igdbClientIdController;
   late TextEditingController _igdbClientSecretController;
+  late TextEditingController _gameLibraryPathController; // Controller for game library path
   Settings? _settings;
   bool _isLoading = true;
   CoverSize _selectedCoverSize = CoverSize.medium;
+  String _imageCachePath = 'Loading...'; // State variable for cache path
 
   @override
   void initState() {
@@ -29,6 +34,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _prefixDirController = TextEditingController();
     _igdbClientIdController = TextEditingController();
     _igdbClientSecretController = TextEditingController();
+    _gameLibraryPathController = TextEditingController(); // Initialize controller
     _loadSettings();
   }
 
@@ -37,6 +43,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _prefixDirController.dispose();
     _igdbClientIdController.dispose();
     _igdbClientSecretController.dispose();
+    _gameLibraryPathController.dispose(); // Dispose controller
     super.dispose();
   }
 
@@ -46,6 +53,13 @@ class _SettingsPageState extends State<SettingsPage> {
     });
 
     final settings = await AppSettings.load();
+    // Fetch cache path
+    String cachePath = 'Error loading path';
+    try {
+      cachePath = await CoverArtService().getImageCacheDirectoryPath();
+    } catch (e) {
+      print("Error getting image cache path: $e");
+    }
 
     setState(() {
       _settings = settings;
@@ -53,6 +67,8 @@ class _SettingsPageState extends State<SettingsPage> {
       _igdbClientIdController.text = settings.igdbClientId;
       _igdbClientSecretController.text = settings.igdbClientSecret;
       _selectedCoverSize = settings.coverSize;
+      _gameLibraryPathController.text = settings.gameLibraryPath ?? ''; // Set text, default to empty
+      _imageCachePath = cachePath; // Set the path state
       _isLoading = false;
     });
   }
@@ -60,13 +76,16 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _saveSettings() async {
     if (_formKey.currentState!.validate()) {
       final settings = Settings(
-        prefixDirectory: _prefixDirController.text,
-        igdbClientId: _igdbClientIdController.text,
-        igdbClientSecret: _igdbClientSecretController.text,
+        prefixDirectory: _prefixDirController.text.trim(),
+        igdbClientId: _igdbClientIdController.text.trim(),
+        igdbClientSecret: _igdbClientSecretController.text.trim(),
         igdbAccessToken: _settings?.igdbAccessToken,
         igdbTokenExpiry: _settings?.igdbTokenExpiry,
         coverSize: _selectedCoverSize, // Save selected cover size
         categories: _settings!.categories,
+        gameLibraryPath: _gameLibraryPathController.text.trim().isEmpty
+            ? null // Store null if empty to use default
+            : _gameLibraryPathController.text.trim(),
       );
 
       await AppSettings.save(settings);
@@ -81,9 +100,43 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
+  // Function to pick directory for prefix directory
+  Future<void> _pickPrefixDirectory() async {
+    String? selectedDirectory = await FilePicker.platform.getDirectoryPath(
+      dialogTitle: 'Select Prefix Directory',
+    );
+
+    if (selectedDirectory != null) {
+      setState(() {
+        _prefixDirController.text = selectedDirectory;
+      });
+    }
+  }
+
+  // Function to pick file path for game library
+  Future<void> _pickGameLibraryPath() async {
+    String? outputFile = await FilePicker.platform.saveFile(
+      dialogTitle: 'Select Game Library File Location',
+      fileName: '.wine_prefix_manager.json', // Default filename
+      // allowedExtensions: ['json'], // Optional: Restrict to json
+      // lockParentWindow: true, // Optional: Modal behavior
+    );
+
+    if (outputFile != null) {
+      // Ensure the file has a .json extension if user didn't provide one
+      if (!outputFile.toLowerCase().endsWith('.json')) {
+        outputFile += '.json';
+      }
+      setState(() {
+        _gameLibraryPathController.text = outputFile!; // Add null assertion operator !
+      });
+    }
+  }
+
+
   Widget _buildCategoryManagement() {
     if (_settings == null) return const SizedBox.shrink();
-    
+
     return Card(
       margin: const EdgeInsets.all(16.0),
       child: Padding(
@@ -105,9 +158,9 @@ class _SettingsPageState extends State<SettingsPage> {
                     label: Text(category),
                     deleteIcon: const Icon(Icons.close, size: 18),
                     onDeleted: () {
-                      final updatedCategories = 
+                      final updatedCategories =
                           List<String>.from(_settings!.categories)..remove(category);
-                      
+
                       setState(() {
                         _settings = Settings(
                           prefixDirectory: _settings!.prefixDirectory,
@@ -117,9 +170,10 @@ class _SettingsPageState extends State<SettingsPage> {
                           igdbTokenExpiry: _settings!.igdbTokenExpiry,
                           coverSize: _settings!.coverSize,
                           categories: updatedCategories,
+                          gameLibraryPath: _settings!.gameLibraryPath, // Keep existing path
                         );
                       });
-                      _saveSettings();
+                      _saveSettings(); // Save after state update
                     },
                   );
                 }),
@@ -138,7 +192,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
   void _showAddCategoryDialog() {
     final controller = TextEditingController();
-    
+
     showDialog(
       context: context,
       builder: (context) {
@@ -161,9 +215,9 @@ class _SettingsPageState extends State<SettingsPage> {
               onPressed: () {
                 if (controller.text.isNotEmpty) {
                   final newCategory = controller.text.trim();
-                  final updatedCategories = 
+                  final updatedCategories =
                       List<String>.from(_settings!.categories)..add(newCategory);
-                  
+
                   setState(() {
                     _settings = Settings(
                       prefixDirectory: _settings!.prefixDirectory,
@@ -173,9 +227,10 @@ class _SettingsPageState extends State<SettingsPage> {
                       igdbTokenExpiry: _settings!.igdbTokenExpiry,
                       coverSize: _settings!.coverSize,
                       categories: updatedCategories,
+                      gameLibraryPath: _settings!.gameLibraryPath, // Keep existing path
                     );
                   });
-                  _saveSettings();
+                  _saveSettings(); // Save after state update
                   Navigator.pop(context);
                 }
               },
@@ -298,30 +353,70 @@ class _SettingsPageState extends State<SettingsPage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const Text(
-                              'Directories',
+                              'Directories & Files', // Updated title
                               style: TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
                             const SizedBox(height: 16),
+                            // Prefix Directory Field
                             TextFormField(
                               controller: _prefixDirController,
-                              decoration: const InputDecoration(
+                              decoration: InputDecoration(
                                 labelText: 'Prefix Directory',
                                 helperText:
                                     'Main directory where prefixes are stored',
-                                prefixIcon: Icon(Icons.folder),
+                                prefixIcon: const Icon(Icons.folder),
+                                suffixIcon: IconButton( // Add browse button
+                                  icon: const Icon(Icons.more_horiz),
+                                  tooltip: 'Browse',
+                                  onPressed: _pickPrefixDirectory,
+                                ),
                               ),
                               validator: (value) {
                                 if (value == null || value.isEmpty) {
                                   return 'Please enter a directory path';
                                 }
+                                // Basic validation: check if it looks like a path
+                                // More robust validation (e.g., checking existence) could be added
                                 return null;
                               },
+                              readOnly: true, // Make field read-only, use button to change
+                              onTap: _pickPrefixDirectory, // Allow tapping field to browse too
+                            ),
+                            const SizedBox(height: 16), // Add spacing
+                            // Game Library Path Field
+                            TextFormField(
+                              controller: _gameLibraryPathController,
+                              decoration: InputDecoration(
+                                labelText: 'Game Library File Path (Optional)',
+                                helperText:
+                                    'Path to save the game library JSON file (e.g., /path/to/your/library.json). Leave blank to use default (~/.wine_prefix_manager.json).',
+                                prefixIcon: const Icon(Icons.save_alt),
+                                suffixIcon: IconButton( // Add browse button
+                                  icon: const Icon(Icons.more_horiz),
+                                  tooltip: 'Browse',
+                                  onPressed: _pickGameLibraryPath,
+                                ),
+                              ),
+                              readOnly: true, // Make field read-only, use button to change
+                              onTap: _pickGameLibraryPath, // Allow tapping field to browse too
+                              // No validator needed, empty string is handled in _saveSettings
                             ),
                           ],
                         ),
+                      ),
+                    ),
+
+                    // Image Cache Path Display
+                    Card(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      child: ListTile(
+                        leading: const Icon(Icons.image),
+                        title: const Text('Image Cache Location'),
+                        subtitle: Text(_imageCachePath),
+                        // Optional: Add button to open directory?
                       ),
                     ),
 

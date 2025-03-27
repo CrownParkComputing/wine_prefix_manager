@@ -43,8 +43,10 @@ class ExeEntry {
   final String path;
   final String name;
   final int? igdbId;
-  final String? coverUrl;
-  final List<String> screenshotUrls;
+  final String? coverUrl; // Original URL from IGDB
+  final String? localCoverPath; // Path to locally stored cover
+  final List<String> screenshotUrls; // Original URLs from IGDB
+  final List<String> localScreenshotPaths; // Paths to locally stored screenshots
   final List<String> videoIds;
   final bool isGame;
   final String? description;
@@ -57,7 +59,9 @@ class ExeEntry {
     required this.name,
     this.igdbId,
     this.coverUrl,
+    this.localCoverPath,
     this.screenshotUrls = const [],
+    this.localScreenshotPaths = const [],
     this.videoIds = const [],
     this.isGame = false,
     this.description,
@@ -71,7 +75,9 @@ class ExeEntry {
     'name': name,
     'igdbId': igdbId,
     'coverUrl': coverUrl,
+    'localCoverPath': localCoverPath,
     'screenshotUrls': screenshotUrls,
+    'localScreenshotPaths': localScreenshotPaths,
     'videoIds': videoIds,
     'isGame': isGame,
     'description': description,
@@ -85,10 +91,14 @@ class ExeEntry {
     name: json['name'],
     igdbId: json['igdbId'],
     coverUrl: json['coverUrl'],
+    localCoverPath: json['localCoverPath'],
     screenshotUrls: json['screenshotUrls'] != null
         ? List<String>.from(json['screenshotUrls'])
         : [],
-    videoIds: json['videoIds'] != null 
+    localScreenshotPaths: json['localScreenshotPaths'] != null // Add this block
+        ? List<String>.from(json['localScreenshotPaths'])
+        : [],
+    videoIds: json['videoIds'] != null
         ? List<String>.from(json['videoIds']) 
         : [],
     isGame: json['isGame'] ?? false,

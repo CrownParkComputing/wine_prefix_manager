@@ -6,6 +6,8 @@ import 'package:dio/dio.dart';
 import 'package:process_run/shell.dart';
 import 'package:path/path.dart' as path;
 import 'package:file_picker/file_picker.dart';
+import 'dart:async'; // For StreamSubscription
+import 'package:connectivity_plus/connectivity_plus.dart'; // For connectivity check
 import 'package:provider/provider.dart';
 import 'models/wine_build.dart';
 import 'models/settings.dart';
@@ -25,6 +27,7 @@ import 'services/prefix_storage_service.dart'; // Import PrefixStorageService
 import 'services/process_service.dart'; // Import ProcessService
 import 'services/prefix_creation_service.dart'; // Import PrefixCreationService
 import 'services/prefix_management_service.dart'; // Import PrefixManagementService
+import 'services/cover_art_service.dart'; // Import CoverArtService
 import 'package:window_manager/window_manager.dart'; // Import window_manager
 import 'widgets/custom_title_bar.dart'; // Import the custom title bar
 
@@ -61,7 +64,7 @@ class WinePrefixManager extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
-    
+
     return MaterialApp(
       title: 'Wine Prefix Manager',
       theme: themeProvider.themeData,
@@ -93,6 +96,10 @@ class _HomePageState extends State<HomePage> {
   String? _selectedGenre;
   int _initialTabIndex = 2; // Start with game library view
 
+  // Connectivity state
+  bool _isConnected = true; // Assume connected initially
+  StreamSubscription<ConnectivityResult>? _connectivitySubscription;
+
   // Service instances
   final BuildService _buildService = BuildService();
   final IgdbService _igdbService = IgdbService();
@@ -100,18 +107,55 @@ class _HomePageState extends State<HomePage> {
   final ProcessService _processService = ProcessService();
   final PrefixCreationService _prefixCreationService = PrefixCreationService();
   final PrefixManagementService _prefixManagementService = PrefixManagementService();
+  final CoverArtService _coverArtService = CoverArtService(); // Add CoverArtService instance
 
   @override
   void initState() {
     super.initState();
     _initialize();
+    _initConnectivity(); // Check initial status
+    // Listen for changes
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen(_updateConnectionStatus);
+  }
+
+  @override
+  void dispose() {
+    _connectivitySubscription?.cancel(); // Cancel subscription
+    _prefixNameController.dispose(); // Dispose existing controller
+    super.dispose();
+  }
+
+  // Helper method to check initial connectivity
+  Future<void> _initConnectivity() async {
+    late ConnectivityResult result;
+    try {
+      result = await Connectivity().checkConnectivity();
+    } catch (e) {
+      print('Error checking connectivity: $e');
+      _updateConnectionStatus(ConnectivityResult.none); // Assume offline on error
+      return;
+    }
+    // Update status once after initial check
+    return _updateConnectionStatus(result);
+  }
+
+  // Helper method to update connection status state
+  Future<void> _updateConnectionStatus(ConnectivityResult result) async {
+    final isConnected = result != ConnectivityResult.none;
+    if (_isConnected != isConnected) { // Only update state if it changed
+      setState(() {
+        _isConnected = isConnected;
+        _status = _isConnected ? 'Online' : 'Offline'; // Update status message
+      });
+      print('Connectivity changed: ${_isConnected ? "Online" : "Offline"}');
+    }
   }
 
   Future<void> _initialize() async {
     await _loadSettings();
     _fetchBuilds();
-    _loadPrefixes();
-    _scanForPrefixes();
+    _loadPrefixes(); // Load prefixes after settings are loaded
+    _scanForPrefixes(); // Scan after loading existing prefixes
   }
 
   Future<void> _loadSettings() async {
@@ -152,7 +196,7 @@ class _HomePageState extends State<HomePage> {
 
     try {
       final scannedPrefixes = await _prefixManagementService.scanForExistingPrefixes(_settings!);
-      
+
       // Merge scanned prefixes with the current list, avoiding duplicates
       // We prioritize keeping existing entries from _prefixes if paths match,
       // as they might contain exeEntries loaded from storage.
@@ -178,6 +222,7 @@ class _HomePageState extends State<HomePage> {
         });
         // Save the updated list including the newly discovered prefixes
         await _savePrefixes();
+        await _checkAndDownloadMissingImages(); // Check images for newly added prefixes
       } else {
          setState(() {
            _status = 'Scan complete. No new prefixes found. Total: ${_prefixes.length}.';
@@ -195,7 +240,12 @@ class _HomePageState extends State<HomePage> {
   /// Saves the current list of prefixes using PrefixStorageService.
   Future<void> _savePrefixes() async {
     try {
-      await _prefixStorageService.savePrefixes(_prefixes);
+      if (_settings == null) {
+        print('Error saving prefixes: Settings not loaded.');
+        setState(() { _status = 'Error saving prefixes: Settings not loaded.'; });
+        return;
+      }
+      await _prefixStorageService.savePrefixes(_prefixes, _settings!); // Pass settings
       // Optionally update status: setState(() { _status = 'Prefixes saved.'; });
     } catch (e) {
       setState(() {
@@ -233,7 +283,7 @@ class _HomePageState extends State<HomePage> {
           });
         }
       },
-      onProcessExit: (exitedExePath, exitCode, errors) {
+      onProcessExit: (exitedExePath, exitCode, errors) async { // Add async here
          // Ensure updates happen on the UI thread
         if (mounted) {
           setState(() {
@@ -245,6 +295,7 @@ class _HomePageState extends State<HomePage> {
             }
             _isLoading = false; // Set loading false when process exits or fails to start
           });
+          // Removed windowManager.focus() and windowManager.show() calls
         }
       },
     );
@@ -287,11 +338,16 @@ class _HomePageState extends State<HomePage> {
   Future<void> _loadPrefixes() async {
     setState(() { _status = 'Loading prefixes...'; });
     try {
-      final loadedPrefixes = await _prefixStorageService.loadPrefixes();
+      if (_settings == null) {
+        setState(() { _status = 'Error loading prefixes: Settings not loaded.'; });
+        return;
+      }
+      final loadedPrefixes = await _prefixStorageService.loadPrefixes(_settings!); // Pass settings
       setState(() {
         _prefixes = loadedPrefixes;
         _status = 'Loaded ${_prefixes.length} prefixes.';
       });
+      await _checkAndDownloadMissingImages(); // Check for missing images after loading
     } catch (e) {
       setState(() {
         _status = 'Error loading prefixes: $e';
@@ -432,11 +488,11 @@ class _HomePageState extends State<HomePage> {
       if (isGame == null) return; // User cancelled
 
       ExeEntry exeEntry;
-      
+
       if (isGame && _settings?.igdbClientId?.isNotEmpty == true) {
         // For games, search IGDB
         final filename = path.basenameWithoutExtension(filePath);
-        
+
         // Show search dialog
         final game = await showDialog<IgdbGame>(
           context: context,
@@ -445,37 +501,57 @@ class _HomePageState extends State<HomePage> {
             onSearch: _searchIgdbGames,
           ),
         );
-        
+
         if (game != null) {
           // User selected a game from IGDB
           setState(() {
             _status = 'Fetching game details...';
             _isLoading = true;
           });
-          
+
           final token = await _getIgdbToken();
           if (token != null) {
             final coverUrl = await _fetchCoverUrl(game.cover, token);
             final screenshotUrls = await _fetchScreenshotUrls(game.screenshots, token);
             final videoIds = await _fetchGameVideoIds(game.id, token);
-            
+
+            // --- Get local cover path ---
+            String? localCoverPath;
+            if (game.id != null && coverUrl != null) {
+              _status = 'Downloading cover art...'; // Update status
+              localCoverPath = await _coverArtService.getLocalCoverPath(game.id!, coverUrl);
+            }
+            // --- End get local cover path ---
+
+            // --- Get local screenshot paths ---
+            List<String> localScreenshotPaths = [];
+            if (screenshotUrls.isNotEmpty) {
+              _status = 'Downloading screenshots...'; // Update status
+              localScreenshotPaths = await _coverArtService.getLocalScreenshotPaths(screenshotUrls);
+            }
+            // --- End get local screenshot paths ---
+
             exeEntry = ExeEntry(
               path: filePath,
               name: game.name,
               igdbId: game.id,
-              coverUrl: coverUrl,
-              screenshotUrls: screenshotUrls,
+              coverUrl: coverUrl, // Keep original URL for reference if needed
+              localCoverPath: localCoverPath, // Add the local path
+              screenshotUrls: screenshotUrls, // Keep original URLs
+              localScreenshotPaths: localScreenshotPaths, // Add local paths
               videoIds: videoIds,
               isGame: true,
               description: game.summary, // Include game description
             );
-            
+
             // Log created entry info
             _printExeEntryInfo(exeEntry);
-            
+
             setState(() {
               _isLoading = false;
-              _status = 'Game added successfully!';
+              _status = localCoverPath != null
+                  ? 'Game added successfully with cover!'
+                  : 'Game added (cover download failed or skipped)';
             });
           } else {
             // Fallback if token couldn't be obtained
@@ -506,7 +582,7 @@ class _HomePageState extends State<HomePage> {
           isGame: false,
         );
       }
-      
+
       // Add to prefix
       setState(() {
         final index = _prefixes.indexWhere((p) => p.path == prefix.path);
@@ -521,7 +597,7 @@ class _HomePageState extends State<HomePage> {
           );
         }
       });
-      
+
       await _savePrefixes();
     } catch (e) {
       setState(() {
@@ -681,6 +757,98 @@ class _HomePageState extends State<HomePage> {
     print('- Video IDs: ${entry.videoIds}');
   }
 
+  /// Checks loaded prefixes for missing local images and attempts download.
+  Future<void> _checkAndDownloadMissingImages() async {
+    if (!_isConnected) {
+      print("Offline, skipping check for missing images.");
+      return; // Don't attempt downloads if offline
+    }
+    if (_settings == null) return; // Need settings for API calls
+
+    print("Checking for missing local images...");
+    bool requiresSave = false;
+    int checked = 0;
+    int downloadedCovers = 0;
+    int downloadedScreenshots = 0;
+
+    // Create a modifiable copy of the prefixes list
+    List<WinePrefix> updatedPrefixes = List.from(_prefixes);
+
+    for (int i = 0; i < updatedPrefixes.length; i++) {
+      WinePrefix prefix = updatedPrefixes[i];
+      List<ExeEntry> updatedEntries = List.from(prefix.exeEntries);
+      bool prefixUpdated = false;
+
+      for (int j = 0; j < updatedEntries.length; j++) {
+        ExeEntry entry = updatedEntries[j];
+        checked++;
+        ExeEntry updatedEntry = entry; // Start with the original entry
+
+        // Check cover
+        if (entry.igdbId != null && entry.coverUrl != null && entry.coverUrl!.isNotEmpty && (entry.localCoverPath == null || entry.localCoverPath!.isEmpty)) {
+          print("Missing local cover for ${entry.name} (${entry.igdbId}). Attempting download...");
+          final localPath = await _coverArtService.getLocalCoverPath(entry.igdbId!, entry.coverUrl!);
+          if (localPath != null) {
+            updatedEntry = ExeEntry( // Create new entry with updated path
+              path: entry.path, name: entry.name, igdbId: entry.igdbId, coverUrl: entry.coverUrl,
+              localCoverPath: localPath, // Updated
+              screenshotUrls: entry.screenshotUrls, localScreenshotPaths: entry.localScreenshotPaths,
+              videoIds: entry.videoIds, isGame: entry.isGame, description: entry.description,
+              notWorking: entry.notWorking, category: entry.category, wineTypeOverride: entry.wineTypeOverride
+            );
+            downloadedCovers++;
+            requiresSave = true;
+            prefixUpdated = true;
+          }
+        }
+
+        // Check screenshots (only if cover was checked or already existed)
+        if (updatedEntry.screenshotUrls.isNotEmpty && (updatedEntry.localScreenshotPaths.isEmpty || updatedEntry.localScreenshotPaths.length != updatedEntry.screenshotUrls.length)) {
+           print("Missing/incomplete local screenshots for ${updatedEntry.name}. Attempting download...");
+           final localPaths = await _coverArtService.getLocalScreenshotPaths(updatedEntry.screenshotUrls);
+           if (localPaths.isNotEmpty && localPaths.length == updatedEntry.screenshotUrls.length) { // Check if all were downloaded
+             // Create a new entry only if screenshots were successfully downloaded
+             updatedEntry = ExeEntry(
+               path: updatedEntry.path, name: updatedEntry.name, igdbId: updatedEntry.igdbId, coverUrl: updatedEntry.coverUrl,
+               localCoverPath: updatedEntry.localCoverPath, screenshotUrls: updatedEntry.screenshotUrls,
+               localScreenshotPaths: localPaths, // Updated
+               videoIds: updatedEntry.videoIds, isGame: updatedEntry.isGame, description: updatedEntry.description,
+               notWorking: updatedEntry.notWorking, category: updatedEntry.category, wineTypeOverride: updatedEntry.wineTypeOverride
+             );
+             downloadedScreenshots += localPaths.length;
+             requiresSave = true;
+             prefixUpdated = true;
+           }
+        }
+
+        // Update the entry in the temporary list if it changed
+        if (prefixUpdated) {
+           updatedEntries[j] = updatedEntry;
+        }
+      }
+
+      // Update the prefix in the main temporary list if any of its entries changed
+      if (prefixUpdated) {
+        updatedPrefixes[i] = WinePrefix(
+          name: prefix.name, path: prefix.path, wineBuildPath: prefix.wineBuildPath,
+          type: prefix.type, exeEntries: updatedEntries
+        );
+      }
+    }
+
+    print("Image check complete. Checked $checked entries. Downloaded $downloadedCovers covers, $downloadedScreenshots screenshots.");
+
+    if (requiresSave) {
+      print("Saving updated prefix data with new local image paths...");
+      // Update the main state and save
+      setState(() {
+        _prefixes = updatedPrefixes;
+        _status = "Downloaded missing images."; // Update status
+      });
+      await _savePrefixes();
+    }
+  }
+
   Future<String?> _pickExeFile() async {
     try {
       final result = await FilePicker.platform.pickFiles(
@@ -716,7 +884,7 @@ class _HomePageState extends State<HomePage> {
   Future<void> _editGameDetails(GameEntry gameEntry) async {
     // Show dialog with game search option
     final filename = path.basenameWithoutExtension(gameEntry.exe.path);
-    
+
     final game = await showDialog<IgdbGame>(
       context: context,
       builder: (context) => GameSearchDialog(
@@ -724,19 +892,19 @@ class _HomePageState extends State<HomePage> {
         onSearch: _searchIgdbGames,
       ),
     );
-    
+
     if (game != null) {
       setState(() {
         _status = 'Updating game details...';
         _isLoading = true;
       });
-      
+
       final token = await _getIgdbToken();
       if (token != null) {
         final coverUrl = await _fetchCoverUrl(game.cover, token);
         final screenshotUrls = await _fetchScreenshotUrls(game.screenshots, token);
         final videoIds = await _fetchGameVideoIds(game.id, token);
-        
+
         final updatedExe = ExeEntry(
           path: gameEntry.exe.path,
           name: game.name,
@@ -747,13 +915,13 @@ class _HomePageState extends State<HomePage> {
           isGame: true,
           description: game.summary,  // Add game description
         );
-        
+
         // Update the exe entry in the prefix
         final prefixIndex = _prefixes.indexWhere((p) => p.path == gameEntry.prefix.path);
         if (prefixIndex != -1) {
           final exeList = List<ExeEntry>.from(_prefixes[prefixIndex].exeEntries);
           final exeIndex = exeList.indexWhere((e) => e.path == gameEntry.exe.path);
-          
+
           if (exeIndex != -1) {
             exeList[exeIndex] = updatedExe;
             _prefixes[prefixIndex] = WinePrefix(
@@ -763,7 +931,7 @@ class _HomePageState extends State<HomePage> {
               type: _prefixes[prefixIndex].type,
               exeEntries: exeList,
             );
-            
+
             await _savePrefixes();
             setState(() {
               _status = 'Game details updated successfully!';
@@ -771,7 +939,7 @@ class _HomePageState extends State<HomePage> {
           }
         }
       }
-      
+
       setState(() {
         _isLoading = false;
       });
@@ -782,14 +950,14 @@ class _HomePageState extends State<HomePage> {
   Future<void> _changeGamePrefix(GameEntry gameEntry) async {
     // Get list of prefixes as options
     final prefixOptions = _prefixes.where((p) => p.path != gameEntry.prefix.path).toList();
-    
+
     if (prefixOptions.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No other prefixes available to move to')),
       );
       return;
     }
-    
+
     final selectedPrefix = await showDialog<WinePrefix>(
       context: context,
       builder: (context) => AlertDialog(
@@ -821,13 +989,13 @@ class _HomePageState extends State<HomePage> {
         ],
       ),
     );
-    
+
     if (selectedPrefix != null) {
       setState(() {
         _status = 'Moving game to different prefix...';
         _isLoading = true;
       });
-      
+
       try {
         // Create a copy of the executable entry to add to the new prefix
         final exeCopy = ExeEntry(
@@ -843,13 +1011,13 @@ class _HomePageState extends State<HomePage> {
           category: gameEntry.exe.category,
           wineTypeOverride: gameEntry.exe.wineTypeOverride,
         );
-        
+
         // First, add to new prefix
         final newPrefixIndex = _prefixes.indexWhere((p) => p.path == selectedPrefix.path);
         if (newPrefixIndex != -1) {
           final updatedEntries = List<ExeEntry>.from(_prefixes[newPrefixIndex].exeEntries)
             ..add(exeCopy);
-            
+
           _prefixes[newPrefixIndex] = WinePrefix(
             name: _prefixes[newPrefixIndex].name,
             path: _prefixes[newPrefixIndex].path,
@@ -858,14 +1026,14 @@ class _HomePageState extends State<HomePage> {
             exeEntries: updatedEntries,
           );
         }
-        
+
         // Then, remove from old prefix
         final oldPrefixIndex = _prefixes.indexWhere((p) => p.path == gameEntry.prefix.path);
         if (oldPrefixIndex != -1) {
           final updatedEntries = _prefixes[oldPrefixIndex].exeEntries
             .where((e) => e.path != gameEntry.exe.path)
             .toList();
-            
+
           _prefixes[oldPrefixIndex] = WinePrefix(
             name: _prefixes[oldPrefixIndex].name,
             path: _prefixes[oldPrefixIndex].path,
@@ -874,15 +1042,15 @@ class _HomePageState extends State<HomePage> {
             exeEntries: updatedEntries,
           );
         }
-        
+
         // Save updated prefixes
         await _savePrefixes();
-        
+
         setState(() {
           _status = 'Game moved to ${selectedPrefix.name} prefix';
           _isLoading = false;
         });
-        
+
         // Notify the user
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Game moved to ${selectedPrefix.name} prefix')),
@@ -902,7 +1070,7 @@ class _HomePageState extends State<HomePage> {
       length: 4,
       initialIndex: 0,
       child: Scaffold(
-        appBar: const CustomTitleBar(title: 'Wine Prefix Manager'), // Add custom title bar
+        appBar: CustomTitleBar(title: 'Wine Prefix Manager', isConnected: _isConnected), // Pass connectivity status
         bottomNavigationBar: BottomNavigationBar(
           currentIndex: _currentTabIndex,
           type: BottomNavigationBarType.fixed,
@@ -1023,7 +1191,7 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ),
               ),
-              
+
               Card(
                 elevation: 3,
                 margin: const EdgeInsets.only(bottom: 24),
@@ -1040,7 +1208,7 @@ class _HomePageState extends State<HomePage> {
                         ),
                       ),
                       const SizedBox(height: 16),
-                      _isLoading 
+                      _isLoading
                         ? const Center(child: CircularProgressIndicator())
                         : _builds.where((build) => build.type == _selectedPrefixType).isEmpty
                           ? Center(
@@ -1080,6 +1248,7 @@ class _HomePageState extends State<HomePage> {
                                     return DropdownMenuItem<BaseBuild>(
                                       value: build,
                                       child: Text(build.name),
+
                                     );
                                   }).toList(),
                                 ),
@@ -1089,7 +1258,7 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ),
               ),
-              
+
               Card(
                 elevation: 3,
                 margin: const EdgeInsets.only(bottom: 24),
@@ -1125,14 +1294,14 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ),
               ),
-              
+
               const SizedBox(height: 8),
               SizedBox(
                 width: double.infinity,
                 height: 50,
                 child: ElevatedButton.icon(
-                  onPressed: (_isLoading || _selectedBuild == null || _prefixName.isEmpty) 
-                    ? null 
+                  onPressed: (_isLoading || _selectedBuild == null || _prefixName.isEmpty)
+                    ? null
                     : _downloadAndCreatePrefix,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Theme.of(context).colorScheme.primary,
@@ -1145,7 +1314,7 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ),
               ),
-              
+
               if (_status.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(top: 24),
@@ -1215,7 +1384,7 @@ class _HomePageState extends State<HomePage> {
   Future<void> _launchGame(WinePrefix prefix, ExeEntry exe) async {
     await _runExe(prefix, exe);
   }
-  
+
   Future<void> _showGameDetails(BuildContext context, GameEntry game) {
     return showDialog(
       context: context,
@@ -1273,7 +1442,7 @@ class _HomePageState extends State<HomePage> {
     if (prefixIndex != -1) {
       final exeList = List<ExeEntry>.from(_prefixes[prefixIndex].exeEntries);
       final exeIndex = exeList.indexWhere((e) => e.path == game.exe.path);
-      
+
       if (exeIndex != -1) {
         final updatedExe = ExeEntry(
           path: game.exe.path,
@@ -1287,7 +1456,7 @@ class _HomePageState extends State<HomePage> {
           notWorking: game.exe.notWorking,
           category: category,
         );
-        
+
         exeList[exeIndex] = updatedExe;
         _prefixes[prefixIndex] = WinePrefix(
           name: _prefixes[prefixIndex].name,
@@ -1296,7 +1465,7 @@ class _HomePageState extends State<HomePage> {
           type: _prefixes[prefixIndex].type,
           exeEntries: exeList,
         );
-        
+
         await _savePrefixes();
         setState(() {});
       }
@@ -1310,7 +1479,7 @@ class _HomePageState extends State<HomePage> {
     final String absoluteExePath = path.isAbsolute(currentExePath)
         ? currentExePath
         : path.absolute(currentExePath); // This might need context if CWD changes, but should be okay here.
-    
+
     // Check if the path is valid and exists before proceeding
     final exeFile = File(absoluteExePath);
     if (!await exeFile.exists()) {
@@ -1390,7 +1559,7 @@ class _HomePageState extends State<HomePage> {
       }
       return;
     }
-    
+
     // Check if destination already exists
     final newDir = Directory(newParentDir);
     if (await newDir.exists()) {
@@ -1419,7 +1588,7 @@ class _HomePageState extends State<HomePage> {
       final command = 'mv "${currentParentDir}" "${destinationDir}"'; // Move into the selected destination
       print('Executing move command: $command');
       final results = await shell.run(command);
-      
+
       // shell.run returns a List<ProcessResult>, access the first one
       final result = results.first;
 

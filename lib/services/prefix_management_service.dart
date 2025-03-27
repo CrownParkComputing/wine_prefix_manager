@@ -23,15 +23,44 @@ class PrefixManagementService {
     try {
       await for (final entry in dir.list()) {
         if (entry is Directory) {
+          print('Checking directory: ${entry.path}'); // Add logging here
           final prefixName = path.basename(entry.path);
-          // Basic check for a Wine/Proton prefix (presence of system.reg)
-          final systemReg = File(path.join(entry.path, 'system.reg'));
 
-          if (await systemReg.exists()) {
-            print('Found potential prefix: ${entry.path}');
-            // Try to load configuration to get build path and type
-            String? buildPath;
-            PrefixType type = PrefixType.wine; // Default to wine
+          // --- Check for registry files ---
+          final systemRegPath = path.join(entry.path, 'system.reg');
+          final userRegPath = path.join(entry.path, 'user.reg');
+          final systemRegExists = await File(systemRegPath).exists();
+          final userRegExists = await File(userRegPath).exists();
+
+          // Declare variables needed in multiple scopes
+          String? buildPath;
+          PrefixType type = PrefixType.wine; // Default to wine
+          String actualPrefixPath = entry.path; // Path containing .reg files (might change if nested)
+          bool foundRegFiles = systemRegExists || userRegExists; // Flag if .reg found in root
+
+          // If not found in root, check inside 'pfx' subdirectory
+          if (!foundRegFiles) {
+            final pfxPath = path.join(entry.path, 'pfx');
+            if (await Directory(pfxPath).exists()) {
+              final systemRegPfxPath = path.join(pfxPath, 'system.reg');
+              final userRegPfxPath = path.join(pfxPath, 'user.reg');
+              final systemRegPfxExists = await File(systemRegPfxPath).exists();
+              final userRegPfxExists = await File(userRegPfxPath).exists();
+              if (systemRegPfxExists || userRegPfxExists) {
+                print('Found potential prefix nested in pfx: ${entry.path} (system.reg: $systemRegPfxExists, user.reg: $userRegPfxExists)');
+                actualPrefixPath = pfxPath; // Update the path where .reg files are found
+                foundRegFiles = true; // Mark as found
+              }
+            }
+          }
+          // --- End Check for registry files ---
+
+
+          // --- Process if registry files were found ---
+          if (foundRegFiles) {
+            print('Processing prefix: ${entry.path}');
+
+            // Config file should always be in the root directory (entry.path)
             final configFile = File(path.join(entry.path, '.prefix_config'));
 
             if (await configFile.exists()) {
@@ -48,22 +77,48 @@ class PrefixManagementService {
                  // Proceed without build path if config is corrupt
               }
             } else {
-               print('  - Config file (.prefix_config) not found for $prefixName.');
-               // Cannot determine build path or specific type without config
-               // Consider adding logic here if you want to *guess* the type or leave buildPath empty
+              print('  - Config file (.prefix_config) not found for $prefixName. Attempting to recreate.');
+              // Guess type based on name
+              if (prefixName.toLowerCase().contains('proton')) {
+                type = PrefixType.proton;
+              } else {
+                type = PrefixType.wine; // Default guess
+              }
+              buildPath = null; // Cannot determine build path
+
+              // Create default config content
+              final defaultConfig = {
+                'buildPath': buildPath,
+                'type': type.name,
+                // Add other default fields if necessary in the future
+              };
+
+              try {
+                await configFile.writeAsString(json.encode(defaultConfig));
+                print('  - Created default .prefix_config for $prefixName (Type: ${type.name}). Please verify build path later.');
+              } catch (e) {
+                print('  - Failed to create default .prefix_config for $prefixName: $e');
+                // Proceed without config if creation fails
+              }
             }
 
             // Create the WinePrefix object
             // Note: ExeEntries are loaded separately (e.g., by PrefixStorageService)
             final prefix = WinePrefix(
               name: prefixName,
-              path: entry.path,
+              path: entry.path, // Use the main directory path for the prefix object
               wineBuildPath: buildPath ?? '', // Use empty string if not found
               type: type,
               exeEntries: [], // Scanner doesn't load exe entries
             );
             foundPrefixes.add(prefix);
+
+          } else {
+            // Log directories skipped due to missing registry files
+            print('Skipping directory (no system.reg or user.reg found in root or pfx): ${entry.path}');
           }
+          // --- End Process if registry files were found ---
+
         }
       }
       print('Scan complete. Found ${foundPrefixes.length} prefixes.');
