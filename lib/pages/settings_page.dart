@@ -128,7 +128,7 @@ class _SettingsPageState extends State<SettingsPage> {
         outputFile += '.json';
       }
       setState(() {
-        _gameLibraryPathController.text = outputFile!; // Add null assertion operator !
+        _gameLibraryPathController.text = outputFile!; // Use null assertion here
       });
     }
   }
@@ -162,6 +162,7 @@ class _SettingsPageState extends State<SettingsPage> {
                           List<String>.from(_settings!.categories)..remove(category);
 
                       setState(() {
+                        // Create a new Settings object with updated categories
                         _settings = Settings(
                           prefixDirectory: _settings!.prefixDirectory,
                           igdbClientId: _settings!.igdbClientId,
@@ -169,7 +170,7 @@ class _SettingsPageState extends State<SettingsPage> {
                           igdbAccessToken: _settings!.igdbAccessToken,
                           igdbTokenExpiry: _settings!.igdbTokenExpiry,
                           coverSize: _settings!.coverSize,
-                          categories: updatedCategories,
+                          categories: updatedCategories, // Use updated list
                           gameLibraryPath: _settings!.gameLibraryPath, // Keep existing path
                         );
                       });
@@ -219,6 +220,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       List<String>.from(_settings!.categories)..add(newCategory);
 
                   setState(() {
+                    // Create a new Settings object with updated categories
                     _settings = Settings(
                       prefixDirectory: _settings!.prefixDirectory,
                       igdbClientId: _settings!.igdbClientId,
@@ -226,7 +228,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       igdbAccessToken: _settings!.igdbAccessToken,
                       igdbTokenExpiry: _settings!.igdbTokenExpiry,
                       coverSize: _settings!.coverSize,
-                      categories: updatedCategories,
+                      categories: updatedCategories, // Use updated list
                       gameLibraryPath: _settings!.gameLibraryPath, // Keep existing path
                     );
                   });

@@ -498,7 +498,7 @@ class _HomePageState extends State<HomePage> {
           context: context,
           builder: (context) => GameSearchDialog(
             initialQuery: filename,
-            onSearch: _searchIgdbGames,
+            onSearch: _searchIgdbGames, // Pass the updated search function
           ),
         );
 
@@ -509,8 +509,18 @@ class _HomePageState extends State<HomePage> {
             _isLoading = true;
           });
 
-          final token = await _getIgdbToken();
-          if (token != null) {
+          // Get token (now returns a map)
+          final tokenResult = await _getIgdbToken();
+          if (tokenResult.containsKey('error')) {
+             // Handle token error (maybe show in status?)
+             setState(() {
+               _isLoading = false;
+               _status = 'Error getting IGDB token: ${tokenResult['error']}';
+             });
+             // Create entry without details
+             exeEntry = ExeEntry(path: filePath, name: game.name, igdbId: game.id, isGame: true);
+          } else {
+            final String token = tokenResult['token'];
             final coverUrl = await _fetchCoverUrl(game.cover, token);
             final screenshotUrls = await _fetchScreenshotUrls(game.screenshots, token);
             final videoIds = await _fetchGameVideoIds(game.id, token);
@@ -553,18 +563,6 @@ class _HomePageState extends State<HomePage> {
                   ? 'Game added successfully with cover!'
                   : 'Game added (cover download failed or skipped)';
             });
-          } else {
-            // Fallback if token couldn't be obtained
-            exeEntry = ExeEntry(
-              path: filePath,
-              name: game.name,
-              igdbId: game.id,
-              isGame: true,
-            );
-            setState(() {
-              _isLoading = false;
-              _status = 'Game added without cover (API token issue)';
-            });
           }
         } else {
           // User cancelled game selection, create regular entry
@@ -575,11 +573,11 @@ class _HomePageState extends State<HomePage> {
           );
         }
       } else {
-        // Regular application
+        // Regular application or IGDB not configured
         exeEntry = ExeEntry(
           path: filePath,
           name: path.basename(filePath),
-          isGame: false,
+          isGame: isGame, // Use the result from the dialog
         );
       }
 
@@ -636,22 +634,16 @@ class _HomePageState extends State<HomePage> {
 
   /// Retrieves a valid IGDB token using the IgdbService.
   /// Updates local settings if a new token is fetched.
-  /// Returns the token string if successful, otherwise null.
-  Future<String?> _getIgdbToken() async {
+  /// Returns a map containing the token or an error message.
+  Future<Map<String, dynamic>> _getIgdbToken() async {
     if (_settings == null) {
-       setState(() {
-         _status = 'Settings not loaded.';
-       });
-       return null;
+      return {'error': 'Settings not loaded.'};
     }
     if (_settings!.igdbClientId.isEmpty || _settings!.igdbClientSecret.isEmpty) {
-      setState(() {
-        _status = 'IGDB credentials not set. Configure in Settings.';
-      });
-      return null;
+      return {'error': 'IGDB credentials not set. Configure in Settings.'};
     }
 
-    setState(() { _status = 'Checking/Fetching IGDB token...'; });
+    print('Checking/Fetching IGDB token...');
 
     try {
       final tokenData = await _igdbService.getIgdbToken(_settings!);
@@ -666,46 +658,50 @@ class _HomePageState extends State<HomePage> {
           print("Updating settings with new IGDB token.");
           // Calculate duration from now until expiry
           final expiresIn = expiry.difference(DateTime.now());
+          // Use await here as updateToken is async
           _settings = await AppSettings.updateToken(_settings!, token, expiresIn);
-          // No need to call setState here as _settings is not directly used in build for this
         }
-        setState(() { _status = 'IGDB token ready.'; });
-        return token;
+        // No setState here for status update
+        return {'token': token};
       } else {
-        setState(() {
-          _status = 'Failed to get IGDB token. Check credentials and network.';
-        });
+        // No setState here
+        return {'error': 'Failed to get IGDB token. Check credentials and network.'};
       }
     } catch (e) {
-      setState(() {
-        _status = 'Error getting IGDB token: $e';
-      });
+      print('Error getting IGDB token: $e');
+      // No setState here
+      return {'error': 'Error getting IGDB token: $e'};
     }
-    return null;
   }
 
+
   /// Searches IGDB for games using the IgdbService.
-  /// NOTE: Removed internal setState calls to prevent "setState called during build" errors.
-  /// Status updates should be handled by the caller or the dialog itself.
-  Future<List<IgdbGame>> _searchIgdbGames(String query) async {
-    final token = await _getIgdbToken(); // This already handles status for token errors
-    if (token == null || _settings == null) {
-      print('Cannot search IGDB: Missing token or settings.');
-      // Consider showing a snackbar or updating status *after* the build phase if needed
-      return [];
+  /// Returns a Future that resolves to a Map containing either 'games' or 'error'.
+  Future<Map<String, dynamic>> _searchIgdbGames(String query) async {
+    final tokenResult = await _getIgdbToken(); // This now returns a Map
+
+    if (tokenResult.containsKey('error')) {
+      print('Cannot search IGDB: ${tokenResult['error']}');
+      return {'error': tokenResult['error']}; // Propagate the error
+    }
+
+    final String token = tokenResult['token'];
+    if (_settings == null) {
+       print('Cannot search IGDB: Settings are null.');
+       return {'error': 'Settings not loaded.'};
     }
 
     print('Searching IGDB for "$query"...'); // Log instead of setState
     try {
       final results = await _igdbService.searchIgdbGames(query, _settings!, token);
       print('Found ${results.length} game(s).'); // Log instead of setState
-      return results;
+      return {'games': results}; // Return games list in a map
     } catch (e) {
       print('Error searching IGDB: $e'); // Log instead of setState
-      // Consider showing a snackbar or updating status *after* the build phase if needed
-      return [];
+      return {'error': 'Error searching IGDB: $e'}; // Return error in a map
     }
   }
+
 
   /// Fetches the cover URL for a given cover ID using the IgdbService.
   Future<String?> _fetchCoverUrl(int? coverId, String token) async {
@@ -889,7 +885,7 @@ class _HomePageState extends State<HomePage> {
       context: context,
       builder: (context) => GameSearchDialog(
         initialQuery: filename,
-        onSearch: _searchIgdbGames,
+        onSearch: _searchIgdbGames, // Pass updated search function
       ),
     );
 
@@ -899,44 +895,55 @@ class _HomePageState extends State<HomePage> {
         _isLoading = true;
       });
 
-      final token = await _getIgdbToken();
-      if (token != null) {
-        final coverUrl = await _fetchCoverUrl(game.cover, token);
-        final screenshotUrls = await _fetchScreenshotUrls(game.screenshots, token);
-        final videoIds = await _fetchGameVideoIds(game.id, token);
+      final tokenResult = await _getIgdbToken(); // Get token map
+      if (tokenResult.containsKey('error')) {
+        setState(() {
+          _isLoading = false;
+          _status = 'Error updating details (token): ${tokenResult['error']}';
+        });
+        return; // Stop if token error
+      }
 
-        final updatedExe = ExeEntry(
-          path: gameEntry.exe.path,
-          name: game.name,
-          igdbId: game.id,
-          coverUrl: coverUrl,
-          screenshotUrls: screenshotUrls,
-          videoIds: videoIds,
-          isGame: true,
-          description: game.summary,  // Add game description
-        );
+      final String token = tokenResult['token'];
+      final coverUrl = await _fetchCoverUrl(game.cover, token);
+      final screenshotUrls = await _fetchScreenshotUrls(game.screenshots, token);
+      final videoIds = await _fetchGameVideoIds(game.id, token);
 
-        // Update the exe entry in the prefix
-        final prefixIndex = _prefixes.indexWhere((p) => p.path == gameEntry.prefix.path);
-        if (prefixIndex != -1) {
-          final exeList = List<ExeEntry>.from(_prefixes[prefixIndex].exeEntries);
-          final exeIndex = exeList.indexWhere((e) => e.path == gameEntry.exe.path);
+      final updatedExe = ExeEntry(
+        path: gameEntry.exe.path,
+        name: game.name,
+        igdbId: game.id,
+        coverUrl: coverUrl,
+        screenshotUrls: screenshotUrls,
+        videoIds: videoIds,
+        isGame: true,
+        description: game.summary,  // Add game description
+        // Preserve existing fields not updated by IGDB search
+        notWorking: gameEntry.exe.notWorking,
+        category: gameEntry.exe.category,
+        wineTypeOverride: gameEntry.exe.wineTypeOverride,
+      );
 
-          if (exeIndex != -1) {
-            exeList[exeIndex] = updatedExe;
-            _prefixes[prefixIndex] = WinePrefix(
-              name: _prefixes[prefixIndex].name,
-              path: _prefixes[prefixIndex].path,
-              wineBuildPath: _prefixes[prefixIndex].wineBuildPath,
-              type: _prefixes[prefixIndex].type,
-              exeEntries: exeList,
-            );
+      // Update the exe entry in the prefix
+      final prefixIndex = _prefixes.indexWhere((p) => p.path == gameEntry.prefix.path);
+      if (prefixIndex != -1) {
+        final exeList = List<ExeEntry>.from(_prefixes[prefixIndex].exeEntries);
+        final exeIndex = exeList.indexWhere((e) => e.path == gameEntry.exe.path);
 
-            await _savePrefixes();
-            setState(() {
-              _status = 'Game details updated successfully!';
-            });
-          }
+        if (exeIndex != -1) {
+          exeList[exeIndex] = updatedExe;
+          _prefixes[prefixIndex] = WinePrefix(
+            name: _prefixes[prefixIndex].name,
+            path: _prefixes[prefixIndex].path,
+            wineBuildPath: _prefixes[prefixIndex].wineBuildPath,
+            type: _prefixes[prefixIndex].type,
+            exeEntries: exeList,
+          );
+
+          await _savePrefixes();
+          setState(() {
+            _status = 'Game details updated successfully!';
+          });
         }
       }
 
@@ -945,6 +952,7 @@ class _HomePageState extends State<HomePage> {
       });
     }
   }
+
 
   // Add method to change assigned prefix
   Future<void> _changeGamePrefix(GameEntry gameEntry) async {
@@ -1418,6 +1426,7 @@ class _HomePageState extends State<HomePage> {
                   description: gameEntry.exe.description,
                   notWorking: notWorking,
                   category: gameEntry.exe.category,
+                  wineTypeOverride: gameEntry.exe.wineTypeOverride, // Preserve override
                 );
                 _prefixes[index] = WinePrefix(
                   name: _prefixes[index].name,
@@ -1455,6 +1464,7 @@ class _HomePageState extends State<HomePage> {
           description: game.exe.description,
           notWorking: game.exe.notWorking,
           category: category,
+          wineTypeOverride: game.exe.wineTypeOverride, // Preserve override
         );
 
         exeList[exeIndex] = updatedExe;
