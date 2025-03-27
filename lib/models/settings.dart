@@ -10,7 +10,6 @@ enum CoverSize {
 
 class Settings {
   final String prefixDirectory;
-  final String defaultPrefixFolder;
   final String igdbClientId;
   final String igdbClientSecret;
   final String? igdbAccessToken;
@@ -20,7 +19,6 @@ class Settings {
 
   Settings({
     required this.prefixDirectory,
-    required this.defaultPrefixFolder,
     required this.igdbClientId,
     required this.igdbClientSecret,
     this.igdbAccessToken,
@@ -31,7 +29,6 @@ class Settings {
 
   Map<String, dynamic> toJson() => {
     'prefixDirectory': prefixDirectory,
-    'defaultPrefixFolder': defaultPrefixFolder,
     'igdbClientId': igdbClientId,
     'igdbClientSecret': igdbClientSecret,
     'igdbAccessToken': igdbAccessToken,
@@ -42,7 +39,6 @@ class Settings {
 
   factory Settings.fromJson(Map<String, dynamic> json) => Settings(
     prefixDirectory: json['prefixDirectory'] ?? '',
-    defaultPrefixFolder: json['defaultPrefixFolder'] ?? '',
     igdbClientId: json['igdbClientId'] ?? '',
     igdbClientSecret: json['igdbClientSecret'] ?? '',
     igdbAccessToken: json['igdbAccessToken'],
@@ -77,7 +73,6 @@ class AppSettings {
     final homeDir = Platform.environment['HOME']!;
     return Settings(
       prefixDirectory: '$homeDir/.wine_prefixes',
-      defaultPrefixFolder: '',
       igdbClientId: '',
       igdbClientSecret: '',
       categories: ['Favorites', 'Currently Playing', 'Completed', 'Backlog'],
@@ -97,7 +92,6 @@ class AppSettings {
   static Future<Settings> updateToken(Settings settings, String token, Duration expiry) async {
     final updatedSettings = Settings(
       prefixDirectory: settings.prefixDirectory,
-      defaultPrefixFolder: settings.defaultPrefixFolder,
       igdbClientId: settings.igdbClientId,
       igdbClientSecret: settings.igdbClientSecret,
       igdbAccessToken: token,

@@ -12,6 +12,7 @@ class GameDetailsDialog extends StatefulWidget {
   final Function() onLaunchGame;
   final Function(GameEntry, bool) onToggleWorkingStatus;
   final Function(GameEntry, String?) onChangeCategory;
+  final Function(GameEntry) onMoveGameFolder; // Add this line
 
   const GameDetailsDialog({
     Key? key,
@@ -23,6 +24,7 @@ class GameDetailsDialog extends StatefulWidget {
     required this.onLaunchGame,
     required this.onToggleWorkingStatus,
     required this.onChangeCategory,
+    required this.onMoveGameFolder, // Ensure this is required
   }) : super(key: key);
 
   @override
@@ -213,6 +215,14 @@ class _GameDetailsDialogState extends State<GameDetailsDialog> {
           onPressed: () {
             Navigator.pop(context);
             widget.onEditGame(widget.game);
+          },
+        ),
+        ElevatedButton.icon( // Add this button
+          icon: const Icon(Icons.drive_file_move_outline),
+          label: const Text('Move Folder'),
+          onPressed: () {
+            Navigator.pop(context);
+            widget.onMoveGameFolder(widget.game);
           },
         ),
       ],

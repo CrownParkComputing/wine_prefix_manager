@@ -17,7 +17,6 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _prefixDirController;
-  late TextEditingController _defaultPrefixFolderController; // New controller
   late TextEditingController _igdbClientIdController;
   late TextEditingController _igdbClientSecretController;
   Settings? _settings;
@@ -28,7 +27,6 @@ class _SettingsPageState extends State<SettingsPage> {
   void initState() {
     super.initState();
     _prefixDirController = TextEditingController();
-    _defaultPrefixFolderController = TextEditingController(); // Initialize controller
     _igdbClientIdController = TextEditingController();
     _igdbClientSecretController = TextEditingController();
     _loadSettings();
@@ -37,7 +35,6 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   void dispose() {
     _prefixDirController.dispose();
-    _defaultPrefixFolderController.dispose(); // Dispose controller
     _igdbClientIdController.dispose();
     _igdbClientSecretController.dispose();
     super.dispose();
@@ -53,7 +50,6 @@ class _SettingsPageState extends State<SettingsPage> {
     setState(() {
       _settings = settings;
       _prefixDirController.text = settings.prefixDirectory;
-      _defaultPrefixFolderController.text = settings.defaultPrefixFolder;
       _igdbClientIdController.text = settings.igdbClientId;
       _igdbClientSecretController.text = settings.igdbClientSecret;
       _selectedCoverSize = settings.coverSize;
@@ -65,7 +61,6 @@ class _SettingsPageState extends State<SettingsPage> {
     if (_formKey.currentState!.validate()) {
       final settings = Settings(
         prefixDirectory: _prefixDirController.text,
-        defaultPrefixFolder: _defaultPrefixFolderController.text,
         igdbClientId: _igdbClientIdController.text,
         igdbClientSecret: _igdbClientSecretController.text,
         igdbAccessToken: _settings?.igdbAccessToken,
@@ -116,7 +111,6 @@ class _SettingsPageState extends State<SettingsPage> {
                       setState(() {
                         _settings = Settings(
                           prefixDirectory: _settings!.prefixDirectory,
-                          defaultPrefixFolder: _settings!.defaultPrefixFolder,
                           igdbClientId: _settings!.igdbClientId,
                           igdbClientSecret: _settings!.igdbClientSecret,
                           igdbAccessToken: _settings!.igdbAccessToken,
@@ -173,7 +167,6 @@ class _SettingsPageState extends State<SettingsPage> {
                   setState(() {
                     _settings = Settings(
                       prefixDirectory: _settings!.prefixDirectory,
-                      defaultPrefixFolder: _settings!.defaultPrefixFolder,
                       igdbClientId: _settings!.igdbClientId,
                       igdbClientSecret: _settings!.igdbClientSecret,
                       igdbAccessToken: _settings!.igdbAccessToken,
@@ -326,15 +319,6 @@ class _SettingsPageState extends State<SettingsPage> {
                                 }
                                 return null;
                               },
-                            ),
-                            const SizedBox(height: 16),
-                            TextFormField(
-                              controller: _defaultPrefixFolderController,
-                              decoration: const InputDecoration(
-                                labelText: 'Default Prefix Folder',
-                                helperText: 'Default folder for new prefixes',
-                                prefixIcon: Icon(Icons.folder_special),
-                              ),
                             ),
                           ],
                         ),

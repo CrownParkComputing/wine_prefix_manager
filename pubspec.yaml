@@ -18,6 +18,7 @@ dependencies:
   process_run: ^0.13.0
   file_picker: ^5.0.0
   url_launcher: ^6.1.6
+  window_manager: ^0.3.8 # Add window manager
   # ...any other dependencies you need...
 
 dev_dependencies:

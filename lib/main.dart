@@ -18,8 +18,35 @@ import 'widgets/game_details_dialog.dart';
 import 'theme/theme_provider.dart';
 import 'widgets/game_carousel.dart';
 import 'pages/game_library_page.dart';
+import 'pages/prefix_management_page.dart'; // Import the new page
+import 'services/build_service.dart'; // Import BuildService
+import 'services/igdb_service.dart'; // Import IgdbService
+import 'services/prefix_storage_service.dart'; // Import PrefixStorageService
+import 'services/process_service.dart'; // Import ProcessService
+import 'services/prefix_creation_service.dart'; // Import PrefixCreationService
+import 'services/prefix_management_service.dart'; // Import PrefixManagementService
+import 'package:window_manager/window_manager.dart'; // Import window_manager
+import 'widgets/custom_title_bar.dart'; // Import the custom title bar
 
-void main() {
+Future<void> main() async { // Make main async
+  WidgetsFlutterBinding.ensureInitialized(); // Ensure bindings are initialized
+  // Must add this line.
+  await windowManager.ensureInitialized();
+
+  WindowOptions windowOptions = const WindowOptions(
+      // size: Size(800, 600), // Optional: Set initial size
+      // center: true, // Optional: Center window
+      // backgroundColor: Colors.transparent, // Optional: Transparent background
+      skipTaskbar: false,
+      // titleBarStyle: TitleBarStyle.normal, // Default
+      titleBarStyle: TitleBarStyle.hidden, // Make window chromeless
+  );
+  windowManager.waitUntilReadyToShow(windowOptions, () async {
+    await windowManager.show();
+    await windowManager.focus();
+  });
+
+
   runApp(
     ChangeNotifierProvider(
       create: (_) => ThemeProvider(),
@@ -53,10 +80,10 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   List<BaseBuild> _builds = [];
   List<WinePrefix> _prefixes = [];
-  final Map<String, int> _runningProcesses = {};  // Map exe path to PID
+  final Map<String, int> _runningProcesses = {}; // Restore map to track running processes for Game Library
   BaseBuild? _selectedBuild;
   PrefixType _selectedPrefixType = PrefixType.wine;
-  PrefixType _selectedPrefixListType = PrefixType.wine;  // For prefix list tab
+  // PrefixType _selectedPrefixListType = PrefixType.wine; // Removed, no longer needed for the old manage tab
   bool _isLoading = false;
   String _prefixName = '';
   String _status = '';
@@ -65,6 +92,14 @@ class _HomePageState extends State<HomePage> {
   int _currentTabIndex = 0;
   String? _selectedGenre;
   int _initialTabIndex = 2; // Start with game library view
+
+  // Service instances
+  final BuildService _buildService = BuildService();
+  final IgdbService _igdbService = IgdbService();
+  final PrefixStorageService _prefixStorageService = PrefixStorageService();
+  final ProcessService _processService = ProcessService();
+  final PrefixCreationService _prefixCreationService = PrefixCreationService();
+  final PrefixManagementService _prefixManagementService = PrefixManagementService();
 
   @override
   void initState() {
@@ -90,38 +125,7 @@ class _HomePageState extends State<HomePage> {
     });
 
     try {
-      // Fetch Wine builds
-      final wineResponse = await http.get(Uri.parse(
-          'https://api.github.com/repos/Kron4ek/Wine-Builds/releases/tags/10.4'));
-      
-      List<BaseBuild> builds = [];
-      
-      if (wineResponse.statusCode == 200) {
-        final wineData = json.decode(wineResponse.body);
-        final wineAssets = wineData['assets'] as List;
-        
-        builds.addAll(
-          wineAssets
-              .where((asset) => asset['name'].toString().endsWith('.tar.xz'))
-              .map((asset) => WineBuild.fromGitHubAsset(asset, '10.4'))
-              .toList()
-        );
-      }
-
-      // Fetch Proton builds
-      final protonResponse = await http.get(Uri.parse(
-          'https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases'));
-      
-      if (protonResponse.statusCode == 200) {
-        final List<dynamic> releases = json.decode(protonResponse.body);
-        builds.addAll(
-          releases
-              .take(5) // Only get the latest 5 releases
-              .map((release) => ProtonBuild.fromGitHubRelease(release))
-              .toList()
-        );
-      }
-      
+      final List<BaseBuild> builds = await _buildService.fetchBuilds();
       setState(() {
         _builds = builds;
         _status = 'Found ${builds.length} builds';
@@ -137,213 +141,244 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  /// Scans for existing prefixes using PrefixManagementService and merges with current list.
   Future<void> _scanForPrefixes() async {
-    if (_settings == null) return;
+    if (_settings == null) {
+      setState(() { _status = 'Cannot scan: Settings not loaded.'; });
+      return;
+    }
 
-    final dir = Directory(_settings!.prefixDirectory);
-    if (!await dir.exists()) return;
+    setState(() { _status = 'Scanning for existing prefixes...'; });
 
     try {
-      await for (final entry in dir.list()) {
-        if (entry is Directory) {
-          final prefixName = path.basename(entry.path);
-          // Check if this is actually a Wine/Proton prefix by looking for system.reg
-          final systemReg = File('${entry.path}/system.reg');
-          if (await systemReg.exists()) {
-            // Try to find the build path and type
-            String? buildPath;
-            PrefixType type = PrefixType.wine;
-            
-            final configFile = File('${entry.path}/.prefix_config');
-            if (await configFile.exists()) {
-              final config = json.decode(await configFile.readAsString());
-              buildPath = config['buildPath'];
-              type = config['type'] == 'proton' ? PrefixType.proton : PrefixType.wine;
-            }
+      final scannedPrefixes = await _prefixManagementService.scanForExistingPrefixes(_settings!);
+      
+      // Merge scanned prefixes with the current list, avoiding duplicates
+      // We prioritize keeping existing entries from _prefixes if paths match,
+      // as they might contain exeEntries loaded from storage.
+      final currentPrefixPaths = _prefixes.map((p) => p.path).toSet();
+      final List<WinePrefix> newPrefixesToAdd = [];
 
-            // Only add if we don't already have this prefix
-            if (!_prefixes.any((p) => p.path == entry.path)) {
-              final prefix = WinePrefix(
-                name: prefixName,
-                path: entry.path,
-                wineBuildPath: buildPath ?? '',
-                type: type,
-                exeEntries: [],
-              );
-              setState(() {
-                _prefixes.add(prefix);
-              });
-            }
-          }
+      for (final scannedPrefix in scannedPrefixes) {
+        if (!currentPrefixPaths.contains(scannedPrefix.path)) {
+          // This is a newly discovered prefix, add it.
+          newPrefixesToAdd.add(scannedPrefix);
+          print('Discovered new prefix: ${scannedPrefix.name}');
+        } else {
+          // Prefix already exists, potentially update info if needed (optional)
+          // For now, we just ignore it to keep the loaded exeEntries.
+          print('Prefix already known: ${scannedPrefix.name}');
         }
       }
-      await _savePrefixes();
+
+      if (newPrefixesToAdd.isNotEmpty) {
+        setState(() {
+          _prefixes.addAll(newPrefixesToAdd);
+          _status = 'Scan complete. Added ${newPrefixesToAdd.length} new prefix(es). Total: ${_prefixes.length}.';
+        });
+        // Save the updated list including the newly discovered prefixes
+        await _savePrefixes();
+      } else {
+         setState(() {
+           _status = 'Scan complete. No new prefixes found. Total: ${_prefixes.length}.';
+         });
+      }
+
     } catch (e) {
+      setState(() {
+        _status = 'Error scanning for prefixes: $e';
+      });
       print('Error scanning for prefixes: $e');
     }
   }
 
+  /// Saves the current list of prefixes using PrefixStorageService.
   Future<void> _savePrefixes() async {
-    final homeDir = Platform.environment['HOME']!;
-    final file = File('$homeDir/.wine_prefix_manager.json');
-    await file.writeAsString(jsonEncode(_prefixes.map((p) => p.toJson()).toList()));
-  }
-
-  Future<void> _loadPrefixes() async {
     try {
-      final homeDir = Platform.environment['HOME']!;
-      final file = File('$homeDir/.wine_prefix_manager.json');
-      if (await file.exists()) {
-        final content = await file.readAsString();
-        final List<dynamic> json = jsonDecode(content);
-        setState(() {
-          _prefixes = json.map((p) => WinePrefix.fromJson(p)).toList();
-        });
-      }
+      await _prefixStorageService.savePrefixes(_prefixes);
+      // Optionally update status: setState(() { _status = 'Prefixes saved.'; });
     } catch (e) {
-      print('Error loading prefixes: $e');
+      setState(() {
+        _status = 'Error saving prefixes: $e';
+      });
     }
   }
 
-  Future<void> _downloadAndCreatePrefix() async {
-    if (_settings == null) return;
-    
-    if (_selectedBuild == null) {
+  // Restore _runExe and _killProcess as they are needed by the Game Library tab (_launchGame)
+  /// Runs an executable using the ProcessService.
+  Future<void> _runExe(WinePrefix prefix, ExeEntry exe) async {
+    // Check if already running
+    if (_runningProcesses.containsKey(exe.path)) {
       setState(() {
-        _status = 'Please select a build';
-      });
-      return;
-    }
-
-    if (_prefixName.isEmpty) {
-      setState(() {
-        _status = 'Please enter a prefix name';
+        _status = '${exe.name} is already running (PID: ${_runningProcesses[exe.path]})';
       });
       return;
     }
 
     setState(() {
-      _isLoading = true;
-      _status = 'Downloading build...';
+      _isLoading = true; // Set loading true when starting
+      _status = 'Starting ${exe.name}...';
     });
 
-    try {
-      final homeDir = Platform.environment['HOME']!;
-      final downloadPath = '$homeDir/${_selectedBuild!.type == PrefixType.wine ? "wine_builds" : "proton_builds"}';
-      await Directory(downloadPath).create(recursive: true);
+    await _processService.runExecutable(
+      prefix,
+      exe,
+      onProcessStart: (startedExePath, pid) {
+        // Ensure updates happen on the UI thread
+        if (mounted) {
+          setState(() {
+            _runningProcesses[startedExePath] = pid;
+            _status = 'Running ${exe.name} (PID: $pid)';
+            // Keep isLoading true while running
+          });
+        }
+      },
+      onProcessExit: (exitedExePath, exitCode, errors) {
+         // Ensure updates happen on the UI thread
+        if (mounted) {
+          setState(() {
+            _runningProcesses.remove(exitedExePath);
+            if (exitCode != 0) {
+               _status = 'Error running ${exe.name} (Code: $exitCode): ${errors.join('\n')}';
+            } else {
+               _status = '${exe.name} exited successfully (Code: $exitCode)';
+            }
+            _isLoading = false; // Set loading false when process exits or fails to start
+          });
+        }
+      },
+    );
+    // Note: If runExecutable returns null (failed to start), the onProcessExit callback
+    // is called immediately by the service, which will set isLoading = false.
+  }
 
-      final fileName = _selectedBuild!.name;
-      final filePath = '$downloadPath/$fileName';
-
-      // Download the build if it doesn't exist
-      if (!File(filePath).existsSync()) {
-        final dio = Dio();
-        await dio.download(_selectedBuild!.downloadUrl, filePath,
-            onReceiveProgress: (received, total) {
-          if (total != -1) {
-            final progress = (received / total * 100).toStringAsFixed(1);
-            setState(() {
-              _status = 'Downloading: $progress%';
-            });
-          }
-        });
-      }
-
+  /// Kills a running process using the ProcessService.
+  Future<void> _killProcess(WinePrefix prefix, ExeEntry exe) async {
+    final pid = _runningProcesses[exe.path];
+    if (pid == null) {
       setState(() {
-        _status = 'Extracting build...';
+        _status = '${exe.name} is not running.';
       });
+      return;
+    }
 
-      // Extract the archive
-      final shell = Shell();
-      await shell.run('tar -xf "$filePath" -C "$downloadPath"');
+    setState(() {
+      _status = 'Attempting to kill ${exe.name} (PID: $pid)...';
+    });
 
-      // Get the extracted directory name
-      final extractedName = fileName.replaceAll(
-        _selectedBuild!.type == PrefixType.wine ? '.tar.xz' : '.tar.gz', 
-        ''
-      );
-      final extractedDir = '$downloadPath/$extractedName';
+    final success = await _processService.killProcess(pid);
 
-      setState(() {
-        _status = 'Creating prefix...';
-      });
-
-      // Create prefix directory, using default folder if set
-      String prefixPath;
-      if (_settings?.defaultPrefixFolder != null && _settings!.defaultPrefixFolder.isNotEmpty) {
-        prefixPath = '${_settings!.defaultPrefixFolder}/$_prefixName';
-      } else {
-        prefixPath = '${_settings!.prefixDirectory}/$_prefixName';
-      }
-      await Directory(prefixPath).create(recursive: true);
-
-      // Save the build path and type for this prefix
-      final configFile = File('$prefixPath/.prefix_config');
-      await configFile.writeAsString(jsonEncode({
-        'buildPath': extractedDir,
-        'type': _selectedBuild!.type == PrefixType.proton ? 'proton' : 'wine'
-      }));
-
-      // Set up environment and create prefix
-      final baseEnv = {
-        'WINEPREFIX': prefixPath,
-        'PATH': '$extractedDir/bin:\$PATH',
-        'LD_LIBRARY_PATH': '$extractedDir/lib:\$LD_LIBRARY_PATH',
-        'GST_PLUGIN_SYSTEM_PATH_1_0': '',
-        'WINEDLLOVERRIDES': 'winemenubuilder.exe=d',
-      };
-
-      if (_selectedBuild!.type == PrefixType.proton) {
-        baseEnv['STEAM_COMPAT_CLIENT_INSTALL_PATH'] = prefixPath;
-        baseEnv['STEAM_COMPAT_DATA_PATH'] = prefixPath;
-      }
-
-      final fullEnv = {
-        ...Platform.environment,
-        ...baseEnv,
-      };
-
-      final shell2 = Shell(environment: fullEnv);
-      
-      // Run setup command
-      if (_selectedBuild!.type == PrefixType.wine) {
-        await shell2.run('$extractedDir/bin/winecfg');
-      } else {
-        // Create a dummy script to initialize the prefix
-        final dummyScript = '${_settings!.prefixDirectory}/_dummy.bat';
-        await File(dummyScript).writeAsString('exit 0');
-        await shell2.run('$extractedDir/proton run "$dummyScript"');
-        await File(dummyScript).delete();
-      }
-
-      // Add prefix to list
-      final newPrefix = WinePrefix(
-        name: _prefixName,
-        path: prefixPath,
-        wineBuildPath: extractedDir,
-        type: _selectedBuild!.type,
-        exeEntries: [],
-      );
-
-      setState(() {
-        _prefixes.add(newPrefix);
-        _status = 'Prefix created successfully!';
-        _prefixNameController.clear();
-        _prefixName = '';
-      });
-
-      await _savePrefixes();
-    } catch (e) {
-      setState(() {
-        _status = 'Error: $e';
-      });
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
+    // ProcessService's runExecutable onProcessExit callback handles removing
+    // the process from _runningProcesses and updating status upon successful termination.
+    // We only need to update status here if the kill command itself failed.
+    if (!success && mounted) { // Check mounted after async gap
+       setState(() {
+         _status = 'Failed to issue kill command for ${exe.name} (PID: $pid). It might still be running.';
+         // We don't remove from _runningProcesses here, as the process might still exit normally
+       });
+    } else if (success && mounted) {
+       // Optional: Update status immediately if kill command succeeded,
+       // but the onProcessExit callback provides more definitive confirmation.
+       // setState(() { _status = 'Kill command sent for ${exe.name} (PID: $pid).'; });
     }
   }
 
+  /// Loads prefixes using PrefixStorageService.
+  Future<void> _loadPrefixes() async {
+    setState(() { _status = 'Loading prefixes...'; });
+    try {
+      final loadedPrefixes = await _prefixStorageService.loadPrefixes();
+      setState(() {
+        _prefixes = loadedPrefixes;
+        _status = 'Loaded ${_prefixes.length} prefixes.';
+      });
+    } catch (e) {
+      setState(() {
+        _status = 'Error loading prefixes: $e';
+      });
+      // Optionally print to console as well
+      print('Error loading prefixes: $e');
+    }
+  }
+
+  /// Downloads the selected build and creates a new prefix using PrefixCreationService.
+  Future<void> _downloadAndCreatePrefix() async {
+    if (_settings == null) {
+       setState(() { _status = 'Settings not loaded.'; });
+       return;
+    }
+    if (_selectedBuild == null) {
+      setState(() { _status = 'Please select a build.'; });
+      return;
+    }
+    if (_prefixName.isEmpty) {
+      setState(() { _status = 'Please enter a prefix name.'; });
+      return;
+    }
+    // Check if prefix name already exists
+    if (_prefixes.any((p) => p.name == _prefixName)) {
+       setState(() { _status = 'Prefix name "$_prefixName" already exists.'; });
+       return;
+    }
+
+
+    setState(() {
+      _isLoading = true;
+      _status = 'Starting prefix creation...'; // Initial status
+      // Reset progress if you add a progress indicator widget
+    });
+
+    try {
+      final newPrefix = await _prefixCreationService.downloadAndCreatePrefix(
+        selectedBuild: _selectedBuild!,
+        prefixName: _prefixName,
+        settings: _settings!,
+        onStatusUpdate: (status) {
+          // Update UI status - ensure it runs on the UI thread
+          if (mounted) {
+            setState(() { _status = status; });
+          }
+        },
+        onProgressUpdate: (progress) {
+          // Update UI progress indicator if you have one
+          // Example: if (mounted) { setState(() { _downloadProgress = progress; }); }
+          // Status is already updated with percentage in the service callback
+        },
+      );
+
+      if (newPrefix != null && mounted) {
+        setState(() {
+          _prefixes.add(newPrefix);
+          // Status already set to success message by service callback
+          _prefixNameController.clear();
+          _prefixName = '';
+          _selectedBuild = null; // Optionally reset build selection
+        });
+        await _savePrefixes(); // Save the updated list
+      } else if (mounted) {
+         // Service returned null (error), status already updated by service callback
+         print('Prefix creation failed (service returned null).');
+      }
+
+    } catch (e) {
+       // Catch any unexpected errors from the service call itself
+       if (mounted) {
+          setState(() {
+             _status = 'Unexpected error during prefix creation: $e';
+          });
+       }
+       print('Unexpected error calling prefix creation service: $e');
+    } finally {
+      // Ensure isLoading is set to false regardless of success or failure
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  // Restore _addExeToPrefix for PrefixManagementPage callback
   Future<void> _addExeToPrefix(WinePrefix prefix) async {
     try {
       // Get exe file path
@@ -496,185 +531,18 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  Future<void> _editExe(WinePrefix prefix, ExeEntry oldExe) async {
-    try {
-      String? filePath;
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['exe'],
-      );
-
-      if (result != null && result.files.single.path != null) {
-        filePath = result.files.single.path!;
-      } else {
-        // Fallback to zenity
-        try {
-          final shell = Shell();
-          final zenityResult = await shell.run(
-            'zenity --file-selection --title="Select Windows Executable" --file-filter="*.exe"'
-          );
-          if (zenityResult.outText.isNotEmpty) {
-            filePath = zenityResult.outText.trim();
-          }
-        } catch (e) {
-          setState(() {
-            _status = 'Error: Please install zenity or try a different file picker';
-          });
-          return;
-        }
-      }
-
-      if (filePath != null) {
-        final newExe = ExeEntry(
-          path: filePath,
-          name: path.basename(filePath),
-          igdbId: oldExe.igdbId,
-          coverUrl: oldExe.coverUrl,
-          screenshotUrls: oldExe.screenshotUrls,
-        );
-
-        setState(() {
-          final index = _prefixes.indexWhere((p) => p.path == prefix.path);
-          if (index != -1) {
-            final exeList = List<ExeEntry>.from(prefix.exeEntries);
-            final exeIndex = exeList.indexWhere((e) => e.path == oldExe.path);
-            if (exeIndex != -1) {
-              exeList[exeIndex] = newExe;
-              _prefixes[index] = WinePrefix(
-                name: prefix.name,
-                path: prefix.path,
-                wineBuildPath: prefix.wineBuildPath,
-                type: prefix.type,
-                exeEntries: exeList,
-              );
-            }
-          }
-        });
-
-        await _savePrefixes();
-      }
-    } catch (e) {
-      setState(() {
-        _status = 'Error editing executable: $e';
-      });
-    }
-  }
-
-  Future<void> _removeExe(WinePrefix prefix, ExeEntry exe) async {
-    // If the exe is running, kill it first
-    if (_runningProcesses.containsKey(exe.path)) {
-      await _killProcess(exe.path);
-    }
-
-    setState(() {
-      final index = _prefixes.indexWhere((p) => p.path == prefix.path);
-      if (index != -1) {
-        _prefixes[index] = WinePrefix(
-          name: prefix.name,
-          path: prefix.path,
-          wineBuildPath: prefix.wineBuildPath,
-          type: prefix.type,
-          exeEntries: prefix.exeEntries.where((e) => e.path != exe.path).toList(),
-        );
-      }
-    });
-
-    await _savePrefixes();
-  }
-
-  Future<void> _runExe(WinePrefix prefix, ExeEntry exe) async {
-    setState(() {
-      _isLoading = true;
-      _status = 'Running ${exe.name}...';
-    });
-
-    try {
-      final baseEnv = {
-        'WINEPREFIX': prefix.path,
-        'PATH': '${prefix.wineBuildPath}/bin:\$PATH',
-        'LD_LIBRARY_PATH': '${prefix.wineBuildPath}/lib:\$LD_LIBRARY_PATH',
-        'GST_PLUGIN_SYSTEM_PATH_1_0': '',
-        'WINEDLLOVERRIDES': 'winemenubuilder.exe=d',
-      };
-
-      if (prefix.type == PrefixType.proton) {
-        baseEnv['STEAM_COMPAT_CLIENT_INSTALL_PATH'] = prefix.path;
-        baseEnv['STEAM_COMPAT_DATA_PATH'] = prefix.path;
-      }
-
-      final exeDir = path.dirname(exe.path);
-      final fullEnv = {
-        ...Platform.environment,
-        ...baseEnv,
-      };
-
-      Process process;
-      List<String> errors = [];
-
-      if (prefix.type == PrefixType.wine) {
-        process = await Process.start(
-          '${prefix.wineBuildPath}/bin/wine',
-          [exe.path],
-          workingDirectory: exeDir,
-          environment: fullEnv,
-        );
-      } else {
-        process = await Process.start(
-          '${prefix.wineBuildPath}/proton',
-          ['run', exe.path],
-          workingDirectory: exeDir,
-          environment: fullEnv,
-        );
-      }
-
-      // Capture any error output
-      process.stderr.transform(utf8.decoder).listen((data) {
-        errors.add(data);
-      });
-
-      // Store PID and monitor process
-      setState(() {
-        _runningProcesses[exe.path] = process.pid;
-        _status = 'Running ${exe.name} (PID: ${process.pid})';
-      });
-
-      // When process exits, handle any errors and cleanup
-      final exitCode = await process.exitCode;
-      setState(() {
-        _runningProcesses.remove(exe.path);
-        if (exitCode != 0 && errors.isNotEmpty) {
-          _status = 'Error running ${exe.name}: ${errors.join('\n')}';
-        } else {
-          _status = '${exe.name} exited with code $exitCode';
-        }
-      });
-    } catch (e) {
-      setState(() {
-        _status = 'Error running ${exe.name}: $e';
-      });
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
-    }
-  }
-
-  Future<void> _killProcess(String exePath) async {
-    final pid = _runningProcesses[exePath];
-    if (pid != null) {
-      try {
-        final shell = Shell();
-        await shell.run('kill $pid');
-        setState(() {
-          _runningProcesses.remove(exePath);
-          _status = 'Process terminated';
-        });
-      } catch (e) {
-        setState(() {
-          _status = 'Error killing process: $e';
-        });
-      }
-    }
+  // Restore _deletePrefix for PrefixManagementPage callback (Implementation needed)
+  Future<void> _deletePrefix(WinePrefix prefix) async {
+    // TODO: Implement confirmation dialog and deletion logic (filesystem and _prefixes list)
+    print('Attempting to delete prefix: ${prefix.name}');
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Delete prefix ${prefix.name} (Not fully implemented)')),
+    );
+    // Example steps:
+    // 1. Show confirmation dialog
+    // 2. If confirmed, delete prefix directory (Directory(prefix.path).delete(recursive: true))
+    // 3. Remove prefix from _prefixes list: setState(() => _prefixes.removeWhere((p) => p.path == prefix.path));
+    // 4. Save updated _prefixes list: await _savePrefixes();
   }
 
   void _openSettings() async {
@@ -690,45 +558,46 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  /// Retrieves a valid IGDB token using the IgdbService.
+  /// Updates local settings if a new token is fetched.
+  /// Returns the token string if successful, otherwise null.
   Future<String?> _getIgdbToken() async {
-    if (_settings == null || 
-        _settings!.igdbClientId.isEmpty || 
-        _settings!.igdbClientSecret.isEmpty) {
+    if (_settings == null) {
+       setState(() {
+         _status = 'Settings not loaded.';
+       });
+       return null;
+    }
+    if (_settings!.igdbClientId.isEmpty || _settings!.igdbClientSecret.isEmpty) {
       setState(() {
         _status = 'IGDB credentials not set. Configure in Settings.';
       });
       return null;
     }
 
-    // Check if we have a valid token already
-    if (_settings!.igdbAccessToken != null && 
-        _settings!.igdbTokenExpiry != null &&
-        _settings!.igdbTokenExpiry!.isAfter(DateTime.now())) {
-      return _settings!.igdbAccessToken;
-    }
+    setState(() { _status = 'Checking/Fetching IGDB token...'; });
 
     try {
-      final response = await http.post(
-        Uri.parse('https://id.twitch.tv/oauth2/token'),
-        body: {
-          'client_id': _settings!.igdbClientId,
-          'client_secret': _settings!.igdbClientSecret,
-          'grant_type': 'client_credentials',
-        },
-      );
+      final tokenData = await _igdbService.getIgdbToken(_settings!);
 
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final token = data['access_token'];
-        final expiresIn = Duration(seconds: data['expires_in']);
-        
-        // Update settings with new token
-        _settings = await AppSettings.updateToken(_settings!, token, expiresIn);
-        
+      if (tokenData != null) {
+        final String token = tokenData['token'];
+        final DateTime expiry = tokenData['expiry'];
+        final bool isNew = tokenData['isNew'];
+
+        // If it's a newly fetched token, update the settings
+        if (isNew) {
+          print("Updating settings with new IGDB token.");
+          // Calculate duration from now until expiry
+          final expiresIn = expiry.difference(DateTime.now());
+          _settings = await AppSettings.updateToken(_settings!, token, expiresIn);
+          // No need to call setState here as _settings is not directly used in build for this
+        }
+        setState(() { _status = 'IGDB token ready.'; });
         return token;
       } else {
         setState(() {
-          _status = 'Failed to get IGDB token: ${response.statusCode} ${response.body}';
+          _status = 'Failed to get IGDB token. Check credentials and network.';
         });
       }
     } catch (e) {
@@ -739,116 +608,67 @@ class _HomePageState extends State<HomePage> {
     return null;
   }
 
+  /// Searches IGDB for games using the IgdbService.
+  /// NOTE: Removed internal setState calls to prevent "setState called during build" errors.
+  /// Status updates should be handled by the caller or the dialog itself.
   Future<List<IgdbGame>> _searchIgdbGames(String query) async {
-    final token = await _getIgdbToken();
-    if (token == null) return [];
-
-    try {
-      final response = await http.post(
-        Uri.parse('https://api.igdb.com/v4/games'),
-        headers: {
-          'Accept': 'application/json',
-          'Client-ID': _settings!.igdbClientId,
-          'Authorization': 'Bearer $token',
-        },
-        body: 'search "$query"; fields name,cover,screenshots,videos,summary; where platforms = (6); limit 20;',
-      );
-
-      if (response.statusCode == 200) {
-        final List<dynamic> games = json.decode(response.body);
-        return games.map((g) => IgdbGame.fromJson(g)).toList();
-      } else {
-        print('IGDB API error: ${response.statusCode} ${response.body}');
-      }
-    } catch (e) {
-      print('Error searching IGDB: $e');
+    final token = await _getIgdbToken(); // This already handles status for token errors
+    if (token == null || _settings == null) {
+      print('Cannot search IGDB: Missing token or settings.');
+      // Consider showing a snackbar or updating status *after* the build phase if needed
+      return [];
     }
-    return [];
+
+    print('Searching IGDB for "$query"...'); // Log instead of setState
+    try {
+      final results = await _igdbService.searchIgdbGames(query, _settings!, token);
+      print('Found ${results.length} game(s).'); // Log instead of setState
+      return results;
+    } catch (e) {
+      print('Error searching IGDB: $e'); // Log instead of setState
+      // Consider showing a snackbar or updating status *after* the build phase if needed
+      return [];
+    }
   }
 
+  /// Fetches the cover URL for a given cover ID using the IgdbService.
   Future<String?> _fetchCoverUrl(int? coverId, String token) async {
-    if (coverId == null) return null;
-    
-    try {
-      final response = await http.post(
-        Uri.parse('https://api.igdb.com/v4/covers'),
-        headers: {
-          'Accept': 'application/json',
-          'Client-ID': _settings!.igdbClientId,
-          'Authorization': 'Bearer $token',
-        },
-        body: 'fields image_id; where id = $coverId;',
-      );
+    if (coverId == null || _settings == null) return null;
 
-      if (response.statusCode == 200) {
-        final List<dynamic> covers = json.decode(response.body);
-        if (covers.isNotEmpty) {
-          final imageId = covers[0]['image_id'];
-          return 'https://images.igdb.com/igdb/image/upload/t_cover_big/$imageId.jpg';
-        }
-      }
+    try {
+      return await _igdbService.fetchCoverUrl(coverId, _settings!, token);
     } catch (e) {
-      print('Error fetching cover: $e');
+      print('Error fetching cover URL in HomePage: $e');
+      // Optionally update status: setState(() { _status = 'Error fetching cover: $e'; });
+      return null;
     }
-    return null;
   }
 
+  /// Fetches screenshot URLs for given IDs using the IgdbService.
   Future<List<String>> _fetchScreenshotUrls(List<int> screenshotIds, String token) async {
-    if (screenshotIds.isEmpty) return [];
-    
-    try {
-      final response = await http.post(
-        Uri.parse('https://api.igdb.com/v4/screenshots'),
-        headers: {
-          'Accept': 'application/json',
-          'Client-ID': _settings!.igdbClientId,
-          'Authorization': 'Bearer $token',
-        },
-        body: 'fields image_id; where id = (${screenshotIds.join(",")});',
-      );
+    if (screenshotIds.isEmpty || _settings == null) return [];
 
-      if (response.statusCode == 200) {
-        final List<dynamic> screenshots = json.decode(response.body);
-        return screenshots
-          .map((s) => 'https://images.igdb.com/igdb/image/upload/t_screenshot_big/${s["image_id"]}.jpg')
-          .toList();
-      }
+    try {
+      return await _igdbService.fetchScreenshotUrls(screenshotIds, _settings!, token);
     } catch (e) {
-      print('Error fetching screenshots: $e');
+      print('Error fetching screenshot URLs in HomePage: $e');
+      // Optionally update status: setState(() { _status = 'Error fetching screenshots: $e'; });
+      return [];
     }
-    return [];
   }
 
+  /// Fetches game video IDs for a given game ID using the IgdbService.
   Future<List<String>> _fetchGameVideoIds(int gameId, String token) async {
-    try {
-      // Debug print to track API requests
-      print('Fetching videos for game ID: $gameId');
-      
-      final response = await http.post(
-        Uri.parse('https://api.igdb.com/v4/game_videos'),
-        headers: {
-          'Accept': 'application/json',
-          'Client-ID': _settings!.igdbClientId,
-          'Authorization': 'Bearer $token',
-        },
-        body: 'fields video_id,name; where game = $gameId;',
-      );
+    if (_settings == null) return [];
 
-      if (response.statusCode == 200) {
-        final List<dynamic> videos = json.decode(response.body);
-        
-        // Debug print response
-        print('Found ${videos.length} videos for game $gameId');
-        
-        final videoIds = videos.map((v) => v['video_id'].toString()).toList();
-        return videoIds;
-      } else {
-        print('Error fetching videos: ${response.statusCode} - ${response.body}');
-      }
+    try {
+      // Debug print moved to service if needed
+      return await _igdbService.fetchGameVideoIds(gameId, _settings!, token);
     } catch (e) {
-      print('Exception fetching game videos: $e');
+      print('Error fetching game video IDs in HomePage: $e');
+      // Optionally update status: setState(() { _status = 'Error fetching videos: $e'; });
+      return [];
     }
-    return [];
   }
 
   // Add this helper method to log video IDs
@@ -890,88 +710,7 @@ class _HomePageState extends State<HomePage> {
     return null;
   }
 
-  Future<void> _renamePrefix(WinePrefix prefix) async {
-    final controller = TextEditingController(text: prefix.name);
-    
-    final newName = await showDialog<String>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Rename Prefix'),
-          content: TextField(
-            controller: controller,
-            decoration: const InputDecoration(labelText: 'New Name'),
-            autofocus: true,
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(context, controller.text),
-              child: const Text('Rename'),
-            ),
-          ],
-        );
-      },
-    );
-    
-    if (newName != null && newName.isNotEmpty && newName != prefix.name) {
-      setState(() {
-        _status = 'Renaming prefix...';
-        _isLoading = true;
-      });
-      
-      try {
-        // Get parent directory
-        final parentDir = Directory(path.dirname(prefix.path));
-        
-        // Create new directory path
-        final newPath = path.join(parentDir.path, newName);
-        
-        // Check if new directory already exists
-        final newDir = Directory(newPath);
-        if (await newDir.exists()) {
-          setState(() {
-            _status = 'Error: Prefix with name "$newName" already exists';
-            _isLoading = false;
-          });
-          return;
-        }
-        
-        // Rename directory
-        await Directory(prefix.path).rename(newPath);
-        
-        // Update prefix in the list
-        setState(() {
-          final index = _prefixes.indexWhere((p) => p.path == prefix.path);
-          if (index != -1) {
-            _prefixes[index] = WinePrefix(
-              name: newName,
-              path: newPath,
-              wineBuildPath: _prefixes[index].wineBuildPath,
-              type: _prefixes[index].type,
-              exeEntries: _prefixes[index].exeEntries,
-            );
-          }
-        });
-        
-        // Save updated prefixes
-        await _savePrefixes();
-        
-        setState(() {
-          _status = 'Prefix renamed successfully!';
-          _isLoading = false;
-        });
-      } catch (e) {
-        setState(() {
-          _status = 'Error renaming prefix folder: $e';
-          _isLoading = false;
-        });
-      }
-    }
-  }
+  // Removed _renamePrefix method
 
   // Add method to edit game details
   Future<void> _editGameDetails(GameEntry gameEntry) async {
@@ -1163,6 +902,7 @@ class _HomePageState extends State<HomePage> {
       length: 4,
       initialIndex: 0,
       child: Scaffold(
+        appBar: const CustomTitleBar(title: 'Wine Prefix Manager'), // Add custom title bar
         bottomNavigationBar: BottomNavigationBar(
           currentIndex: _currentTabIndex,
           type: BottomNavigationBarType.fixed,
@@ -1195,7 +935,14 @@ class _HomePageState extends State<HomePage> {
           children: [
             _buildWelcomePage(),
             _buildCreatePrefixTab(),
-            _buildManagePrefixesTab(),
+            PrefixManagementPage( // Pass necessary data and callbacks
+              prefixes: _prefixes,
+              runningProcesses: _runningProcesses,
+              onAddExecutable: _addExeToPrefix,
+              onDeletePrefix: _deletePrefix, // Placeholder implementation
+              onRunExe: _runExe,
+              onKillProcess: _killProcess,
+            ),
             _buildGameLibrary(),
           ],
         ),
@@ -1227,11 +974,8 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildCreatePrefixTab() {
+    // Remove the AppBar here, as the main Scaffold now has the CustomTitleBar
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Create New Prefix'),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-      ),
       body: SingleChildScrollView(
         child: Padding(
           padding: const EdgeInsets.all(24.0),
@@ -1442,185 +1186,7 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildManagePrefixesTab() {
-    final filteredPrefixes = _prefixes
-        .where((prefix) => prefix.type == _selectedPrefixListType)
-        .toList();
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Manage Prefixes'),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        actions: [
-          // Filter dropdown
-          DropdownButton<PrefixType>(
-            value: _selectedPrefixListType,
-            onChanged: (PrefixType? newValue) {
-              if (newValue != null) {
-                setState(() {
-                  _selectedPrefixListType = newValue;
-                });
-              }
-            },
-            items: PrefixType.values.map((type) {
-              final label = type == PrefixType.wine ? 'Wine' : 'Proton';
-              final icon = type == PrefixType.wine ? Icons.wine_bar : Icons.games;
-              
-              return DropdownMenuItem<PrefixType>(
-                value: type,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(icon, color: Theme.of(context).colorScheme.primary),
-                    const SizedBox(width: 8),
-                    Text(label),
-                  ],
-                ),
-              );
-            }).toList(),
-            underline: Container(),
-            icon: const Icon(Icons.filter_list),
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-          ),
-        ],
-      ),
-      body: filteredPrefixes.isEmpty
-        ? Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.folder_off,
-                  size: 64,
-                  color: Theme.of(context).colorScheme.outline,
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'No ${_selectedPrefixListType.toString().split('.').last} prefixes found',
-                  style: TextStyle(
-                    fontSize: 18,
-                    color: Theme.of(context).colorScheme.outline,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                ElevatedButton.icon(
-                  onPressed: () {
-                    setState(() {
-                      _currentTabIndex = 1; // Switch to Create tab
-                    });
-                  },
-                  icon: const Icon(Icons.add),
-                  label: const Text('Create New Prefix'),
-                ),
-              ],
-            ),
-          )
-        : ListView.builder(
-            itemCount: filteredPrefixes.length,
-            padding: const EdgeInsets.all(16),
-            itemBuilder: (context, index) {
-              final prefix = filteredPrefixes[index];
-              return Card(
-                elevation: 2,
-                margin: const EdgeInsets.only(bottom: 16),
-                clipBehavior: Clip.antiAlias,
-                child: ExpansionTile(
-                  leading: Icon(
-                    prefix.type == PrefixType.wine ? Icons.wine_bar : Icons.games,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                  title: Text(
-                    prefix.name,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  subtitle: Text(
-                    'Path: ${prefix.path}',
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.edit),
-                        tooltip: 'Rename Prefix',
-                        onPressed: () => _renamePrefix(prefix),
-                      ),
-                      const SizedBox(width: 4),
-                      Text('${prefix.exeEntries.length}'),
-                    ],
-                  ),
-                  children: [
-                    // Executables list
-                    ...prefix.exeEntries.map((exe) => ListTile(
-                      leading: Icon(
-                        exe.isGame ? Icons.sports_esports : Icons.app_shortcut,
-                        color: exe.notWorking
-                          ? Theme.of(context).colorScheme.error
-                          : Theme.of(context).colorScheme.secondary,
-                      ),
-                      title: Text(exe.name),
-                      subtitle: Text(
-                        exe.path,
-                        style: const TextStyle(fontSize: 12),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            icon: _runningProcesses.containsKey(exe.path)
-                                ? const Icon(Icons.stop, color: Colors.red)
-                                : const Icon(Icons.play_arrow, color: Colors.green),
-                            onPressed: () {
-                              if (_runningProcesses.containsKey(exe.path)) {
-                                _killProcess(exe.path);
-                              } else {
-                                _runExe(prefix, exe);
-                              }
-                            },
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.edit),
-                            onPressed: () => _editExe(prefix, exe),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.delete_outline),
-                            onPressed: () => _removeExe(prefix, exe),
-                          ),
-                        ],
-                      ),
-                    )),
-                    
-                    // Add executable button
-                    Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: ElevatedButton.icon(
-                        onPressed: () => _addExeToPrefix(prefix),
-                        icon: const Icon(Icons.add),
-                        label: const Text('Add Executable'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-                          foregroundColor: Theme.of(context).colorScheme.onPrimaryContainer,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          setState(() {
-            _currentTabIndex = 1; // Switch to Create tab
-          });
-        },
-        tooltip: 'Create New Prefix',
-        child: const Icon(Icons.add),
-      ),
-    );
-  }
+  // Removed _buildManagePrefixesTab method as its functionality is now in PrefixManagementPage
 
   Widget _buildGameLibrary() {
     final List<GameEntry> allGames = [];
@@ -1663,6 +1229,7 @@ class _HomePageState extends State<HomePage> {
           Navigator.pop(context);
           _launchGame(game.prefix, game.exe);
         },
+        onMoveGameFolder: _moveGameFolder, // Add this line
         onToggleWorkingStatus: (gameEntry, notWorking) {
           // Update UI state immediately
           setState(() {
@@ -1733,6 +1300,206 @@ class _HomePageState extends State<HomePage> {
         await _savePrefixes();
         setState(() {});
       }
+    }
+  }
+
+  /// Moves the parent directory of the game's executable to a new location.
+  Future<void> _moveGameFolder(GameEntry game) async {
+    final String currentExePath = game.exe.path;
+    // Ensure we have an absolute path before getting the dirname
+    final String absoluteExePath = path.isAbsolute(currentExePath)
+        ? currentExePath
+        : path.absolute(currentExePath); // This might need context if CWD changes, but should be okay here.
+    
+    // Check if the path is valid and exists before proceeding
+    final exeFile = File(absoluteExePath);
+    if (!await exeFile.exists()) {
+      if (mounted) {
+        setState(() {
+          _status = 'Error: Executable path "$absoluteExePath" does not exist.';
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: Executable path does not exist.')),
+        );
+      }
+      return;
+    }
+
+    final String currentParentDir = path.dirname(absoluteExePath);
+    final String folderName = path.basename(currentParentDir);
+
+    // Check if the parent directory exists
+    final parentDir = Directory(currentParentDir);
+     if (!await parentDir.exists()) {
+      if (mounted) {
+        setState(() {
+          _status = 'Error: Parent directory "$currentParentDir" does not exist.';
+        });
+         ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: Game folder does not exist.')),
+        );
+      }
+      return;
+    }
+
+
+    if (mounted) {
+      setState(() {
+        _status = 'Select destination directory for "$folderName"...';
+      });
+    }
+
+    String? destinationDir;
+    try {
+      // Use file picker to get the destination directory
+      destinationDir = await FilePicker.platform.getDirectoryPath(
+        dialogTitle: 'Select Destination Folder for "$folderName"',
+      );
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _status = 'Error opening directory picker: $e';
+        });
+         ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error opening directory picker: $e')),
+        );
+      }
+      return;
+    }
+
+    if (destinationDir == null) {
+      if (mounted) {
+        setState(() {
+          _status = 'Move cancelled.';
+        });
+      }
+      return; // User cancelled
+    }
+
+    final String newParentDir = path.join(destinationDir, folderName);
+
+    // Prevent moving into itself or if destination is the same
+    if (path.equals(newParentDir, currentParentDir)) {
+       if (mounted) {
+        setState(() {
+          _status = 'Source and destination are the same. Move cancelled.';
+        });
+         ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Source and destination are the same.')),
+        );
+      }
+      return;
+    }
+    
+    // Check if destination already exists
+    final newDir = Directory(newParentDir);
+    if (await newDir.exists()) {
+      if (mounted) {
+        setState(() {
+          _status = 'Error: Destination "$newParentDir" already exists.';
+        });
+         ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: Destination folder "$folderName" already exists.')),
+        );
+      }
+      return;
+    }
+
+    if (mounted) {
+      setState(() {
+        _isLoading = true;
+        _status = 'Moving "$currentParentDir" to "$newParentDir"...';
+      });
+    }
+
+    try {
+      // Use 'mv' command via Shell for moving the directory
+      final shell = Shell();
+      // Ensure paths are quoted to handle spaces and special characters
+      final command = 'mv "${currentParentDir}" "${destinationDir}"'; // Move into the selected destination
+      print('Executing move command: $command');
+      final results = await shell.run(command);
+      
+      // shell.run returns a List<ProcessResult>, access the first one
+      final result = results.first;
+
+      if (result.exitCode != 0) {
+        // Attempt to parse stderr for a more specific error message
+        String errorMsg = result.errText.trim();
+        if (errorMsg.isEmpty) {
+          errorMsg = 'Unknown error (exit code ${result.exitCode})';
+        }
+        throw Exception('Failed to move directory: $errorMsg');
+      }
+
+      // Calculate the new executable path relative to the *new* parent directory
+      final String relativeExePath = path.relative(absoluteExePath, from: currentParentDir);
+      final String newExePath = path.join(newParentDir, relativeExePath);
+
+      // Update the ExeEntry in the state
+      final prefixIndex = _prefixes.indexWhere((p) => p.path == game.prefix.path);
+      if (prefixIndex != -1) {
+        final exeList = List<ExeEntry>.from(_prefixes[prefixIndex].exeEntries);
+        // Find the specific exe entry using the *original* path
+        final exeIndex = exeList.indexWhere((e) => e.path == currentExePath);
+
+        if (exeIndex != -1) {
+          final updatedExe = ExeEntry(
+            path: newExePath, // *** Update the path ***
+            name: game.exe.name,
+            igdbId: game.exe.igdbId,
+            coverUrl: game.exe.coverUrl,
+            screenshotUrls: game.exe.screenshotUrls,
+            videoIds: game.exe.videoIds,
+            isGame: game.exe.isGame,
+            description: game.exe.description,
+            notWorking: game.exe.notWorking,
+            category: game.exe.category,
+            wineTypeOverride: game.exe.wineTypeOverride,
+          );
+
+          exeList[exeIndex] = updatedExe;
+          _prefixes[prefixIndex] = WinePrefix(
+            name: _prefixes[prefixIndex].name,
+            path: _prefixes[prefixIndex].path,
+            wineBuildPath: _prefixes[prefixIndex].wineBuildPath,
+            type: _prefixes[prefixIndex].type,
+            exeEntries: exeList,
+          );
+
+          await _savePrefixes();
+
+          if (mounted) {
+            setState(() {
+              _status = 'Successfully moved "$folderName" to "$destinationDir" and updated path.';
+              _isLoading = false;
+            });
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Moved "$folderName" successfully.')),
+            );
+          }
+        } else {
+           // This case should ideally not happen if the GameEntry was valid
+           throw Exception('Consistency error: Could not find executable entry with path "$currentExePath" in prefix "${game.prefix.name}" to update after move.');
+        }
+      } else {
+         // This case should ideally not happen
+         throw Exception('Consistency error: Could not find prefix entry with path "${game.prefix.path}" to update after move.');
+      }
+
+    } catch (e) {
+      print('Error moving game folder: $e'); // Log detailed error
+      if (mounted) {
+        setState(() {
+          // Provide a user-friendly error message
+          _status = 'Error moving folder: ${e.toString().replaceFirst("Exception: ", "")}';
+          _isLoading = false;
+        });
+         ScaffoldMessenger.of(context).showSnackBar(
+           SnackBar(content: Text('Error moving folder: ${e.toString().replaceFirst("Exception: ", "")}')),
+         );
+      }
+      // Note: No automatic rollback implemented. The move might be partially complete.
     }
   }
 }
