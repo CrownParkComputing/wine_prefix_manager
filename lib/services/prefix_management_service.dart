@@ -130,5 +130,60 @@ class PrefixManagementService {
     return foundPrefixes;
   }
 
+
+  /// Deletes the specified prefix directory recursively.
+  /// Returns true if successful, false otherwise.
+  Future<bool> deletePrefixDirectory(String prefixPath) async {
+    try {
+      final dir = Directory(prefixPath);
+      if (await dir.exists()) {
+        await dir.delete(recursive: true);
+        print('Deleted prefix directory: $prefixPath');
+        return true;
+      } else {
+        print('Prefix directory not found, nothing to delete: $prefixPath');
+        return true; // Consider it success if it doesn't exist
+      }
+    } catch (e) {
+      print('Error deleting prefix directory $prefixPath: $e');
+      return false;
+    }
+  }
+
+  /// Moves a game's folder (parent directory of the executable) to a new parent directory.
+  /// Returns the new path of the executable.
+  Future<String> moveGameFolder(String currentExePath, String destinationParentDir) async {
+    final sourceDir = Directory(path.dirname(currentExePath));
+    final sourceDirName = path.basename(sourceDir.path);
+    final destinationDir = Directory(path.join(destinationParentDir, sourceDirName));
+
+    if (!await sourceDir.exists()) {
+      throw Exception('Source directory does not exist: ${sourceDir.path}');
+    }
+    if (await destinationDir.exists()) {
+      throw Exception('Destination directory already exists: ${destinationDir.path}');
+    }
+    if (sourceDir.path == destinationDir.path) {
+       throw Exception('Source and destination directories are the same.');
+    }
+
+    try {
+      print('Moving directory from ${sourceDir.path} to ${destinationDir.path}');
+      // Ensure destination parent exists
+      await Directory(destinationParentDir).create(recursive: true);
+      // Rename (move) the directory
+      await sourceDir.rename(destinationDir.path);
+
+      // Calculate the new executable path
+      final exeFilename = path.basename(currentExePath);
+      final newExePath = path.join(destinationDir.path, exeFilename);
+      print('Directory moved successfully. New exe path: $newExePath');
+      return newExePath;
+    } catch (e) {
+      print('Error moving directory: $e');
+      throw Exception('Failed to move game folder: $e');
+    }
+  }
+
   // Future methods for addExeToPrefix, deletePrefix, etc., could be added here later.
 }

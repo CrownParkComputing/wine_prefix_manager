@@ -47,46 +47,100 @@ class GameLibraryPage extends StatelessWidget {
         ? games.where((game) => game.exe.category == selectedGenre).toList()
         : games;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Game Library'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.filter_list),
-            onPressed: () {
-              _showFilterDialog(context);
-            },
-          ),
-        ],
-      ),
-      body: filteredGames.isEmpty
-          ? const Center(child: Text('No games found'))
-          : GridView.builder(
-              padding: const EdgeInsets.all(16),
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: _getCrossAxisCount(context),
-                childAspectRatio: 0.7,
-                crossAxisSpacing: 16,
-                mainAxisSpacing: 16,
+    return Column(
+      children: [
+        // App title - since this is now the main page
+        Padding(
+          padding: const EdgeInsets.only(top: 8.0, left: 16.0, right: 16.0),
+          child: Row(
+            children: [
+              const Text(
+                'Game Library',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-              itemCount: filteredGames.length,
-              itemBuilder: (context, index) {
-                final game = filteredGames[index];
-                return GestureDetector(
-                  onTap: () => onShowDetails(context, game),
-                  child: Card(
-                    elevation: 4,
-                    clipBehavior: Clip.antiAlias,
-                    child: GameCard(
-                      game: game,
-                      onTap: (g) => onShowDetails(context, g),
-                      onLaunch: (g) => onLaunchGame(g.prefix, g.exe),
-                      coverSize: coverSize,
-                    ),
-                  ),
-                );
-              },
+              const Spacer(),
+              // Filter button
+              IconButton(
+                icon: const Icon(Icons.filter_list),
+                tooltip: 'Filter Games',
+                onPressed: () {
+                  _showFilterDialog(context);
+                },
+              ),
+            ],
+          ),
+        ),
+        // Display current filter if one is selected
+        if (selectedGenre != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: Row(
+              children: [
+                const Text('Filtered by: '),
+                Chip(
+                  label: Text(selectedGenre!),
+                  deleteIcon: const Icon(Icons.close, size: 16),
+                  onDeleted: () {
+                    if (onGenreSelected != null) onGenreSelected!(null);
+                  },
+                ),
+              ],
             ),
+          ),
+        // Original Body Content (Expanded)
+        Expanded(
+          child: filteredGames.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.sports_esports_outlined, size: 64, color: Colors.grey),
+                      const SizedBox(height: 16),
+                      Text(
+                        selectedGenre != null 
+                            ? 'No games found in category "$selectedGenre"'
+                            : 'No games found',
+                        style: const TextStyle(fontSize: 18),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Add games in the Manage section',
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                )
+              : GridView.builder(
+                  padding: const EdgeInsets.all(16),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: _getCrossAxisCount(context),
+                    childAspectRatio: 0.7,
+                    crossAxisSpacing: 16,
+                    mainAxisSpacing: 16,
+                  ),
+                  itemCount: filteredGames.length,
+                  itemBuilder: (context, index) {
+                    final game = filteredGames[index];
+                    return GestureDetector(
+                      onTap: () => onShowDetails(context, game),
+                      child: Card(
+                        elevation: 4,
+                        clipBehavior: Clip.antiAlias,
+                        child: GameCard(
+                          game: game,
+                          onTap: (g) => onShowDetails(context, g),
+                          onLaunch: (g) => onLaunchGame(g.prefix, g.exe),
+                          coverSize: coverSize,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
     );
   }
 

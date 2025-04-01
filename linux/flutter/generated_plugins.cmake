@@ -3,6 +3,9 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  bitsdojo_window_linux
+  file_saver
+  flutter_acrylic
   screen_retriever
   url_launcher_linux
   window_manager

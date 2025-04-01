@@ -46,24 +46,94 @@ class ProcessService {
       String command;
       List<String> arguments;
 
-      if (prefix.type == PrefixType.wine) {
-        command = '${prefix.wineBuildPath}/bin/wine';
-        arguments = [exe.path];
-      } else { // Proton
-        command = '${prefix.wineBuildPath}/proton';
+      // For Proton, we need to handle paths differently
+      // The buildPath in prefix settings points to where the Proton runtime is located
+      // NOT the prefix directory itself
+      String? protonRuntimePath;
+      
+      if (prefix.type == PrefixType.proton && prefix.wineBuildPath != null) {
+        final buildPath = prefix.wineBuildPath!;
+        String resolvedPath;
+        
+        if (path.isAbsolute(buildPath)) {
+          resolvedPath = buildPath;
+        } else {
+          resolvedPath = path.join(Directory.current.path, buildPath);
+        }
+        
+        print('Checking proton build directory: $resolvedPath');
+        try {
+          final dir = Directory(resolvedPath);
+          if (await dir.exists()) {
+            final files = await dir.list().toList();
+            print('Files in proton directory:');
+            for (var file in files) {
+              print(' - ${path.basename(file.path)}');
+            }
+            
+            // Find the proton executable - it might be named differently
+            String? protonExecutable;
+            for (var file in files) {
+              if (file is File) {
+                if (path.basename(file.path).toLowerCase().contains('proton') || 
+                    path.basename(file.path) == 'proton') {
+                  protonExecutable = file.path;
+                  print('Found potential proton executable: $protonExecutable');
+                  break;
+                }
+              }
+            }
+            
+            if (protonExecutable != null) {
+              command = protonExecutable;
+            } else {
+              // Fall back to the standard path
+              command = path.join(resolvedPath, 'proton');
+              print('No proton executable found, using default path: $command');
+            }
+          } else {
+            print('ERROR: Proton build directory does not exist: $resolvedPath');
+            onProcessExit(exe.path, -1, ['ERROR: Proton build directory does not exist: $resolvedPath']);
+            return null;
+          }
+        } catch (e) {
+          print('Error listing proton directory: $e');
+          onProcessExit(exe.path, -1, ['Error listing proton directory: $e']);
+          return null;
+        }
+        
         arguments = ['run', exe.path];
+      } else {
+        // Handle Wine case
+        final normalizedBuildPath = path.normalize(
+          path.isAbsolute(prefix.wineBuildPath ?? '') 
+              ? (prefix.wineBuildPath ?? '') 
+              : path.join(Directory.current.path, prefix.wineBuildPath ?? '')
+        );
+        command = path.join(normalizedBuildPath, 'bin', 'wine');
+        arguments = [exe.path];
       }
 
       print('Running command: $command ${arguments.join(' ')}');
       print('Working directory: $exeDir');
-      // print('Environment: $fullEnv'); // Uncomment for deep debugging
+      
+      // Make the proton script executable if needed
+      if (prefix.type == PrefixType.proton) {
+        try {
+          await Process.run('chmod', ['+x', command]);
+          print('Made proton script executable: $command');
+        } catch (e) {
+          print('Warning: Could not set executable permission: $e');
+        }
+      }
 
       process = await Process.start(
         command,
         arguments,
         workingDirectory: exeDir,
         environment: fullEnv,
-        runInShell: false, // Usually false is better unless you need shell features
+        // Always run with runInShell for consistent behavior
+        runInShell: true,
       );
 
       // Notify caller about process start
@@ -73,6 +143,11 @@ class ProcessService {
       process.stderr.transform(utf8.decoder).listen((data) {
         print('stderr: $data'); // Log stderr
         errors.add(data);
+      });
+
+      // Also capture stdout for debugging
+      process.stdout.transform(utf8.decoder).listen((data) {
+        print('stdout: $data');
       });
 
       // Don't await exit code here, let the caller manage the process lifetime

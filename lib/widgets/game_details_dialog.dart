@@ -1,476 +1,640 @@
-import 'dart:io'; // Import for File
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../models/prefix_models.dart'; // Import only from prefix_models.dart
+import '../models/prefix_models.dart';
 import '../models/settings.dart';
 
 class GameDetailsDialog extends StatefulWidget {
   final GameEntry game;
   final Settings settings;
   final List<WinePrefix> availablePrefixes;
+  final VoidCallback onLaunchGame;
   final Function(GameEntry) onEditGame;
   final Function(GameEntry) onChangePrefix;
-  final Function() onLaunchGame;
+  final Function(GameEntry) onMoveGameFolder;
   final Function(GameEntry, bool) onToggleWorkingStatus;
   final Function(GameEntry, String?) onChangeCategory;
-  final Function(GameEntry) onMoveGameFolder; // Add this line
+  final Function(GameEntry) onEditExePath; // New callback for editing exe path
 
   const GameDetailsDialog({
     Key? key,
     required this.game,
     required this.settings,
     required this.availablePrefixes,
+    required this.onLaunchGame,
     required this.onEditGame,
     required this.onChangePrefix,
-    required this.onLaunchGame,
+    required this.onMoveGameFolder,
     required this.onToggleWorkingStatus,
     required this.onChangeCategory,
-    required this.onMoveGameFolder, // Ensure this is required
+    required this.onEditExePath, // Add required parameter
   }) : super(key: key);
 
   @override
   State<GameDetailsDialog> createState() => _GameDetailsDialogState();
 }
 
-class _GameDetailsDialogState extends State<GameDetailsDialog> {
-  // Add a page controller as a class field
-  late PageController _screenshotController;
-  int _currentScreenshotIndex = 0;
+class _GameDetailsDialogState extends State<GameDetailsDialog> with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+  String? _selectedCategory;
+  int _currentTabIndex = 0;
   
   @override
   void initState() {
     super.initState();
-    _screenshotController = PageController();
+    _tabController = TabController(length: 4, vsync: this);
+    _tabController.addListener(() {
+      if (_tabController.indexIsChanging) {
+        setState(() {
+          _currentTabIndex = _tabController.index;
+        });
+      }
+    });
+    _selectedCategory = widget.game.exe.category;
   }
   
   @override
   void dispose() {
-    _screenshotController.dispose();
+    _tabController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      child: Container(
-        width: MediaQuery.of(context).size.width * 0.8,
-        height: MediaQuery.of(context).size.height * 0.8,
-        constraints: const BoxConstraints(maxWidth: 800),
-        child: Column(
-          children: [
-            _buildHeader(),
-            Expanded(
-              child: SingleChildScrollView(
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildGameInfo(),
-                      const SizedBox(height: 16),
-                      _buildActionButtons(),
-                      const SizedBox(height: 24),
-                      if (widget.game.exe.description != null)
-                        _buildDescription(),
-                      const SizedBox(height: 16),
-                      _buildScreenshots(),
-                      const SizedBox(height: 16),
-                      if (widget.game.exe.videoIds.isNotEmpty)
-                        _buildVideoLinks(),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHeader() {
-    return AppBar(
-      title: Text(widget.game.exe.name),
-      actions: [
-        IconButton(
-          icon: const Icon(Icons.close),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildGameInfo() {
-    final color = widget.game.exe.notWorking ? Colors.red : Colors.green;
+    final double dialogWidth = MediaQuery.of(context).size.width * 0.8;
+    final double dialogHeight = MediaQuery.of(context).size.height * 0.8;
     
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Prefix Selection
-            Row(
-              children: [
-                const Text('Prefix: '),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: DropdownButton<WinePrefix>(
-                    value: widget.game.prefix,
-                    isExpanded: true,
-                    items: widget.availablePrefixes.map((prefix) {
-                      return DropdownMenuItem<WinePrefix>(
-                        value: prefix,
-                        child: Text(
-                          prefix.name,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      );
-                    }).toList(),
-                    onChanged: (prefix) {
-                      if (prefix != null && prefix != widget.game.prefix) {
-                        Navigator.pop(context); // Close the dialog first
-                        widget.onChangePrefix(widget.game);
-                      }
-                    },
-                  ),
-                ),
-              ],
-            ),
-            const Divider(),
-            
-            // Category Selection
-            Row(
-              children: [
-                const Text('Category: '),
-                const SizedBox(width: 8),
-                DropdownButton<String?>(
-                  value: widget.game.exe.category,
-                  hint: const Text('Uncategorized'),
-                  items: [
-                    const DropdownMenuItem<String?>(
-                      value: null,
-                      child: Text('Uncategorized'),
-                    ),
-                    ...widget.settings.categories.map((String category) {
-                      return DropdownMenuItem<String?>(
-                        value: category,
-                        child: Text(category),
-                      );
-                    }),
-                  ],
-                  onChanged: (String? category) {
-                    widget.onChangeCategory(widget.game, category);
-                    Navigator.pop(context);
-                  },
-                ),
-              ],
-            ),
-            const Divider(),
-            
-            // Working Status
-            Row(
-              children: [
-                const Text('Status: '),
-                const SizedBox(width: 8),
-                Chip(
-                  label: Text(
-                    widget.game.exe.notWorking ? 'Not Working' : 'Working',
-                    style: TextStyle(color: color),
-                  ),
-                  backgroundColor: color.withOpacity(0.1),
-                ),
-                const Spacer(),
-                TextButton(
-                  onPressed: () {
-                    widget.onToggleWorkingStatus(widget.game, !widget.game.exe.notWorking);
-                    Navigator.pop(context);
-                  },
-                  child: Text(
-                    widget.game.exe.notWorking ? 'Mark as Working' : 'Mark as Not Working'
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
+    return Dialog(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
       ),
-    );
-  }
-
-  Widget _buildActionButtons() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-      children: [
-        ElevatedButton.icon(
-          icon: const Icon(Icons.play_arrow),
-          label: const Text('Play'),
-          onPressed: () {
-            Navigator.pop(context);
-            widget.onLaunchGame();
-          },
-        ),
-        ElevatedButton.icon(
-          icon: const Icon(Icons.edit),
-          label: const Text('Edit Details'),
-          onPressed: () {
-            Navigator.pop(context);
-            widget.onEditGame(widget.game);
-          },
-        ),
-        ElevatedButton.icon( // Add this button
-          icon: const Icon(Icons.drive_file_move_outline),
-          label: const Text('Move Folder'),
-          onPressed: () {
-            Navigator.pop(context);
-            widget.onMoveGameFolder(widget.game);
-          },
-        ),
-      ],
-    );
-  }
-
-  Widget _buildDescription() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
+      child: Container(
+        width: dialogWidth,
+        height: dialogHeight,
+        padding: EdgeInsets.zero,
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
-              'Description',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Text(widget.game.exe.description ?? ''),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildScreenshots() {
-    if (widget.game.exe.screenshotUrls.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Screenshots',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 8),
-        Stack(
-          children: [
-            SizedBox(
-              height: 220,
-              child: PageView.builder(
-                controller: _screenshotController,
-                // Use local paths if available, otherwise fallback to URLs
-                itemCount: widget.game.exe.localScreenshotPaths.isNotEmpty
-                           ? widget.game.exe.localScreenshotPaths.length
-                           : widget.game.exe.screenshotUrls.length,
-                onPageChanged: (index) {
-                  setState(() {
-                    _currentScreenshotIndex = index;
-                  });
-                },
-                itemBuilder: (context, index) {
-                  final bool useLocal = widget.game.exe.localScreenshotPaths.isNotEmpty && index < widget.game.exe.localScreenshotPaths.length;
-                  final String imagePathOrUrl = useLocal
-                                                ? widget.game.exe.localScreenshotPaths[index]
-                                                : (index < widget.game.exe.screenshotUrls.length ? widget.game.exe.screenshotUrls[index] : ''); // Fallback URL
-
-                  if (imagePathOrUrl.isEmpty) {
-                    // Handle case where index might be out of bounds for URLs if local paths were expected but missing
-                    return _buildErrorPlaceholder();
-                  }
-
-                  return GestureDetector(
-                    // Pass both local path and URL to fullscreen view if needed, or decide priority there
-                    onTap: () => _showFullScreenImage(imagePathOrUrl, isLocal: useLocal),
-                    child: Card(
-                      margin: const EdgeInsets.symmetric(horizontal: 4.0),
-                      clipBehavior: Clip.antiAlias,
-                      child: useLocal
-                          ? Image.file( // Use Image.file for local paths
-                              File(imagePathOrUrl),
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => _buildErrorPlaceholder(),
-                            )
-                          : Image.network( // Use Image.network for URLs
-                              imagePathOrUrl,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => _buildErrorPlaceholder(),
-                            ),
+            // Custom header with close button
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: Theme.of(context).primaryColor,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(16),
+                  topRight: Radius.circular(16),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      widget.game.exe.name,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
                     ),
-                  );
-                },
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ],
               ),
             ),
             
-            // Left/Right navigation arrows
-            Positioned.fill(
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            // Tab Bar (outside of AppBar for better layout)
+            Container(
+              color: Theme.of(context).primaryColor.withOpacity(0.8),
+              child: TabBar(
+                controller: _tabController,
+                labelColor: Colors.white,
+                unselectedLabelColor: Colors.white70,
+                tabs: const [
+                  Tab(icon: Icon(Icons.info), text: 'Info'),
+                  Tab(icon: Icon(Icons.settings), text: 'Settings'),
+                  Tab(icon: Icon(Icons.image), text: 'Media'),
+                  Tab(icon: Icon(Icons.history), text: 'History'),
+                ],
+              ),
+            ),
+            
+            // Tab content with explicit constraints
+            Expanded(
+              child: TabBarView(
+                controller: _tabController,
                 children: [
-                  // Left arrow
-                  IconButton(
-                    icon: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.black54,
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
-                    ),
-                    onPressed: _currentScreenshotIndex > 0
-                        ? () {
-                            _screenshotController.previousPage(
-                              duration: const Duration(milliseconds: 300),
-                              curve: Curves.easeInOut,
-                            );
-                          }
-                        : null,
+                  _buildInfoTab(),
+                  _buildSettingsTab(),
+                  _buildMediaTab(),
+                  _buildHistoryTab(),
+                ],
+              ),
+            ),
+            
+            // Action buttons at the bottom
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Theme.of(context).cardColor,
+                border: Border(
+                  top: BorderSide(color: Theme.of(context).dividerColor),
+                ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.play_arrow),
+                    label: const Text('Play'),
+                    onPressed: widget.onLaunchGame,
                   ),
-                  
-                  // Right arrow
-                  IconButton(
-                    icon: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.black54,
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 20),
-                    ),
-                    onPressed: _currentScreenshotIndex < widget.game.exe.screenshotUrls.length - 1
-                        ? () {
-                            _screenshotController.nextPage(
-                              duration: const Duration(milliseconds: 300),
-                              curve: Curves.easeInOut,
-                            );
-                          }
-                        : null,
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.edit),
+                    label: const Text('Edit Details'),
+                    onPressed: () {
+                      widget.onEditGame(widget.game);
+                      Navigator.pop(context);
+                    },
                   ),
                 ],
               ),
             ),
           ],
         ),
-        const SizedBox(height: 8),
-        
-        // Indicator dots
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: List.generate(
-            // Use the same logic for itemCount as the PageView
-            widget.game.exe.localScreenshotPaths.isNotEmpty
-               ? widget.game.exe.localScreenshotPaths.length
-               : widget.game.exe.screenshotUrls.length,
-            (index) => Container(
-              width: 8,
-              height: 8,
-              margin: const EdgeInsets.symmetric(horizontal: 3),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: index == _currentScreenshotIndex
-                    ? Theme.of(context).colorScheme.primary
-                    : Theme.of(context).colorScheme.surfaceVariant,
+      ),
+    );
+  }
+
+  Widget _buildInfoTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Game cover/banner image
+          if (widget.game.exe.localCoverPath != null && widget.game.exe.localCoverPath!.isNotEmpty)
+            Center(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8.0),
+                child: Image.file(
+                  File(widget.game.exe.localCoverPath!),
+                  height: 200,
+                  fit: BoxFit.cover,
+                ),
               ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildVideoLinks() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Videos',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: widget.game.exe.videoIds.map((videoId) {
-            final index = widget.game.exe.videoIds.indexOf(videoId) + 1;
-            return ElevatedButton.icon(
-              icon: const Icon(Icons.play_circle_outline),
-              label: Text('Video $index'),
-              onPressed: () => _launchYouTubeVideo(videoId),
-            );
-          }).toList(),
-        ),
-      ],
-    );
-  }
-
-  void _launchYouTubeVideo(String videoId) async {
-    final url = Uri.parse('https://www.youtube.com/watch?v=$videoId');
-    if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not open video')),
-        );
-      }
-    }
-  }
-
-  // Add placeholder method
-  Widget _buildErrorPlaceholder() {
-    return Container(
-      color: Colors.grey.shade300,
-      child: const Center(child: Icon(Icons.broken_image, size: 48)),
-    );
-  }
- 
-  void _showFullScreenImage(String pathOrUrl, {bool isLocal = false}) { // Updated signature
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: EdgeInsets.zero,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            InteractiveViewer(
-              child: isLocal // Use conditional loading
-                  ? Image.file(
-                      File(pathOrUrl),
-                      fit: BoxFit.contain,
-                      errorBuilder: (context, error, stackTrace) {
-                        return const Center(child: Icon(Icons.broken_image, size: 64, color: Colors.white70));
-                      },
-                    )
-                  : Image.network(
-                      pathOrUrl,
-                      fit: BoxFit.contain,
-                      errorBuilder: (context, error, stackTrace) {
-                        return const Center(child: Icon(Icons.broken_image, size: 64, color: Colors.white70));
-                      },
-                    ),
-            ),
-            Positioned(
-              top: 10,
-              right: 10,
-              child: Material(
-                color: Colors.transparent,
-                child: IconButton(
-                  icon: const Icon(Icons.close, color: Colors.white, size: 30),
-                  onPressed: () => Navigator.pop(context),
+            )
+          else if (widget.game.exe.coverUrl != null && widget.game.exe.coverUrl!.isNotEmpty)
+            Center(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8.0),
+                child: Image.network(
+                  widget.game.exe.coverUrl!,
+                  height: 200,
+                  fit: BoxFit.cover,
                 ),
               ),
             ),
-          ],
+          
+          const SizedBox(height: 20),
+          
+          // Game Description
+          if (widget.game.exe.description != null && widget.game.exe.description!.isNotEmpty)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Description',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 8),
+                Text(widget.game.exe.description!),
+                const SizedBox(height: 20),
+              ],
+            ),
+          
+          // Basic game info
+          Text(
+            'Game Information',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          const SizedBox(height: 8),
+          _buildInfoRow('Status', widget.game.exe.notWorking ? 'Not Working' : 'Working'),
+          _buildInfoRow('Category', widget.game.exe.category ?? 'Uncategorized'),
+          _buildInfoRow('Prefix', widget.game.prefix.name),
+          _buildInfoRow('Prefix Type', widget.game.prefix.type.toString().split('.').last),
+          _buildInfoRow('Executable', widget.game.exe.path),
+          if (widget.game.exe.igdbId != null)
+            _buildInfoRow('IGDB ID', widget.game.exe.igdbId.toString()),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSettingsTab() {
+    // Define a predefined list of categories
+    final List<String> predefinedCategories = [
+      'Action', 
+      'Adventure', 
+      'RPG', 
+      'Strategy', 
+      'Simulation', 
+      'Sports', 
+      'Racing', 
+      'Puzzle', 
+      'Other'
+    ];
+    
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Game Status Section
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Game Status', style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  SwitchListTile(
+                    title: const Text('Mark as Not Working'),
+                    subtitle: const Text('Toggle if the game has issues running'),
+                    value: widget.game.exe.notWorking,
+                    onChanged: (value) {
+                      widget.onToggleWorkingStatus(widget.game, value);
+                      Navigator.pop(context); // Close dialog after change
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+          
+          const SizedBox(height: 16),
+          
+          // Category Section
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Category', style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  // Radio buttons for category selection
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Uncategorized option
+                      RadioListTile<String?>(
+                        title: const Text('Uncategorized'),
+                        value: null,
+                        groupValue: _selectedCategory,
+                        onChanged: (value) {
+                          setState(() {
+                            _selectedCategory = value;
+                          });
+                        },
+                      ),
+                      // Generate a radio tile for each predefined category
+                      ...predefinedCategories.map((category) => 
+                        RadioListTile<String>(
+                          title: Text(category),
+                          value: category,
+                          groupValue: _selectedCategory,
+                          onChanged: (value) {
+                            setState(() {
+                              _selectedCategory = value;
+                            });
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  ElevatedButton(
+                    onPressed: () {
+                      widget.onChangeCategory(widget.game, _selectedCategory);
+                      Navigator.pop(context); // Close dialog after change
+                    },
+                    child: const Text('Save Category'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          
+          const SizedBox(height: 16),
+          
+          // New Executable Path Section
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Executable Settings', style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 16),
+                  ListTile(
+                    leading: const Icon(Icons.edit_note),
+                    title: const Text('Edit Executable Path'),
+                    subtitle: Text(
+                      widget.game.exe.path,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    onTap: () {
+                      widget.onEditExePath(widget.game);
+                      Navigator.pop(context); // Close dialog after action
+                    },
+                    trailing: const Icon(Icons.chevron_right),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          
+          const SizedBox(height: 16),
+          
+          // Prefix Section
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Prefix Settings', style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 16),
+                  ListTile(
+                    leading: const Icon(Icons.folder_special),
+                    title: const Text('Change Prefix'),
+                    subtitle: Text('Current: ${widget.game.prefix.name}'),
+                    onTap: () {
+                      widget.onChangePrefix(widget.game);
+                      Navigator.pop(context); // Close dialog after action
+                    },
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.folder_copy),
+                    title: const Text('Move Game Folder'),
+                    subtitle: const Text('Relocate the game installation'),
+                    onTap: () {
+                      widget.onMoveGameFolder(widget.game);
+                      Navigator.pop(context); // Close dialog after action
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMediaTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Screenshots Section
+          if (widget.game.exe.localScreenshotPaths.isNotEmpty || 
+              widget.game.exe.screenshotUrls.isNotEmpty)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Screenshots',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  height: 200,
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Theme.of(context).dividerColor),
+                    borderRadius: BorderRadius.circular(8.0),
+                  ),
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: widget.game.exe.localScreenshotPaths.isNotEmpty
+                        ? widget.game.exe.localScreenshotPaths.length
+                        : widget.game.exe.screenshotUrls.length,
+                    itemBuilder: (context, index) {
+                      final bool isLocal = widget.game.exe.localScreenshotPaths.isNotEmpty;
+                      final String imagePath = isLocal 
+                          ? widget.game.exe.localScreenshotPaths[index]
+                          : widget.game.exe.screenshotUrls[index];
+                      
+                      return Padding(
+                        padding: const EdgeInsets.all(4.0),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(8.0),
+                          child: isLocal
+                              ? Image.file(
+                                  File(imagePath),
+                                  fit: BoxFit.cover,
+                                  width: 300,
+                                  errorBuilder: (context, error, stackTrace) {
+                                    // Remove print statement for better error handling
+                                    return Container(
+                                      width: 300,
+                                      color: Colors.grey[800],
+                                      child: const Center(
+                                        child: Icon(Icons.broken_image, size: 50, color: Colors.white70),
+                                      ),
+                                    );
+                                  },
+                                )
+                              : Image.network(
+                                  imagePath, // Using direct URL without base URL prefix
+                                  fit: BoxFit.cover,
+                                  width: 300,
+                                  loadingBuilder: (context, child, loadingProgress) {
+                                    if (loadingProgress == null) return child;
+                                    return Container(
+                                      width: 300,
+                                      color: Colors.grey[800],
+                                      child: const Center(
+                                        child: CircularProgressIndicator(),
+                                      ),
+                                    );
+                                  },
+                                  errorBuilder: (context, error, stackTrace) {
+                                    return Container(
+                                      width: 300,
+                                      color: Colors.grey[800],
+                                      child: const Center(
+                                        child: Icon(Icons.broken_image, size: 50, color: Colors.white70),
+                                      ),
+                                    );
+                                  },
+                                ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 20),
+              ],
+            ),
+          
+          // Videos Section
+          if (widget.game.exe.videoIds.isNotEmpty)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Videos',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 8),
+                // Add note about YouTube videos
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 12.0),
+                  child: Text(
+                    'Note: Videos open in your browser. YouTube thumbnails are displayed below.',
+                    style: TextStyle(fontStyle: FontStyle.italic, fontSize: 12),
+                  ),
+                ),
+                Column(
+                  children: widget.game.exe.videoIds.map((videoId) {
+                    final videoUrl = 'https://www.youtube.com/watch?v=$videoId';
+                    final thumbnailUrl = 'https://img.youtube.com/vi/$videoId/0.jpg';
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Video thumbnail with play button overlay
+                          Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              // YouTube thumbnail
+                              ClipRRect(
+                                borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                                child: Image.network(
+                                  thumbnailUrl,
+                                  width: double.infinity,
+                                  height: 180,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => Container(
+                                    width: double.infinity,
+                                    height: 180,
+                                    color: Colors.grey[800],
+                                    child: const Icon(Icons.video_library, size: 50, color: Colors.white70),
+                                  ),
+                                ),
+                              ),
+                              // Play button overlay
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.play_circle_outline,
+                                  size: 60,
+                                  color: Colors.white,
+                                ),
+                                onPressed: () => _launchUrl(videoUrl),
+                              ),
+                            ],
+                          ),
+                          // Video title and link
+                          Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.videogame_asset),
+                                const SizedBox(width: 8),
+                                const Expanded(child: Text('Game Trailer')),
+                                IconButton(
+                                  icon: const Icon(Icons.open_in_new),
+                                  onPressed: () => _launchUrl(videoUrl),
+                                  tooltip: 'Open in browser',
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
+            ),
+          
+          // IGDB Link
+          if (widget.game.exe.igdbId != null)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 20),
+                Text(
+                  'External Links',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 8),
+                ListTile(
+                  leading: const Icon(Icons.link),
+                  title: const Text('View on IGDB'),
+                  trailing: const Icon(Icons.open_in_new),
+                  onTap: () => _launchUrl('https://www.igdb.com/games/${widget.game.exe.igdbId}'),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildHistoryTab() {
+    // Placeholder for game history - could track play time, achievements, etc.
+    return const Center(
+      child: Padding(
+        padding: EdgeInsets.all(16.0),
+        child: Text(
+          'Play history and statistics coming soon',
+          style: TextStyle(fontSize: 16),
         ),
       ),
     );
+  }
+
+  Widget _buildInfoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(
+              label,
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+          Expanded(
+            child: Text(value),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _launchUrl(String url) async {
+    try {
+      if (await canLaunch(url)) {
+        await launch(url);
+      } else {
+        throw 'Could not launch $url';
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not launch $url: $e')),
+      );
+    }
   }
 }

@@ -1,38 +1,31 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart'; // For debugPrint (used carefully)
 import 'package:http/http.dart' as http;
-import '../models/settings.dart'; // Adjust import path as needed
-import '../models/igdb_models.dart'; // Adjust import path as needed
+import '../models/settings.dart';
+import '../models/igdb_models.dart';
 
 class IgdbService {
-  // Note: This service now requires the Settings object to be passed in.
-  // Consider using a dependency injection solution or passing it to the constructor
-  // if the service instance lives longer.
 
-  /// Fetches or retrieves a valid IGDB API token.
-  /// Returns a Map containing 'token' and 'expiry' if successful, otherwise null.
   Future<Map<String, dynamic>?> getIgdbToken(Settings settings) async {
     if (settings.igdbClientId.isEmpty || settings.igdbClientSecret.isEmpty) {
-      print('IGDB credentials not set.');
+      debugPrint('IGDB credentials not set.');
       return null;
     }
 
-    // Check if we have a valid token already
     if (settings.igdbAccessToken != null &&
         settings.igdbTokenExpiry != null &&
         settings.igdbTokenExpiry!.isAfter(DateTime.now())) {
-      // Return existing valid token and its expiry
       return {
         'token': settings.igdbAccessToken!,
         'expiry': settings.igdbTokenExpiry!,
-        'isNew': false, // Indicate it's not a newly fetched token
+        'isNew': false,
       };
     }
 
-    // Fetch a new token
-    print('Fetching new IGDB token...');
+    debugPrint('Fetching new IGDB token...');
     try {
       final response = await http.post(
-        Uri.parse('https://id.twitch.tv/oauth2/token'),
+        Uri.parse(settings.twitchOAuthUrl), // Use settings URL
         body: {
           'client_id': settings.igdbClientId,
           'client_secret': settings.igdbClientSecret,
@@ -45,18 +38,17 @@ class IgdbService {
         final token = data['access_token'] as String;
         final expiresIn = Duration(seconds: data['expires_in'] as int);
         final expiryTime = DateTime.now().add(expiresIn);
-
-        print('Successfully fetched new IGDB token.');
+        debugPrint('Successfully fetched new IGDB token.');
         return {
           'token': token,
           'expiry': expiryTime,
-          'isNew': true, // Indicate it's a newly fetched token
+          'isNew': true,
         };
       } else {
-        print('Failed to get IGDB token: ${response.statusCode} ${response.body}');
+        debugPrint('Failed to get IGDB token: ${response.statusCode} ${response.body}');
       }
     } catch (e) {
-      print('Error getting IGDB token: $e');
+      debugPrint('Error getting IGDB token: $e');
     }
     return null;
   }
@@ -64,13 +56,12 @@ class IgdbService {
   Future<List<IgdbGame>> searchIgdbGames(String query, Settings settings, String token) async {
     try {
       final response = await http.post(
-        Uri.parse('https://api.igdb.com/v4/games'),
+        Uri.parse(settings.igdbApiBaseUrl).replace(path: '/v4/games'), // Use replace
         headers: {
           'Accept': 'application/json',
           'Client-ID': settings.igdbClientId,
           'Authorization': 'Bearer $token',
         },
-        // Query adjusted slightly for clarity
         body: 'search "$query"; fields name,cover,screenshots,videos,summary; where platforms = (6); limit 20;',
       );
 
@@ -78,69 +69,100 @@ class IgdbService {
         final List<dynamic> games = json.decode(response.body);
         return games.map((g) => IgdbGame.fromJson(g)).toList();
       } else {
-        print('IGDB API error during search: ${response.statusCode} ${response.body}');
+        debugPrint('IGDB API error during search: ${response.statusCode} ${response.body}');
       }
     } catch (e) {
-      print('Error searching IGDB: $e');
+      debugPrint('Error searching IGDB: $e');
     }
     return [];
   }
 
-  Future<String?> fetchCoverUrl(int? coverId, Settings settings, String token) async {
+  Future<Map<String, String>?> fetchCoverDetails(int? coverId, Settings settings, String token) async {
     if (coverId == null) return null;
-
     try {
       final response = await http.post(
-        Uri.parse('https://api.igdb.com/v4/covers'),
+        Uri.parse(settings.igdbApiBaseUrl).replace(path: '/v4/covers'), // Use replace
         headers: {
           'Accept': 'application/json',
           'Client-ID': settings.igdbClientId,
           'Authorization': 'Bearer $token',
         },
-        body: 'fields image_id; where id = $coverId;',
+        body: 'fields image_id, url; where id = $coverId;', // Request URL field too
       );
 
+      // debugPrint("IGDB Cover Request Body: ${'fields image_id, url; where id = $coverId;'}"); // Keep commented
       if (response.statusCode == 200) {
+        // debugPrint("IGDB Cover Response Body: ${response.body}"); // Keep commented
         final List<dynamic> covers = json.decode(response.body);
         if (covers.isNotEmpty) {
-          final imageId = covers[0]['image_id'];
-          // Using a recommended size, adjust as needed
-          return 'https://images.igdb.com/igdb/image/upload/t_cover_big/$imageId.jpg';
+          final coverData = covers[0];
+          final imageId = coverData['image_id']?.toString();
+          String? imageUrl = coverData['url']?.toString();
+
+          if (imageUrl != null && imageUrl.isNotEmpty) {
+             if (imageUrl.startsWith('//')) {
+               imageUrl = 'https:$imageUrl';
+             }
+             imageUrl = imageUrl.replaceFirst('/t_thumb/', '/t_cover_big/');
+             // debugPrint("Using direct URL from API for cover: $imageUrl"); // Keep commented
+             return {'url': imageUrl, 'imageId': imageId ?? ''};
+          } else if (imageId != null) {
+             // debugPrint("Constructing cover URL from imageId as 'url' field was missing."); // Keep commented
+             imageUrl = '${settings.igdbImageBaseUrl}/t_cover_big/$imageId.jpg';
+             return {'url': imageUrl, 'imageId': imageId};
+          }
         }
       } else {
-         print('IGDB API error fetching cover: ${response.statusCode} ${response.body}');
+         debugPrint('IGDB API error fetching cover: ${response.statusCode} ${response.body}');
       }
     } catch (e) {
-      print('Error fetching cover: $e');
+      debugPrint('Error fetching cover: $e');
     }
     return null;
   }
 
-  Future<List<String>> fetchScreenshotUrls(List<int> screenshotIds, Settings settings, String token) async {
+  Future<List<Map<String, String>>> fetchScreenshotDetails(List<int> screenshotIds, Settings settings, String token) async {
     if (screenshotIds.isEmpty) return [];
-
     try {
+      final requestBody = 'fields image_id, url; where id = (${screenshotIds.join(",")}); limit ${screenshotIds.length};';
+      // debugPrint("IGDB Screenshot Request Body: $requestBody"); // Keep commented
       final response = await http.post(
-        Uri.parse('https://api.igdb.com/v4/screenshots'),
+        Uri.parse(settings.igdbApiBaseUrl).replace(path: '/v4/screenshots'), // Use replace
         headers: {
           'Accept': 'application/json',
           'Client-ID': settings.igdbClientId,
           'Authorization': 'Bearer $token',
         },
-        body: 'fields image_id; where id = (${screenshotIds.join(",")}); limit ${screenshotIds.length};', // Added limit
+        body: requestBody,
       );
 
       if (response.statusCode == 200) {
+        // debugPrint("IGDB Screenshot Response Body: ${response.body}"); // Keep commented
         final List<dynamic> screenshots = json.decode(response.body);
-        return screenshots
-          // Using a recommended size, adjust as needed
-          .map((s) => 'https://images.igdb.com/igdb/image/upload/t_screenshot_big/${s["image_id"]}.jpg')
-          .toList();
+        List<Map<String, String>> results = [];
+        for (var s in screenshots) {
+          final imageId = s['image_id']?.toString();
+          String? imageUrl = s['url']?.toString();
+
+          if (imageUrl != null && imageUrl.isNotEmpty) {
+             if (imageUrl.startsWith('//')) {
+               imageUrl = 'https:$imageUrl';
+             }
+             imageUrl = imageUrl.replaceFirst('/t_thumb/', '/t_screenshot_big/');
+             // debugPrint("Using direct URL from API for screenshot: $imageUrl"); // Keep commented
+             results.add({'url': imageUrl, 'imageId': imageId ?? ''});
+          } else if (imageId != null) {
+             // debugPrint("Constructing screenshot URL from imageId as 'url' field was missing."); // Keep commented
+             imageUrl = '${settings.igdbImageBaseUrl}/t_screenshot_big/$imageId.jpg';
+             results.add({'url': imageUrl, 'imageId': imageId});
+          }
+        }
+        return results;
       } else {
-        print('IGDB API error fetching screenshots: ${response.statusCode} ${response.body}');
+        debugPrint('IGDB API error fetching screenshots: ${response.statusCode} ${response.body}');
       }
     } catch (e) {
-      print('Error fetching screenshots: $e');
+      debugPrint('Error fetching screenshots: $e');
     }
     return [];
   }
@@ -148,23 +170,23 @@ class IgdbService {
   Future<List<String>> fetchGameVideoIds(int gameId, Settings settings, String token) async {
     try {
       final response = await http.post(
-        Uri.parse('https://api.igdb.com/v4/game_videos'),
+        Uri.parse(settings.igdbApiBaseUrl).replace(path: '/v4/game_videos'), // Use replace
         headers: {
           'Accept': 'application/json',
           'Client-ID': settings.igdbClientId,
           'Authorization': 'Bearer $token',
         },
-        body: 'fields video_id; where game = $gameId;', // Simplified fields
+        body: 'fields video_id; where game = $gameId;',
       );
 
       if (response.statusCode == 200) {
         final List<dynamic> videos = json.decode(response.body);
         return videos.map((v) => v['video_id'].toString()).toList();
       } else {
-        print('IGDB API error fetching videos: ${response.statusCode} ${response.body}');
+        debugPrint('IGDB API error fetching videos: ${response.statusCode} ${response.body}');
       }
     } catch (e) {
-      print('Exception fetching game videos: $e');
+      debugPrint('Exception fetching game videos: $e');
     }
     return [];
   }
