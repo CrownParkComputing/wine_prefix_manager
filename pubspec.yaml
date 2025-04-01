@@ -1,7 +1,7 @@
 name: wine_prefix_manager
-description: A tool to manage Wine and Proton prefixes
+description: A wine prefix manager for Linux gaming
 publish_to: 'none'
-version: 1.0.1+1
+version: 1.5.0
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
