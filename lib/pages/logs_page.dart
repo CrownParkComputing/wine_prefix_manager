@@ -18,13 +18,13 @@ class _LogsPageState extends State<LogsPage> {
   LogLevel _filterLevel = LogLevel.info;
   String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
-  
+
   @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
   }
-  
+
   // Filter logs based on level and search query
   List<LogEntry> _getFilteredLogs() {
     final allLogs = _logService.getLogs();
@@ -33,7 +33,7 @@ class _LogsPageState extends State<LogsPage> {
       if (log.level.index < _filterLevel.index) {
         return false;
       }
-      
+
       // Filter by search query
       if (_searchQuery.isEmpty) {
         return true;
@@ -41,7 +41,7 @@ class _LogsPageState extends State<LogsPage> {
       return log.message.toLowerCase().contains(_searchQuery.toLowerCase());
     }).toList();
   }
-  
+
   // Export logs to a file
   Future<void> _exportLogs() async {
     try {
@@ -52,13 +52,14 @@ class _LogsPageState extends State<LogsPage> {
         buffer.writeln(log.toString());
       }
       final logsText = buffer.toString();
-      
+
       if (Platform.isAndroid || Platform.isIOS) {
         // For mobile platforms, use share functionality
         final tempDir = await getTemporaryDirectory();
         final file = File('${tempDir.path}/wine_prefix_manager_logs.txt');
         await file.writeAsString(logsText);
-        await Share.shareFiles([file.path], text: 'Wine Prefix Manager Logs');
+        // Use shareXFiles instead of shareFiles
+        await Share.shareXFiles([XFile(file.path)], text: 'Wine Prefix Manager Logs');
       } else {
         // For desktop platforms, save to file
         await FileSaver.instance.saveFile(
@@ -76,11 +77,11 @@ class _LogsPageState extends State<LogsPage> {
       );
     }
   }
-  
+
   @override
   Widget build(BuildContext context) {
     final filteredLogs = _getFilteredLogs();
-    
+
     return Column(
       children: [
         Padding(
@@ -88,17 +89,18 @@ class _LogsPageState extends State<LogsPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Title and action buttons
+              // Title and action buttons (Title Text Removed)
               Row(
                 children: [
-                  const Text(
-                    'Application Logs', 
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const Spacer(),
+                  // Removed Title Text Widget
+                  // const Text(
+                  //   'Application Logs',
+                  //   style: TextStyle(
+                  //     fontSize: 24,
+                  //     fontWeight: FontWeight.bold,
+                  //   ),
+                  // ),
+                  const Spacer(), // Takes up space where title was
                   IconButton(
                     icon: const Icon(Icons.save_alt),
                     tooltip: 'Export Logs',
@@ -133,9 +135,9 @@ class _LogsPageState extends State<LogsPage> {
                   ),
                 ],
               ),
-              
+
               const SizedBox(height: 8),
-              
+
               // Filter and search controls
               Row(
                 children: [
@@ -156,9 +158,9 @@ class _LogsPageState extends State<LogsPage> {
                       );
                     }).toList(),
                   ),
-                  
+
                   const SizedBox(width: 16),
-                  
+
                   // Search field
                   Expanded(
                     child: TextField(
@@ -192,9 +194,9 @@ class _LogsPageState extends State<LogsPage> {
             ],
           ),
         ),
-        
+
         Divider(),
-        
+
         // Logs list
         Expanded(
           child: filteredLogs.isEmpty
@@ -212,11 +214,11 @@ class _LogsPageState extends State<LogsPage> {
       ],
     );
   }
-  
+
   Widget _buildLogItem(LogEntry log) {
     Color? color;
     Icon? icon;
-    
+
     // Set color and icon based on log level
     switch (log.level) {
       case LogLevel.error:
@@ -236,7 +238,7 @@ class _LogsPageState extends State<LogsPage> {
         icon = const Icon(Icons.code, color: Colors.grey, size: 18);
         break;
     }
-    
+
     return Container(
       color: color,
       child: ListTile(

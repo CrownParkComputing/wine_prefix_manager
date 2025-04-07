@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 
 class CustomTitleBar extends StatelessWidget implements PreferredSizeWidget {
-  final String title;
+  // final String title; // Removed title parameter
   final bool isConnected; // Add connectivity status
   final Color? backgroundColor; // Optional background color
- 
+
   const CustomTitleBar({
     super.key,
-    required this.title,
+    // required this.title, // Removed title parameter
     required this.isConnected, // Make it required
     this.backgroundColor,
   });
@@ -30,14 +30,16 @@ class CustomTitleBar extends StatelessWidget implements PreferredSizeWidget {
           children: [
             // Optional: Add an icon or padding at the start
             const SizedBox(width: 16),
-            // Title
-            Expanded(
-              child: Text(
-                title,
-                style: theme.textTheme.titleMedium?.copyWith(color: iconColor),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
+            // Title Text Widget Removed
+            // Expanded(
+            //   child: Text(
+            //     title,
+            //     style: theme.textTheme.titleMedium?.copyWith(color: iconColor),
+            //     overflow: TextOverflow.ellipsis,
+            //   ),
+            // ),
+            // Spacer to push buttons to the right
+            const Spacer(),
             // Connectivity Indicator
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8.0),

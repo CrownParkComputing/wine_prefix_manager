@@ -1,33 +1,42 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+// import 'package:flutter/services.dart'; // No longer needed for Steam ID
 import 'package:url_launcher/url_launcher.dart';
 import '../models/prefix_models.dart';
 import '../models/settings.dart';
+// import '../providers/prefix_provider.dart'; // No longer needed for dynamic categories
+import '../widgets/common_components_dialog.dart'; // Import for confirmation dialog
 
 class GameDetailsDialog extends StatefulWidget {
   final GameEntry game;
   final Settings settings;
-  final List<WinePrefix> availablePrefixes;
+  final List<WinePrefix> availablePrefixes; // Keep for prefix change dropdown if needed later
+  // final PrefixProvider prefixProvider; // Removed
   final VoidCallback onLaunchGame;
-  final Function(GameEntry) onEditGame;
   final Function(GameEntry) onChangePrefix;
-  final Function(GameEntry) onMoveGameFolder;
+  // final Function(GameEntry) onMoveGameFolder; // Removed
   final Function(GameEntry, bool) onToggleWorkingStatus;
   final Function(GameEntry, String?) onChangeCategory;
-  final Function(GameEntry) onEditExePath; // New callback for editing exe path
+  final Function(GameEntry) onEditExePath;
+  final Function(GameEntry) onUpdateMetadata; // New callback for metadata update
+  final Function(GameEntry, String?) onSaveLaunchOptions; // Callback for launch options
+  // final Function(GameEntry, int?) onSaveSteamAppId; // Removed
 
   const GameDetailsDialog({
     Key? key,
     required this.game,
     required this.settings,
     required this.availablePrefixes,
+    // required this.prefixProvider, // Removed
     required this.onLaunchGame,
-    required this.onEditGame,
     required this.onChangePrefix,
-    required this.onMoveGameFolder,
+    // required this.onMoveGameFolder, // Removed
     required this.onToggleWorkingStatus,
     required this.onChangeCategory,
-    required this.onEditExePath, // Add required parameter
+    required this.onEditExePath,
+    required this.onUpdateMetadata, // Make metadata update callback required
+    required this.onSaveLaunchOptions, // Make launch options callback required
+    // required this.onSaveSteamAppId, // Removed
   }) : super(key: key);
 
   @override
@@ -37,53 +46,76 @@ class GameDetailsDialog extends StatefulWidget {
 class _GameDetailsDialogState extends State<GameDetailsDialog> with SingleTickerProviderStateMixin {
   late TabController _tabController;
   String? _selectedCategory;
-  int _currentTabIndex = 0;
-  
+  late TextEditingController _launchOptionsController; // Controller for launch options
+  // late TextEditingController _steamAppIdController; // Removed
+  final PageController _screenshotPageController = PageController(); // Controller for screenshot carousel
+  int _currentScreenshotIndex = 0; // Index for screenshot carousel
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
-    _tabController.addListener(() {
-      if (_tabController.indexIsChanging) {
-        setState(() {
-          _currentTabIndex = _tabController.index;
-        });
-      }
-    });
+    _tabController.addListener(_handleTabChange); // Use separate handler
     _selectedCategory = widget.game.exe.category;
+    _launchOptionsController = TextEditingController(text: widget.game.exe.launchOptions ?? '');
+    // _steamAppIdController = TextEditingController(text: widget.game.exe.steamAppId?.toString() ?? ''); // Removed
+    // _loadDynamicCategories(); // Removed dynamic category loading
   }
-  
+
+  // Removed _loadDynamicCategories method
+
   @override
   void dispose() {
+    _tabController.removeListener(_handleTabChange); // Remove listener
     _tabController.dispose();
+    _launchOptionsController.dispose();
+    // _steamAppIdController.dispose(); // Removed
+    _screenshotPageController.dispose(); // Dispose screenshot controller
     super.dispose();
   }
 
+  // Add a handler for tab changes if needed elsewhere, ensure listener removal
+  void _handleTabChange() {
+     if (mounted && _tabController.indexIsChanging) {
+       // Optional: Handle index changing if needed
+     } else if (mounted && !_tabController.indexIsChanging) {
+        // Optional: Handle index change completion if needed
+     }
+  }
+
+
   @override
   Widget build(BuildContext context) {
-    final double dialogWidth = MediaQuery.of(context).size.width * 0.8;
-    final double dialogHeight = MediaQuery.of(context).size.height * 0.8;
-    
+    // Removed explicit width/height calculations
+    // final double dialogWidth = MediaQuery.of(context).size.width * 0.8;
+    // final double dialogHeight = MediaQuery.of(context).size.height * 0.9;
+
     return Dialog(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
+      // Make dialog fill the screen
+      insetPadding: EdgeInsets.zero,
+      // Remove rounded corners for full screen
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
       child: Container(
-        width: dialogWidth,
-        height: dialogHeight,
+        // Remove explicit width/height to allow filling
+        // width: dialogWidth,
+        // height: dialogHeight,
         padding: EdgeInsets.zero,
         child: Column(
-          mainAxisSize: MainAxisSize.min,
+          // Keep MainAxisSize.min if content might not fill screen,
+          // or use MainAxisSize.max if it should always stretch.
+          // Let's try max first for full screen effect.
+          mainAxisSize: MainAxisSize.max,
           children: [
             // Custom header with close button
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.only(left: 16, right: 16, top: 8, bottom: 8), // Adjust padding slightly
               decoration: BoxDecoration(
                 color: Theme.of(context).primaryColor,
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(16),
-                  topRight: Radius.circular(16),
-                ),
+                // Remove top radius for full screen
+                // borderRadius: const BorderRadius.only(
+                //   topLeft: Radius.circular(16),
+                //   topRight: Radius.circular(16),
+                // ),
               ),
               child: Row(
                 children: [
@@ -95,33 +127,36 @@ class _GameDetailsDialogState extends State<GameDetailsDialog> with SingleTicker
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
                       ),
+                      overflow: TextOverflow.ellipsis, // Prevent overflow
                     ),
                   ),
                   IconButton(
                     icon: const Icon(Icons.close, color: Colors.white),
                     onPressed: () => Navigator.of(context).pop(),
+                    tooltip: 'Close Details',
                   ),
                 ],
               ),
             ),
-            
-            // Tab Bar (outside of AppBar for better layout)
+
+            // Tab Bar - Modified to show only icons
             Container(
               color: Theme.of(context).primaryColor.withOpacity(0.8),
               child: TabBar(
                 controller: _tabController,
                 labelColor: Colors.white,
                 unselectedLabelColor: Colors.white70,
+                indicatorColor: Colors.white, // Make indicator visible
                 tabs: const [
-                  Tab(icon: Icon(Icons.info), text: 'Info'),
-                  Tab(icon: Icon(Icons.settings), text: 'Settings'),
-                  Tab(icon: Icon(Icons.image), text: 'Media'),
-                  Tab(icon: Icon(Icons.history), text: 'History'),
+                  Tab(icon: Tooltip(message: 'Info', child: Icon(Icons.info_outline))),
+                  Tab(icon: Tooltip(message: 'Settings', child: Icon(Icons.settings_outlined))),
+                  Tab(icon: Tooltip(message: 'Media', child: Icon(Icons.image_outlined))),
+                  Tab(icon: Tooltip(message: 'History', child: Icon(Icons.history_outlined))),
                 ],
               ),
             ),
-            
-            // Tab content with explicit constraints
+
+            // Tab content - Ensure it expands
             Expanded(
               child: TabBarView(
                 controller: _tabController,
@@ -133,8 +168,8 @@ class _GameDetailsDialogState extends State<GameDetailsDialog> with SingleTicker
                 ],
               ),
             ),
-            
-            // Action buttons at the bottom
+
+            // Action buttons - Keep at bottom
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -144,20 +179,12 @@ class _GameDetailsDialogState extends State<GameDetailsDialog> with SingleTicker
                 ),
               ),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   ElevatedButton.icon(
                     icon: const Icon(Icons.play_arrow),
                     label: const Text('Play'),
                     onPressed: widget.onLaunchGame,
-                  ),
-                  ElevatedButton.icon(
-                    icon: const Icon(Icons.edit),
-                    label: const Text('Edit Details'),
-                    onPressed: () {
-                      widget.onEditGame(widget.game);
-                      Navigator.pop(context);
-                    },
                   ),
                 ],
               ),
@@ -183,49 +210,56 @@ class _GameDetailsDialogState extends State<GameDetailsDialog> with SingleTicker
                   File(widget.game.exe.localCoverPath!),
                   height: 200,
                   fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) => const Icon(Icons.broken_image, size: 100),
                 ),
               ),
             )
           else if (widget.game.exe.coverUrl != null && widget.game.exe.coverUrl!.isNotEmpty)
-            Center(
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(8.0),
-                child: Image.network(
-                  widget.game.exe.coverUrl!,
-                  height: 200,
-                  fit: BoxFit.cover,
-                ),
-              ),
-            ),
-          
+             Center(
+               child: ClipRRect(
+                 borderRadius: BorderRadius.circular(8.0),
+                 child: Image.network(
+                   widget.game.exe.coverUrl!,
+                   height: 200,
+                   fit: BoxFit.cover,
+                   errorBuilder: (context, error, stackTrace) => const Icon(Icons.broken_image, size: 100),
+                   loadingBuilder: (context, child, loadingProgress) {
+                     if (loadingProgress == null) return child;
+                     return const SizedBox(height: 200, child: Center(child: CircularProgressIndicator()));
+                   },
+                 ),
+               ),
+             )
+           else
+             const Center(child: Icon(Icons.image_not_supported, size: 100, color: Colors.grey)),
+
+
           const SizedBox(height: 20),
-          
+
           // Game Description
           if (widget.game.exe.description != null && widget.game.exe.description!.isNotEmpty)
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Description',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
+                Text('Description', style: Theme.of(context).textTheme.titleLarge),
                 const SizedBox(height: 8),
                 Text(widget.game.exe.description!),
                 const SizedBox(height: 20),
               ],
             ),
-          
+
           // Basic game info
-          Text(
-            'Game Information',
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
+          Text('Game Information', style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 8),
           _buildInfoRow('Status', widget.game.exe.notWorking ? 'Not Working' : 'Working'),
           _buildInfoRow('Category', widget.game.exe.category ?? 'Uncategorized'),
           _buildInfoRow('Prefix', widget.game.prefix.name),
           _buildInfoRow('Prefix Type', widget.game.prefix.type.toString().split('.').last),
           _buildInfoRow('Executable', widget.game.exe.path),
+          // if (widget.game.exe.steamAppId != null) // Removed Steam App ID display
+          //   _buildInfoRow('Steam App ID', widget.game.exe.steamAppId.toString()),
+          if (widget.game.exe.launchOptions != null && widget.game.exe.launchOptions!.isNotEmpty)
+            _buildInfoRow('Launch Options', widget.game.exe.launchOptions!),
           if (widget.game.exe.igdbId != null)
             _buildInfoRow('IGDB ID', widget.game.exe.igdbId.toString()),
         ],
@@ -234,19 +268,10 @@ class _GameDetailsDialogState extends State<GameDetailsDialog> with SingleTicker
   }
 
   Widget _buildSettingsTab() {
-    // Define a predefined list of categories
-    final List<String> predefinedCategories = [
-      'Action', 
-      'Adventure', 
-      'RPG', 
-      'Strategy', 
-      'Simulation', 
-      'Sports', 
-      'Racing', 
-      'Puzzle', 
-      'Other'
-    ];
-    
+    // Use categories from settings, adding null for 'Uncategorized'
+    // FIX: Changed gameCategories to categories
+    final List<String?> availableCategories = [null, ...widget.settings.categories];
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
       child: Column(
@@ -265,18 +290,15 @@ class _GameDetailsDialogState extends State<GameDetailsDialog> with SingleTicker
                     title: const Text('Mark as Not Working'),
                     subtitle: const Text('Toggle if the game has issues running'),
                     value: widget.game.exe.notWorking,
-                    onChanged: (value) {
-                      widget.onToggleWorkingStatus(widget.game, value);
-                      Navigator.pop(context); // Close dialog after change
-                    },
+                    onChanged: (value) => widget.onToggleWorkingStatus(widget.game, value),
                   ),
                 ],
               ),
             ),
           ),
-          
+
           const SizedBox(height: 16),
-          
+
           // Category Section
           Card(
             child: Padding(
@@ -286,52 +308,30 @@ class _GameDetailsDialogState extends State<GameDetailsDialog> with SingleTicker
                 children: [
                   Text('Category', style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 8),
-                  // Radio buttons for category selection
-                  Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Uncategorized option
-                      RadioListTile<String?>(
-                        title: const Text('Uncategorized'),
-                        value: null,
-                        groupValue: _selectedCategory,
-                        onChanged: (value) {
-                          setState(() {
-                            _selectedCategory = value;
-                          });
-                        },
-                      ),
-                      // Generate a radio tile for each predefined category
-                      ...predefinedCategories.map((category) => 
-                        RadioListTile<String>(
-                          title: Text(category),
-                          value: category,
-                          groupValue: _selectedCategory,
-                          onChanged: (value) {
-                            setState(() {
-                              _selectedCategory = value;
-                            });
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  ElevatedButton(
-                    onPressed: () {
+                  DropdownButton<String?>(
+                    value: _selectedCategory,
+                    isExpanded: true,
+                    hint: const Text('Select Category'),
+                    items: availableCategories.map((String? category) => DropdownMenuItem<String?>(
+                      value: category,
+                      child: Text(category ?? 'Uncategorized'),
+                    )).toList(),
+                    onChanged: (String? newValue) {
+                      setState(() => _selectedCategory = newValue);
                       widget.onChangeCategory(widget.game, _selectedCategory);
-                      Navigator.pop(context); // Close dialog after change
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Category saved'), duration: Duration(seconds: 1)),
+                      );
                     },
-                    child: const Text('Save Category'),
                   ),
                 ],
               ),
             ),
           ),
-          
+
           const SizedBox(height: 16),
-          
-          // New Executable Path Section
+
+          // Executable Path Section
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16.0),
@@ -343,24 +343,87 @@ class _GameDetailsDialogState extends State<GameDetailsDialog> with SingleTicker
                   ListTile(
                     leading: const Icon(Icons.edit_note),
                     title: const Text('Edit Executable Path'),
-                    subtitle: Text(
-                      widget.game.exe.path,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    onTap: () {
-                      widget.onEditExePath(widget.game);
-                      Navigator.pop(context); // Close dialog after action
-                    },
+                    subtitle: Text(widget.game.exe.path, maxLines: 1, overflow: TextOverflow.ellipsis),
+                    onTap: () => widget.onEditExePath(widget.game),
                     trailing: const Icon(Icons.chevron_right),
                   ),
                 ],
               ),
             ),
           ),
-          
+
           const SizedBox(height: 16),
-          
+
+          // Steam App ID Section (Removed)
+          // Card(...)
+
+          // const SizedBox(height: 16), // Removed spacer
+
+          // Launch Options Section
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Launch Options', style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Enter environment variables (e.g., VAR=value) or command-line arguments, separated by spaces.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _launchOptionsController,
+                    decoration: const InputDecoration(
+                      hintText: 'e.g., SteamDeck=0 %command% -arg',
+                      border: OutlineInputBorder(),
+                    ),
+                    maxLines: null,
+                  ),
+                   const SizedBox(height: 8),
+                   ElevatedButton(
+                     onPressed: () {
+                       final options = _launchOptionsController.text.trim();
+                       widget.onSaveLaunchOptions(widget.game, options.isEmpty ? null : options);
+                       ScaffoldMessenger.of(context).showSnackBar(
+                         const SnackBar(content: Text('Launch options saved'), duration: Duration(seconds: 1)),
+                       );
+                     },
+                     child: const Text('Save Launch Options'),
+                   ),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // Metadata Section
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Metadata Settings', style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 16),
+                  ListTile(
+                    leading: const Icon(Icons.manage_search),
+                    title: const Text('Update Game Metadata'),
+                    subtitle: Text(widget.game.exe.igdbId != null
+                        ? 'Fetch latest details from IGDB (ID: ${widget.game.exe.igdbId})'
+                        : 'Search IGDB and fetch details'),
+                    onTap: () => widget.onUpdateMetadata(widget.game),
+                    trailing: const Icon(Icons.chevron_right),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
           // Prefix Section
           Card(
             child: Padding(
@@ -374,20 +437,11 @@ class _GameDetailsDialogState extends State<GameDetailsDialog> with SingleTicker
                     leading: const Icon(Icons.folder_special),
                     title: const Text('Change Prefix'),
                     subtitle: Text('Current: ${widget.game.prefix.name}'),
-                    onTap: () {
-                      widget.onChangePrefix(widget.game);
-                      Navigator.pop(context); // Close dialog after action
-                    },
+                    onTap: () => widget.onChangePrefix(widget.game),
+                     trailing: const Icon(Icons.chevron_right),
                   ),
-                  ListTile(
-                    leading: const Icon(Icons.folder_copy),
-                    title: const Text('Move Game Folder'),
-                    subtitle: const Text('Relocate the game installation'),
-                    onTap: () {
-                      widget.onMoveGameFolder(widget.game);
-                      Navigator.pop(context); // Close dialog after action
-                    },
-                  ),
+                  // ListTile for Move Game Folder (Removed)
+                  // ListTile(...)
                 ],
               ),
             ),
@@ -398,243 +452,236 @@ class _GameDetailsDialogState extends State<GameDetailsDialog> with SingleTicker
   }
 
   Widget _buildMediaTab() {
-    return SingleChildScrollView(
+    final screenshots = [
+      if (widget.game.exe.localScreenshotPaths.isNotEmpty)
+        ...widget.game.exe.localScreenshotPaths.map((path) => {'type': 'local', 'path': path}),
+      if (widget.game.exe.screenshotUrls.isNotEmpty)
+        ...widget.game.exe.screenshotUrls.map((url) => {'type': 'network', 'path': url}),
+    ];
+
+    final videos = widget.game.exe.videoIds;
+
+    return SingleChildScrollView( // Keep SingleChildScrollView for overall tab scrolling
       padding: const EdgeInsets.all(16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Screenshots Section
-          if (widget.game.exe.localScreenshotPaths.isNotEmpty || 
-              widget.game.exe.screenshotUrls.isNotEmpty)
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          // Screenshots Section - Replaced GridView with PageView
+          Text('Screenshots', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 8),
+          if (screenshots.isEmpty)
+            const Center(child: Text('No screenshots available.'))
+          else
+            Column( // Wrap PageView and indicators in a Column
               children: [
-                Text(
-                  'Screenshots',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 8),
-                Container(
-                  height: 200,
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Theme.of(context).dividerColor),
-                    borderRadius: BorderRadius.circular(8.0),
-                  ),
-                  child: ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: widget.game.exe.localScreenshotPaths.isNotEmpty
-                        ? widget.game.exe.localScreenshotPaths.length
-                        : widget.game.exe.screenshotUrls.length,
+                SizedBox(
+                  height: 200, // Define a height for the carousel
+                  child: PageView.builder(
+                    controller: _screenshotPageController,
+                    itemCount: screenshots.length,
+                    onPageChanged: (index) {
+                      setState(() {
+                        _currentScreenshotIndex = index;
+                      });
+                    },
                     itemBuilder: (context, index) {
-                      final bool isLocal = widget.game.exe.localScreenshotPaths.isNotEmpty;
-                      final String imagePath = isLocal 
-                          ? widget.game.exe.localScreenshotPaths[index]
-                          : widget.game.exe.screenshotUrls[index];
-                      
-                      return Padding(
-                        padding: const EdgeInsets.all(4.0),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(8.0),
-                          child: isLocal
-                              ? Image.file(
-                                  File(imagePath),
-                                  fit: BoxFit.cover,
-                                  width: 300,
-                                  errorBuilder: (context, error, stackTrace) {
-                                    // Remove print statement for better error handling
-                                    return Container(
-                                      width: 300,
-                                      color: Colors.grey[800],
-                                      child: const Center(
-                                        child: Icon(Icons.broken_image, size: 50, color: Colors.white70),
-                                      ),
-                                    );
-                                  },
-                                )
-                              : Image.network(
-                                  imagePath, // Using direct URL without base URL prefix
-                                  fit: BoxFit.cover,
-                                  width: 300,
-                                  loadingBuilder: (context, child, loadingProgress) {
-                                    if (loadingProgress == null) return child;
-                                    return Container(
-                                      width: 300,
-                                      color: Colors.grey[800],
-                                      child: const Center(
-                                        child: CircularProgressIndicator(),
-                                      ),
-                                    );
-                                  },
-                                  errorBuilder: (context, error, stackTrace) {
-                                    return Container(
-                                      width: 300,
-                                      color: Colors.grey[800],
-                                      child: const Center(
-                                        child: Icon(Icons.broken_image, size: 50, color: Colors.white70),
-                                      ),
-                                    );
-                                  },
-                                ),
+                      final screenshot = screenshots[index];
+                      final isLocal = screenshot['type'] == 'local';
+                      final path = screenshot['path']!;
+                      return Padding( // Add padding around each image
+                        padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                        child: GestureDetector(
+                          onTap: () => _showImageCarousel(context, screenshots, index), // Keep full screen view on tap
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(8.0),
+                            child: isLocal
+                                ? Image.file(File(path), fit: BoxFit.contain, errorBuilder: (_, __, ___) => const Icon(Icons.broken_image))
+                                : Image.network(path, fit: BoxFit.contain,
+                                    loadingBuilder: (context, child, loadingProgress) {
+                                      if (loadingProgress == null) return child;
+                                      return const Center(child: CircularProgressIndicator());
+                                    },
+                                    errorBuilder: (_, __, ___) => const Icon(Icons.broken_image)
+                                  ),
+                          ),
                         ),
                       );
                     },
                   ),
                 ),
-                const SizedBox(height: 20),
-              ],
-            ),
-          
-          // Videos Section
-          if (widget.game.exe.videoIds.isNotEmpty)
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Videos',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 8),
-                // Add note about YouTube videos
-                const Padding(
-                  padding: EdgeInsets.only(bottom: 12.0),
-                  child: Text(
-                    'Note: Videos open in your browser. YouTube thumbnails are displayed below.',
-                    style: TextStyle(fontStyle: FontStyle.italic, fontSize: 12),
+                // Optional: Add page indicators
+                if (screenshots.length > 1)
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(screenshots.length, (index) {
+                      return Container(
+                        width: 8.0,
+                        height: 8.0,
+                        margin: const EdgeInsets.symmetric(vertical: 10.0, horizontal: 2.0),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: _currentScreenshotIndex == index
+                              ? Theme.of(context).primaryColor
+                              : Colors.grey.withOpacity(0.5),
+                        ),
+                      );
+                    }),
                   ),
-                ),
-                Column(
-                  children: widget.game.exe.videoIds.map((videoId) {
-                    final videoUrl = 'https://www.youtube.com/watch?v=$videoId';
-                    final thumbnailUrl = 'https://img.youtube.com/vi/$videoId/0.jpg';
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Video thumbnail with play button overlay
-                          Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              // YouTube thumbnail
-                              ClipRRect(
-                                borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
-                                child: Image.network(
-                                  thumbnailUrl,
-                                  width: double.infinity,
-                                  height: 180,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (_, __, ___) => Container(
-                                    width: double.infinity,
-                                    height: 180,
-                                    color: Colors.grey[800],
-                                    child: const Icon(Icons.video_library, size: 50, color: Colors.white70),
-                                  ),
-                                ),
-                              ),
-                              // Play button overlay
-                              IconButton(
-                                icon: const Icon(
-                                  Icons.play_circle_outline,
-                                  size: 60,
-                                  color: Colors.white,
-                                ),
-                                onPressed: () => _launchUrl(videoUrl),
-                              ),
-                            ],
-                          ),
-                          // Video title and link
-                          Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.videogame_asset),
-                                const SizedBox(width: 8),
-                                const Expanded(child: Text('Game Trailer')),
-                                IconButton(
-                                  icon: const Icon(Icons.open_in_new),
-                                  onPressed: () => _launchUrl(videoUrl),
-                                  tooltip: 'Open in browser',
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }).toList(),
-                ),
               ],
             ),
-          
-          // IGDB Link
-          if (widget.game.exe.igdbId != null)
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 20),
-                Text(
-                  'External Links',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 8),
-                ListTile(
-                  leading: const Icon(Icons.link),
-                  title: const Text('View on IGDB'),
-                  trailing: const Icon(Icons.open_in_new),
-                  onTap: () => _launchUrl('https://www.igdb.com/games/${widget.game.exe.igdbId}'),
-                ),
-              ],
+
+          const SizedBox(height: 24),
+
+          // Videos Section
+          Text('Videos', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 8),
+          if (videos.isEmpty)
+            const Text('No videos available.')
+          else
+            ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(), // Disable ListView scrolling
+              itemCount: videos.length,
+              itemBuilder: (context, index) {
+                final videoId = videos[index];
+                final thumbnailUrl = 'https://img.youtube.com/vi/$videoId/0.jpg';
+                final videoUrl = 'https://www.youtube.com/watch?v=$videoId';
+
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: ListTile(
+                    leading: Image.network(thumbnailUrl, width: 100, fit: BoxFit.cover, errorBuilder: (_,__,___) => const Icon(Icons.video_library)),
+                    title: Text('Video ${index + 1}'),
+                    subtitle: Text(videoUrl),
+                    trailing: const Icon(Icons.play_circle_outline),
+                    onTap: () => _launchVideoUrl(videoUrl),
+                  ),
+                );
+              },
             ),
         ],
       ),
     );
   }
-  
+
   Widget _buildHistoryTab() {
-    // Placeholder for game history - could track play time, achievements, etc.
+    // Placeholder for history/logs related to this game
     return const Center(
       child: Padding(
         padding: EdgeInsets.all(16.0),
-        child: Text(
-          'Play history and statistics coming soon',
-          style: TextStyle(fontSize: 16),
-        ),
+        child: Text('Game-specific history or logs will be shown here in the future.'),
       ),
     );
   }
 
   Widget _buildInfoRow(String label, String value) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8.0),
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: 120,
-            child: Text(
-              label,
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-          ),
-          Expanded(
-            child: Text(value),
-          ),
+          Text('$label: ', style: const TextStyle(fontWeight: FontWeight.bold)),
+          Expanded(child: Text(value)),
         ],
       ),
     );
   }
 
-  void _launchUrl(String url) async {
-    try {
-      if (await canLaunch(url)) {
-        await launch(url);
-      } else {
-        throw 'Could not launch $url';
+  // Helper to show image carousel dialog (remains for full-screen view)
+  void _showImageCarousel(BuildContext context, List<Map<String, String>> images, int initialIndex) {
+     showDialog(
+        context: context,
+        builder: (BuildContext dialogContext) {
+           // Use StatefulBuilder to manage the index within the dialog
+           int currentIndex = initialIndex;
+           final PageController pageController = PageController(initialPage: initialIndex);
+
+           return StatefulBuilder(
+              builder: (stfContext, stfSetState) {
+                 return Dialog(
+                    backgroundColor: Colors.black.withOpacity(0.8),
+                    insetPadding: EdgeInsets.zero, // Full screen
+                    child: Stack(
+                       alignment: Alignment.center,
+                       children: [
+                          PageView.builder(
+                             controller: pageController,
+                             itemCount: images.length,
+                             onPageChanged: (index) {
+                                stfSetState(() {
+                                   currentIndex = index;
+                                });
+                             },
+                             itemBuilder: (context, index) {
+                                final image = images[index];
+                                final isLocal = image['type'] == 'local';
+                                final path = image['path']!;
+                                return InteractiveViewer( // Allow zooming
+                                   child: isLocal
+                                      ? Image.file(File(path), fit: BoxFit.contain)
+                                      : Image.network(path, fit: BoxFit.contain,
+                                         loadingBuilder: (context, child, loadingProgress) {
+                                            if (loadingProgress == null) return child;
+                                            return const Center(child: CircularProgressIndicator(color: Colors.white));
+                                         },
+                                         errorBuilder: (_, __, ___) => const Center(child: Icon(Icons.broken_image, color: Colors.white, size: 50)),
+                                      ),
+                                );
+                             },
+                          ),
+                          // Close button
+                          Positioned(
+                             top: 10,
+                             right: 10,
+                             child: IconButton(
+                                icon: const Icon(Icons.close, color: Colors.white, size: 30),
+                                onPressed: () => Navigator.of(stfContext).pop(),
+                             ),
+                          ),
+                          // Left navigation arrow
+                          if (currentIndex > 0)
+                             Positioned(
+                                left: 10,
+                                child: IconButton(
+                                   icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 30),
+                                   onPressed: () {
+                                      pageController.previousPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+                                   },
+                                ),
+                             ),
+                          // Right navigation arrow
+                          if (currentIndex < images.length - 1)
+                             Positioned(
+                                right: 10,
+                                child: IconButton(
+                                   icon: const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 30),
+                                   onPressed: () {
+                                      pageController.nextPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+                                   },
+                                ),
+                             ),
+                       ],
+                    ),
+                 );
+              },
+           );
+        },
+     );
+  }
+
+
+  // Helper to launch video URL
+  Future<void> _launchVideoUrl(String url) async {
+    final Uri uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication); // Open externally
+    } else {
+      // Handle error - show snackbar or log
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not launch $url')),
+        );
       }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not launch $url: $e')),
-      );
     }
   }
 }

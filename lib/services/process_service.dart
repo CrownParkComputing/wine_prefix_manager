@@ -12,174 +12,361 @@ typedef ProcessExitCallback = void Function(String exePath, int exitCode, List<S
 /// Provides the executable path and the process ID.
 typedef ProcessStartCallback = void Function(String exePath, int pid);
 
+/// Helper function to split arguments respecting quotes (Manual Parser).
+List<String> _splitArguments(String argsString) {
+  final List<String> result = [];
+  final buffer = StringBuffer();
+  bool inDoubleQuotes = false;
+  bool inSingleQuotes = false;
+  bool escaped = false; // Handle potential escape characters if needed (basic for now)
+
+  for (int i = 0; i < argsString.length; i++) {
+    final char = argsString[i];
+
+    if (escaped) {
+      // If the previous character was an escape, add the current char literally
+      buffer.write(char);
+      escaped = false;
+      continue;
+    }
+
+    if (char == '\\') {
+      // Found an escape character, the next character is literal
+      // Note: This is basic escaping, shell rules can be more complex
+      escaped = true;
+      continue; // Don't add the backslash itself unless escaped (\\)
+    }
+
+    if (char == '"' && !inSingleQuotes) {
+      inDoubleQuotes = !inDoubleQuotes;
+      continue; // Don't add the quote itself to the argument
+    }
+
+    if (char == '\'' && !inDoubleQuotes) {
+      inSingleQuotes = !inSingleQuotes;
+      continue; // Don't add the quote itself to the argument
+    }
+
+    if (char == ' ' && !inDoubleQuotes && !inSingleQuotes) {
+      // Space outside quotes signifies the end of an argument
+      if (buffer.isNotEmpty) {
+        result.add(buffer.toString());
+        buffer.clear();
+      }
+    } else {
+      // Add character to the current argument buffer
+      buffer.write(char);
+    }
+  }
+
+  // Add the last argument if the buffer isn't empty
+  if (buffer.isNotEmpty) {
+    result.add(buffer.toString());
+  }
+
+  // Handle potential lingering quote issues (e.g., unmatched quotes) - basic cleanup
+  if (inDoubleQuotes || inSingleQuotes) {
+      // Warning: Unmatched quotes detected in launch options
+      // Depending on desired behavior, could throw error or try to recover
+  }
+
+  return result;
+}
+
+
 class ProcessService {
   /// Runs an executable within a specified Wine/Proton prefix.
-  /// 
+  ///
   /// Monitors the process and calls callbacks on start and exit.
   /// Returns the started Process object, or null if startup fails.
   Future<Process?> runExecutable(
     WinePrefix prefix,
-    ExeEntry exe, {
+    ExeEntry exe, { // ExeEntry now contains launchOptions and steamAppId
     required ProcessStartCallback onProcessStart,
     required ProcessExitCallback onProcessExit,
   }) async {
     try {
+      // Base environment setup
       final baseEnv = {
         'WINEPREFIX': prefix.path,
-        'PATH': '${prefix.wineBuildPath}/bin:${Platform.environment['PATH']}', // Ensure existing PATH is included
-        'LD_LIBRARY_PATH': '${prefix.wineBuildPath}/lib:${Platform.environment['LD_LIBRARY_PATH'] ?? ''}', // Handle null LD_LIBRARY_PATH
-        'GST_PLUGIN_SYSTEM_PATH_1_0': '', // May need adjustment based on build
-        'WINEDLLOVERRIDES': 'winemenubuilder.exe=d',
+        // PATH and LD_LIBRARY_PATH are set differently for Proton vs Wine below
       };
 
-      if (prefix.type == PrefixType.proton) {
-        baseEnv['STEAM_COMPAT_CLIENT_INSTALL_PATH'] = prefix.path; // Check if this is correct, might need Steam path
+      final bool isMsi = exe.path.toLowerCase().endsWith('.msi');
+      String command;
+      List<String> baseArguments; // Base arguments for wine/proton itself
+      String wineExecutablePath; // Path to the wine binary itself
+      String wineBinDir; // Directory containing wine binary
+      String wineLibDir; // lib directory
+      String wineLib64Dir; // lib64 directory
+
+      // --- Determine paths, command, and specific env vars based on prefix type ---
+
+      if (prefix.type == PrefixType.gaming) {
+        // Gaming prefixes use the system's wine installation
+        command = 'wine'; // Assume 'wine' is in PATH
+        wineExecutablePath = 'wine'; // For potential checks, though existence check might fail if not absolute
+        wineBinDir = ''; // Rely on system PATH
+        wineLibDir = ''; // Rely on system libs
+        wineLib64Dir = ''; // Rely on system libs
+
+        // Base arguments for system wine
+        baseArguments = isMsi ? ['wineconsole', 'msiexec', '/i', exe.path] : [exe.path];
+
+      } else if (prefix.type == PrefixType.proton) {
+        final buildPath = prefix.wineBuildPath; // Removed unnecessary '!'
+         String resolvedPath = path.normalize(path.isAbsolute(buildPath)
+            ? buildPath
+            : path.join(Directory.current.path, buildPath));
+         final protonDir = Directory(resolvedPath);
+
+         if (!await protonDir.exists()) {
+           // ERROR: Proton build directory does not exist
+           onProcessExit(exe.path, -1, ['ERROR: Proton build directory does not exist: $resolvedPath']);
+           return null;
+         }
+
+        // Proton structure typically uses 'files/bin', 'files/lib', 'files/lib64'
+        wineBinDir = path.join(resolvedPath, 'files', 'bin');
+        wineLibDir = path.join(resolvedPath, 'files', 'lib');
+        wineLib64Dir = path.join(resolvedPath, 'files', 'lib64');
+        wineExecutablePath = path.join(wineBinDir, 'wine');
+
+        // Set Proton specific environment variables
+        baseEnv['STEAM_COMPAT_CLIENT_INSTALL_PATH'] = Platform.environment['HOME'] ?? '.'; // Use HOME or fallback
         baseEnv['STEAM_COMPAT_DATA_PATH'] = prefix.path;
+
+        if (exe.steamAppId != null && !isMsi) {
+          final steamAppIdStr = exe.steamAppId.toString();
+          baseEnv['SteamAppId'] = steamAppIdStr;
+          baseEnv['SteamGameId'] = steamAppIdStr;
+          baseEnv['STEAM_COMPAT_APP_ID'] = steamAppIdStr;
+          // Setting Steam App ID for Proton launch
+        }
+        if (!isMsi) {
+           baseEnv['UMU_ID'] = exe.steamAppId?.toString() ?? '1';
+           // Setting UMU_ID
+        }
+
+        // Determine command for Proton
+        if (isMsi) {
+          // For MSI with Proton, use internal wine + wineconsole
+          if (!await File(wineExecutablePath).exists()) {
+              // ERROR: Could not find wine executable within Proton build at expected path
+              onProcessExit(exe.path, -1, ['ERROR: Could not find wine executable within Proton build at expected path: $wineExecutablePath']);
+              return null;
+          }
+          command = wineExecutablePath;
+          baseArguments = ['wineconsole', 'msiexec', '/i', exe.path];
+          try { await Process.run('chmod', ['+x', command]); } catch (e) { /* Warning: Could not set executable permission for internal wine */ }
+        } else {
+          // For regular executables with Proton, use the 'proton' script
+          command = path.join(resolvedPath, 'proton'); // Path to the 'proton' script
+           if (!await File(command).exists()) {
+              // ERROR: Proton script not found
+              onProcessExit(exe.path, -1, ['ERROR: Proton script not found: $command']);
+              return null;
+           }
+          try { await Process.run('chmod', ['+x', command]); } catch (e) { /* Warning: Could not set executable permission for proton script */ }
+          baseArguments = ['run', exe.path]; // Base args for Proton EXE
+        }
+
+      } else {
+        // Handle standard Wine prefix case (PrefixType.wine)
+        final normalizedBuildPath = path.normalize(
+          path.isAbsolute(prefix.wineBuildPath) // Removed '?? '''
+              ? prefix.wineBuildPath // Removed '?? '''
+              : path.join(Directory.current.path, 'wine_builds', prefix.wineBuildPath) // Removed '?? '''
+        );
+        wineBinDir = path.join(normalizedBuildPath, 'bin');
+        wineLibDir = path.join(normalizedBuildPath, 'lib');
+        wineLib64Dir = path.join(normalizedBuildPath, 'lib64');
+        wineExecutablePath = path.join(wineBinDir, 'wine');
+
+        command = wineExecutablePath;
+
+        if (!await File(command).exists()) {
+           // ERROR: Wine executable not found
+           onProcessExit(exe.path, -1, ['ERROR: Wine executable not found: $command']);
+           return null;
+        }
+
+        if (isMsi) {
+          baseArguments = ['wineconsole', 'msiexec', '/i', exe.path];
+          // Wine MSI mode: using wineconsole
+        } else {
+          baseArguments = [exe.path];
+          // Wine EXE mode
+        }
       }
+
+      // --- Start Parsing Launch Options ---
+      final Map<String, String> launchEnv = {};
+      List<String> wrapperCommands = []; // Commands/args before %command%
+      List<String> executableArgs = []; // Args after %command% or all args if no %command%
+
+      if (exe.launchOptions != null && exe.launchOptions!.trim().isNotEmpty) {
+        // Parsing launch options
+        final optionsString = exe.launchOptions!.trim();
+        final commandPlaceholder = '%command%';
+        final commandIndex = optionsString.indexOf(commandPlaceholder);
+
+        String beforeCommand = '';
+        String afterCommand = '';
+
+        if (commandIndex != -1) {
+          beforeCommand = optionsString.substring(0, commandIndex).trim();
+          afterCommand = optionsString.substring(commandIndex + commandPlaceholder.length).trim();
+        } else {
+          // If no %command%, treat everything as arguments for the executable
+          afterCommand = optionsString;
+        }
+
+        // Parse parts before %command% (wrapper commands/args and env vars)
+        if (beforeCommand.isNotEmpty) {
+          final parts = _splitArguments(beforeCommand);
+          for (final part in parts) {
+            if (part.contains('=')) {
+              final kv = part.split('=');
+              if (kv.length == 2 && kv[0].isNotEmpty) {
+                launchEnv[kv[0]] = kv[1];
+                // Found Env Var (before %command%)
+              } else {
+                 // Ignoring malformed env var part (before %command%)
+              }
+            } else {
+              wrapperCommands.add(part);
+              // Found Wrapper Command/Arg
+            }
+          }
+        }
+
+        // Parse parts after %command% (executable args and env vars)
+        if (afterCommand.isNotEmpty) {
+          final parts = _splitArguments(afterCommand);
+          for (final part in parts) {
+            if (part.contains('=')) {
+              final kv = part.split('=');
+              if (kv.length == 2 && kv[0].isNotEmpty) {
+                launchEnv[kv[0]] = kv[1]; // Env vars can appear after %command% too
+                // Found Env Var (after %command%)
+              } else {
+                 // Ignoring malformed env var part (after %command%)
+              }
+            } else {
+              executableArgs.add(part);
+              // Found Executable Argument
+            }
+          }
+        }
+      }
+      // --- End Parsing Launch Options ---
+
+      // Combine environments: Platform -> baseEnv -> launchEnv
+      // Set PATH and LD_LIBRARY_PATH, potentially modifying based on prefix type
+      final fullEnv = {
+          ...Platform.environment,
+          ...baseEnv,
+          'GST_PLUGIN_SYSTEM_PATH_1_0': '', // Often needed
+          'WINEDLLOVERRIDES': 'winemenubuilder.exe=d', // Prevent menu building
+          ...launchEnv // Launch options override base/platform env
+      };
+
+      // Only prepend build paths for non-gaming prefixes
+      if (prefix.type != PrefixType.gaming) {
+        fullEnv['PATH'] = '$wineBinDir:${Platform.environment['PATH'] ?? ''}';
+        fullEnv['LD_LIBRARY_PATH'] = '$wineLib64Dir:$wineLibDir:${Platform.environment['LD_LIBRARY_PATH'] ?? ''}';
+      }
+
 
       final exeDir = path.dirname(exe.path);
-      // Combine baseEnv with existing environment, ensuring baseEnv takes precedence if keys conflict
-      final fullEnv = {...Platform.environment, ...baseEnv}; 
-
       Process process;
       List<String> errors = [];
-      String command;
-      List<String> arguments;
 
-      // For Proton, we need to handle paths differently
-      // The buildPath in prefix settings points to where the Proton runtime is located
-      // NOT the prefix directory itself
-      String? protonRuntimePath;
-      
-      if (prefix.type == PrefixType.proton && prefix.wineBuildPath != null) {
-        final buildPath = prefix.wineBuildPath!;
-        String resolvedPath;
-        
-        if (path.isAbsolute(buildPath)) {
-          resolvedPath = buildPath;
-        } else {
-          resolvedPath = path.join(Directory.current.path, buildPath);
-        }
-        
-        print('Checking proton build directory: $resolvedPath');
-        try {
-          final dir = Directory(resolvedPath);
-          if (await dir.exists()) {
-            final files = await dir.list().toList();
-            print('Files in proton directory:');
-            for (var file in files) {
-              print(' - ${path.basename(file.path)}');
-            }
-            
-            // Find the proton executable - it might be named differently
-            String? protonExecutable;
-            for (var file in files) {
-              if (file is File) {
-                if (path.basename(file.path).toLowerCase().contains('proton') || 
-                    path.basename(file.path) == 'proton') {
-                  protonExecutable = file.path;
-                  print('Found potential proton executable: $protonExecutable');
-                  break;
-                }
-              }
-            }
-            
-            if (protonExecutable != null) {
-              command = protonExecutable;
-            } else {
-              // Fall back to the standard path
-              command = path.join(resolvedPath, 'proton');
-              print('No proton executable found, using default path: $command');
-            }
-          } else {
-            print('ERROR: Proton build directory does not exist: $resolvedPath');
-            onProcessExit(exe.path, -1, ['ERROR: Proton build directory does not exist: $resolvedPath']);
-            return null;
-          }
-        } catch (e) {
-          print('Error listing proton directory: $e');
-          onProcessExit(exe.path, -1, ['Error listing proton directory: $e']);
-          return null;
-        }
-        
-        arguments = ['run', exe.path];
+      // --- Construct Final Command and Arguments ---
+      String finalCommand;
+      List<String> finalArguments;
+
+      if (wrapperCommands.isNotEmpty) {
+        // Use the first wrapper command as the main command
+        finalCommand = wrapperCommands.first;
+        // The rest of the wrapper commands, the original command, base arguments, and executable arguments become the arguments
+        finalArguments = [
+          ...wrapperCommands.sublist(1), // Remaining wrapper args
+          command, // The original wine/proton command
+          ...baseArguments, // Original base arguments (like 'run' or 'wineconsole', and the exe path)
+          ...executableArgs // Arguments from launch options after %command%
+        ];
       } else {
-        // Handle Wine case
-        final normalizedBuildPath = path.normalize(
-          path.isAbsolute(prefix.wineBuildPath ?? '') 
-              ? (prefix.wineBuildPath ?? '') 
-              : path.join(Directory.current.path, prefix.wineBuildPath ?? '')
-        );
-        command = path.join(normalizedBuildPath, 'bin', 'wine');
-        arguments = [exe.path];
+        // No wrapper commands, use the original command
+        finalCommand = command;
+        // Combine base arguments and executable arguments
+        finalArguments = [
+          ...baseArguments, // Original base arguments (like 'run' or 'wineconsole', and the exe path)
+          ...executableArgs // Arguments from launch options
+        ];
       }
+      // --- End Construct Final Command and Arguments ---
 
-      print('Running command: $command ${arguments.join(' ')}');
-      print('Working directory: $exeDir');
-      
-      // Make the proton script executable if needed
-      if (prefix.type == PrefixType.proton) {
-        try {
-          await Process.run('chmod', ['+x', command]);
-          print('Made proton script executable: $command');
-        } catch (e) {
-          print('Warning: Could not set executable permission: $e');
-        }
-      }
+
+      // Running command
+      // Working directory
+      // Environment keys
 
       process = await Process.start(
-        command,
-        arguments,
+        finalCommand,
+        finalArguments,
         workingDirectory: exeDir,
         environment: fullEnv,
-        // Always run with runInShell for consistent behavior
-        runInShell: true,
+        runInShell: false, // Set to false for better control, true might be needed sometimes
       );
 
-      // Notify caller about process start
       onProcessStart(exe.path, process.pid);
 
-      // Asynchronously listen for stderr and exit code
       process.stderr.transform(utf8.decoder).listen((data) {
-        print('stderr: $data'); // Log stderr
+        // stderr
         errors.add(data);
       });
 
-      // Also capture stdout for debugging
       process.stdout.transform(utf8.decoder).listen((data) {
-        print('stdout: $data');
+        // stdout
       });
 
-      // Don't await exit code here, let the caller manage the process lifetime
       process.exitCode.then((exitCode) {
-        print('${exe.name} exited with code $exitCode');
+        // Exited with code
         onProcessExit(exe.path, exitCode, errors);
       });
 
       return process;
 
-    } catch (e) {
-      print('Error running ${exe.name}: $e');
-      // Immediately call the exit callback with an error code (e.g., -1)
+    } catch (e) { // Removed unused stacktrace variable
+      // Error running executable
+      // Stacktrace
       onProcessExit(exe.path, -1, ['Error starting process: $e']);
       return null;
     }
   }
 
   /// Kills a process by its PID.
-  /// Returns true if the kill command was issued successfully, false otherwise.
   Future<bool> killProcess(int pid) async {
     try {
-      // Use 'kill' command, might need 'taskkill' on Windows
-      final shell = Shell(); 
-      print('Attempting to kill PID: $pid');
-      // Consider using SIGTERM first, then SIGKILL if needed
-      await shell.run('kill $pid'); 
-      print('Kill command issued for PID: $pid');
+      final shell = Shell();
+      // Attempting to kill PID
+      await shell.run('kill $pid');
+      // Kill command issued for PID
       return true;
     } catch (e) {
-      print('Error killing process PID $pid: $e');
-      return false;
+      try {
+        // Check if process still exists before declaring error
+        await Process.run('kill', ['-0', pid.toString()]);
+        // If the above doesn't throw, the process exists but kill failed
+        // Error killing process PID
+        return false;
+      } catch (e2) {
+         // If kill -0 throws, the process is already gone
+         // Process PID likely already terminated
+         return true;
+      }
     }
   }
 }

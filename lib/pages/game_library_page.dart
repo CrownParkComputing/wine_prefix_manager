@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:collection/collection.dart'; // Import for groupBy
 import '../models/prefix_models.dart';
 import '../models/settings.dart';
-import '../widgets/game_card.dart';
+import '../widgets/game_card.dart'; // Import GameCard for GameLaunchState enum
 
 class GameLibraryPage extends StatelessWidget {
   final List<GameEntry> games;
@@ -9,7 +10,9 @@ class GameLibraryPage extends StatelessWidget {
   final Function(BuildContext, GameEntry) onShowDetails;
   final Function(String?)? onGenreSelected;
   final String? selectedGenre;
-  final CoverSize coverSize;
+  final CoverSize coverSize; // Keep this for potential future use or other widgets
+  final Map<String, GameLaunchState> gameLaunchStates; // Add state map
+  final Function(GameEntry) onStopGame; // Add stop callback
 
   const GameLibraryPage({
     Key? key,
@@ -18,54 +21,67 @@ class GameLibraryPage extends StatelessWidget {
     required this.onShowDetails,
     this.onGenreSelected,
     this.selectedGenre,
-    this.coverSize = CoverSize.medium,
+    this.coverSize = CoverSize.medium, // Keep default here
+    required this.gameLaunchStates, // Make required
+    required this.onStopGame, // Make required
   }) : super(key: key);
 
   // Get unique categories from all games
   List<String?> get categories {
     final Set<String?> cats = {};
-    
+
     // Include null category explicitly (for uncategorized games)
     cats.add(null);
-    
+
     for (final game in games) {
       if (game.exe.category != null) {
         cats.add(game.exe.category);
       }
     }
-    
+
     // Sort non-null categories
     final sortedCats = cats.where((c) => c != null).toList()..sort();
-    
+
     // Return null first, followed by sorted categories
     return [null, ...sortedCats];
   }
 
   @override
   Widget build(BuildContext context) {
+    // Apply genre filter first
     final filteredGames = selectedGenre != null
         ? games.where((game) => game.exe.category == selectedGenre).toList()
         : games;
 
+    // Group filtered games by prefix
+    final groupedGames = groupBy<GameEntry, WinePrefix>(
+      filteredGames,
+      (game) => game.prefix,
+    );
+
+    // Sort prefixes by name for consistent order
+    final sortedPrefixes = groupedGames.keys.toList()
+      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+
     return Column(
       children: [
-        // App title - since this is now the main page
+        // Header with Filter Button (Title Removed)
         Padding(
-          padding: const EdgeInsets.only(top: 8.0, left: 16.0, right: 16.0),
+          padding: const EdgeInsets.only(top: 8.0, left: 16.0, right: 16.0, bottom: 8.0),
           child: Row(
             children: [
-              const Text(
-                'Game Library',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const Spacer(),
-              // Filter button
+              // Removed Title Text Widget
+              // const Text(
+              //   'Game Library',
+              //   style: TextStyle(
+              //     fontSize: 24,
+              //     fontWeight: FontWeight.bold,
+              //   ),
+              // ),
+              const Spacer(), // Takes up space where title was
               IconButton(
                 icon: const Icon(Icons.filter_list),
-                tooltip: 'Filter Games',
+                tooltip: 'Filter Games by Category',
                 onPressed: () {
                   _showFilterDialog(context);
                 },
@@ -77,65 +93,94 @@ class GameLibraryPage extends StatelessWidget {
         if (selectedGenre != null)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
-            child: Row(
-              children: [
-                const Text('Filtered by: '),
-                Chip(
-                  label: Text(selectedGenre!),
-                  deleteIcon: const Icon(Icons.close, size: 16),
-                  onDeleted: () {
-                    if (onGenreSelected != null) onGenreSelected!(null);
-                  },
-                ),
-              ],
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Chip(
+                label: Text('Category: ${selectedGenre!}'),
+                deleteIcon: const Icon(Icons.close, size: 16),
+                onDeleted: () {
+                  if (onGenreSelected != null) onGenreSelected!(null);
+                },
+              ),
             ),
           ),
-        // Original Body Content (Expanded)
+        // Game List Area
         Expanded(
           child: filteredGames.isEmpty
-              ? Center(
+              ? Center( // Show message if no games match filter or no games exist
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       const Icon(Icons.sports_esports_outlined, size: 64, color: Colors.grey),
                       const SizedBox(height: 16),
                       Text(
-                        selectedGenre != null 
+                        selectedGenre != null
                             ? 'No games found in category "$selectedGenre"'
-                            : 'No games found',
+                            : 'No games found in library',
                         style: const TextStyle(fontSize: 18),
                       ),
                       const SizedBox(height: 8),
                       const Text(
-                        'Add games in the Manage section',
+                        'Add games via the Manage tab',
                         style: TextStyle(color: Colors.grey),
                       ),
                     ],
                   ),
                 )
-              : GridView.builder(
-                  padding: const EdgeInsets.all(16),
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: _getCrossAxisCount(context),
-                    childAspectRatio: 0.7,
-                    crossAxisSpacing: 16,
-                    mainAxisSpacing: 16,
-                  ),
-                  itemCount: filteredGames.length,
+              : ListView.builder( // Use ListView for prefix groups
+                  padding: const EdgeInsets.symmetric(vertical: 8.0),
+                  itemCount: sortedPrefixes.length,
                   itemBuilder: (context, index) {
-                    final game = filteredGames[index];
-                    return GestureDetector(
-                      onTap: () => onShowDetails(context, game),
-                      child: Card(
-                        elevation: 4,
-                        clipBehavior: Clip.antiAlias,
-                        child: GameCard(
-                          game: game,
-                          onTap: (g) => onShowDetails(context, g),
-                          onLaunch: (g) => onLaunchGame(g.prefix, g.exe),
-                          coverSize: coverSize,
+                    final prefix = sortedPrefixes[index];
+                    final gamesInPrefix = groupedGames[prefix]!;
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Prefix Header
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+                          child: Text(
+                            prefix.name,
+                            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                          ),
                         ),
-                      ),
+                        // Grid for games within this prefix
+                        GridView.builder(
+                          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                          shrinkWrap: true, // Important for GridView inside ListView
+                          physics: const NeverScrollableScrollPhysics(), // Disable GridView scrolling
+                          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: _getCrossAxisCount(context),
+                            childAspectRatio: 0.7,
+                            crossAxisSpacing: 16,
+                            mainAxisSpacing: 16,
+                          ),
+                          itemCount: gamesInPrefix.length,
+                          itemBuilder: (context, gameIndex) {
+                            final game = gamesInPrefix[gameIndex];
+                            // Get the launch state for this specific game
+                            final launchState = gameLaunchStates[game.exe.path] ?? GameLaunchState.idle;
+
+                            return Card( // Removed GestureDetector, GameCard handles taps
+                              elevation: 4,
+                              clipBehavior: Clip.antiAlias,
+                              child: GameCard(
+                                game: game,
+                                onTap: (g) => onShowDetails(context, g), // Pass details callback
+                                onLaunch: (g) => onLaunchGame(g.prefix, g.exe), // Pass launch callback
+                                onStop: onStopGame, // Pass stop callback
+                                launchState: launchState, // Pass current state
+                                // Removed coverSize parameter
+                              ),
+                            );
+                          },
+                        ),
+                        const Divider(height: 24, thickness: 1, indent: 16, endIndent: 16), // Separator between prefixes
+                      ],
                     );
                   },
                 ),
@@ -158,14 +203,14 @@ class GameLibraryPage extends StatelessWidget {
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text('Filter Games'),
+          title: const Text('Filter by Category'),
           content: SizedBox(
-            width: 300,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
+            width: 300, // Constrain width
+            child: ListView( // Use ListView for potentially long category lists
+              shrinkWrap: true,
               children: [
                 ListTile(
-                  title: const Text('All Games'),
+                  title: const Text('All Categories'),
                   selected: selectedGenre == null,
                   onTap: () {
                     if (onGenreSelected != null) onGenreSelected!(null);
@@ -184,6 +229,12 @@ class GameLibraryPage extends StatelessWidget {
               ],
             ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'),
+            ),
+          ],
         );
       },
     );

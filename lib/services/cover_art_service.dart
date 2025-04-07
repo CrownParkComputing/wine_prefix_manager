@@ -1,6 +1,6 @@
 import 'dart:io';
-import 'dart:typed_data'; // For Uint8List
-import 'package:flutter/foundation.dart'; // For debugPrint
+// import 'dart:typed_data'; // Unused import removed
+// import 'package:flutter/foundation.dart'; // Unused import removed
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
@@ -35,19 +35,19 @@ class CoverArtService {
       final filePath = p.join(imageDir.path, filename);
       final file = File(filePath);
 
-      debugPrint('Attempting to download cover from: $coverUrl');
+      // debugPrint('Attempting to download cover from: $coverUrl');
       final response = await http.get(Uri.parse(coverUrl));
 
       if (response.statusCode == 200) {
         await file.writeAsBytes(response.bodyBytes);
-        debugPrint('Saved cover for $igdbId to $filePath');
+        // debugPrint('Saved cover for $igdbId to $filePath');
         return filePath;
       } else {
-        debugPrint('Failed to download cover for $igdbId: ${response.statusCode}');
+        // debugPrint('Failed to download cover for $igdbId: ${response.statusCode}');
         return null;
       }
     } catch (e) {
-      debugPrint('Error downloading/saving cover for $igdbId: $e');
+      // debugPrint('Error downloading/saving cover for $igdbId: $e');
       return null;
     }
   }
@@ -67,7 +67,7 @@ class CoverArtService {
         return await downloadAndSaveCover(igdbId, coverUrl);
       }
     } catch (e) {
-      debugPrint('Error getting local cover path for $igdbId: $e');
+      // debugPrint('Error getting local cover path for $igdbId: $e');
       return null;
     }
   }
@@ -88,19 +88,19 @@ class CoverArtService {
       final filePath = p.join(imageDir.path, filename);
       final file = File(filePath);
 
-      debugPrint('Attempting to download screenshot from: $screenshotUrl');
+      // debugPrint('Attempting to download screenshot from: $screenshotUrl');
       final response = await http.get(Uri.parse(screenshotUrl));
 
       if (response.statusCode == 200) {
         await file.writeAsBytes(response.bodyBytes);
-        debugPrint('Saved screenshot to $filePath');
+        // debugPrint('Saved screenshot to $filePath');
         return filePath;
       } else {
-        debugPrint('Failed to download screenshot $screenshotUrl: ${response.statusCode}');
+        // debugPrint('Failed to download screenshot $screenshotUrl: ${response.statusCode}');
         return null;
       }
     } catch (e) {
-      debugPrint('Error downloading/saving screenshot $screenshotUrl: $e');
+      // debugPrint('Error downloading/saving screenshot $screenshotUrl: $e');
       return null;
     }
   }
@@ -120,7 +120,7 @@ class CoverArtService {
         return await _downloadAndSaveScreenshot(screenshotUrl);
       }
     } catch (e) {
-      debugPrint('Error getting local screenshot path for $screenshotUrl: $e');
+      // debugPrint('Error getting local screenshot path for $screenshotUrl: $e');
       return null;
     }
   }
@@ -144,10 +144,10 @@ class CoverArtService {
       final file = File(localCoverPath);
       if (await file.exists()) {
         await file.delete();
-        debugPrint('Deleted cover: $localCoverPath');
+        // debugPrint('Deleted cover: $localCoverPath');
       }
     } catch (e) {
-      debugPrint('Error deleting cover $localCoverPath: $e');
+      // debugPrint('Error deleting cover $localCoverPath: $e');
     }
   }
 }

@@ -1,10 +1,7 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart'; // Import file_picker
-import 'package:path/path.dart' as path; // Import path package
 import '../models/settings.dart';
-import '../models/wine_build.dart';
 import '../services/cover_art_service.dart'; // Import CoverArtService
 import '../theme/theme_provider.dart';
 
@@ -82,7 +79,7 @@ class _SettingsPageState extends State<SettingsPage> {
     try {
       cachePath = await CoverArtService().getImageCacheDirectoryPath();
     } catch (e) {
-      print("Error getting image cache path: $e");
+      // Error getting image cache path
     }
 
     setState(() {
@@ -185,12 +182,10 @@ class _SettingsPageState extends State<SettingsPage> {
       if (!outputFile.toLowerCase().endsWith('.json')) {
         outputFile += '.json';
       }
-      // Add null check (restored)
-      if (outputFile != null) {
-        setState(() {
-          _gameLibraryPathController.text = outputFile!; // Use null assertion operator
-        });
-      }
+      // Removed redundant null check here
+      setState(() {
+        _gameLibraryPathController.text = outputFile!; // Use null assertion operator
+      });
     }
   }
 
@@ -500,103 +495,100 @@ class _SettingsPageState extends State<SettingsPage> {
                                controller: _igdbClientIdController,
                                decoration: const InputDecoration(
                                  labelText: 'IGDB Client ID',
-                                 prefixIcon: Icon(Icons.vpn_key),
+                                 hintText: 'Enter your Twitch/IGDB Client ID',
                                ),
+                               validator: (value) {
+                                 if (value == null || value.isEmpty) {
+                                   return 'Please enter your IGDB Client ID';
+                                 }
+                                 return null;
+                               },
                              ),
-                             const SizedBox(height: 8),
+                             const SizedBox(height: 16),
                              TextFormField(
                                controller: _igdbClientSecretController,
                                decoration: const InputDecoration(
                                  labelText: 'IGDB Client Secret',
-                                 prefixIcon: Icon(Icons.security),
+                                 hintText: 'Enter your Twitch/IGDB Client Secret',
                                ),
                                obscureText: true,
+                               validator: (value) {
+                                 if (value == null || value.isEmpty) {
+                                   return 'Please enter your IGDB Client Secret';
+                                 }
+                                 return null;
+                               },
                              ),
                            ],
                          ),
                        ),
                      ),
 
-                    // API/Service URLs Card
-                    Card(
-                      margin: const EdgeInsets.only(bottom: 16),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'API & Service URLs',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            TextFormField(
-                              controller: _dxvkApiUrlController,
-                              decoration: const InputDecoration(labelText: 'DXVK API URL', hintText: 'https://api.github.com/repos/doitsujin/dxvk/releases/latest'),
-                            ),
-                            const SizedBox(height: 8),
-                            TextFormField(
-                              controller: _vkd3dApiUrlController,
-                              decoration: const InputDecoration(labelText: 'VKD3D-Proton API URL', hintText: 'https://api.github.com/repos/HansKristian-Work/vkd3d-proton/releases/latest'),
-                            ),
-                            const SizedBox(height: 8),
-                            TextFormField(
-                              controller: _wineBuildsApiUrlController,
-                              decoration: const InputDecoration(labelText: 'Wine Builds API URL', hintText: 'https://api.github.com/repos/Kron4ek/Wine-Builds/releases/tags/10.4'),
-                            ),
-                            const SizedBox(height: 8),
-                            TextFormField(
-                              controller: _protonGeApiUrlController,
-                              decoration: const InputDecoration(labelText: 'Proton-GE API URL', hintText: 'https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases'),
-                            ),
-                            const SizedBox(height: 8),
-                            TextFormField(
-                              controller: _twitchOAuthUrlController,
-                              decoration: const InputDecoration(labelText: 'Twitch OAuth URL', hintText: 'https://id.twitch.tv/oauth2/token'),
-                            ),
-                            const SizedBox(height: 8),
-                            TextFormField(
-                              controller: _igdbApiBaseUrlController,
-                              decoration: const InputDecoration(labelText: 'IGDB API Base URL', hintText: 'https://api.igdb.com/v4'),
-                            ),
-                            const SizedBox(height: 8),
-                            TextFormField(
-                              controller: _igdbImageBaseUrlController,
-                              decoration: const InputDecoration(labelText: 'IGDB Image Base URL', hintText: 'https://images.igdb.com/igdb/image/upload'),
-                            ),
-                            const SizedBox(height: 16),
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: ElevatedButton.icon(
-                                onPressed: _resetApiUrls, // This call should now work
-                                icon: const Icon(Icons.refresh),
-                                label: const Text('Reset URLs to Default'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Theme.of(context).colorScheme.secondaryContainer,
-                                  foregroundColor: Theme.of(context).colorScheme.onSecondaryContainer,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
+                    // API URLs Card... (content omitted for brevity)
+                     Card(
+                       margin: const EdgeInsets.only(bottom: 16),
+                       child: Padding(
+                         padding: const EdgeInsets.all(16.0),
+                         child: Column(
+                           crossAxisAlignment: CrossAxisAlignment.start,
+                           children: [
+                             Row(
+                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                               children: [
+                                 const Text(
+                                   'API URLs (Advanced)',
+                                   style: TextStyle(
+                                     fontSize: 18,
+                                     fontWeight: FontWeight.bold,
+                                   ),
+                                 ),
+                                 TextButton(
+                                   onPressed: _resetApiUrls,
+                                   child: const Text('Reset Defaults'),
+                                 ),
+                               ],
+                             ),
+                             const SizedBox(height: 16),
+                             _buildUrlTextField(_dxvkApiUrlController, 'DXVK API URL'),
+                             _buildUrlTextField(_vkd3dApiUrlController, 'VKD3D-Proton API URL'),
+                             _buildUrlTextField(_wineBuildsApiUrlController, 'Wine Builds API URL'),
+                             _buildUrlTextField(_protonGeApiUrlController, 'Proton-GE API URL'),
+                             _buildUrlTextField(_twitchOAuthUrlController, 'Twitch OAuth URL'),
+                             _buildUrlTextField(_igdbApiBaseUrlController, 'IGDB API Base URL'),
+                             _buildUrlTextField(_igdbImageBaseUrlController, 'IGDB Image Base URL'),
+                           ],
+                         ),
+                       ),
+                     ),
 
                     _buildCategoryManagement(),
 
-                    const SizedBox(height: 16),
-                    ElevatedButton.icon(
+                    const SizedBox(height: 24),
+                    ElevatedButton(
                       onPressed: _saveSettings,
-                      icon: const Icon(Icons.save),
-                      label: const Text('Save Settings'),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                      ),
+                      child: const Text('Save Settings'),
                     ),
                   ],
                 ),
               ),
             ),
+    );
+  }
+
+  Widget _buildUrlTextField(TextEditingController controller, String label) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16.0),
+      child: TextFormField(
+        controller: controller,
+        decoration: InputDecoration(
+          labelText: label,
+          hintText: 'Leave blank for default',
+          border: const OutlineInputBorder(),
+        ),
+      ),
     );
   }
 }

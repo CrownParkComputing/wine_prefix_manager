@@ -1,11 +1,14 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart'; // For listEquals, ChangeNotifier, debugPrint
-import 'package:path/path.dart' as p;
+import 'package:path/path.dart' as p; // Import path package
 import '../models/prefix_models.dart';
 import '../models/settings.dart';
 import '../services/prefix_storage_service.dart';
 import '../services/prefix_management_service.dart';
 import '../services/cover_art_service.dart';
+import '../services/igdb_service.dart'; // Import IgdbService
+import '../models/igdb_models.dart'; // Import IgdbGame model
 
 class PrefixProvider with ChangeNotifier {
   List<WinePrefix> _prefixes = [];
@@ -17,6 +20,7 @@ class PrefixProvider with ChangeNotifier {
   final PrefixManagementService _managementService = PrefixManagementService();
   final CoverArtService _coverArtService = CoverArtService();
   final PrefixStorageService _prefixStorageService = PrefixStorageService();
+  final IgdbService _igdbService = IgdbService(); // Add IgdbService instance
 
   List<WinePrefix> get prefixes => List.unmodifiable(_prefixes);
   bool get isLoading => _isLoading;
@@ -28,7 +32,6 @@ class PrefixProvider with ChangeNotifier {
       _status = message;
       notifyListeners();
     }
-    // Removed misplaced debugPrint
   }
 
   void _setLoading(bool loading, [String statusMessage = '']) {
@@ -50,9 +53,7 @@ class PrefixProvider with ChangeNotifier {
 
   void updateSettings(Settings newSettings) {
     _settings = newSettings;
-    // _storageService.updateLibraryPath(newSettings.gameLibraryPath); // Method doesn't exist
-    debugPrint("[PrefixProvider] Settings updated. Image Base URL: ${_settings?.igdbImageBaseUrl}");
-
+    // debugPrint("[PrefixProvider] Settings updated. Image Base URL: ${_settings.igdbImageBaseUrl}"); // Removed ?.
     notifyListeners();
   }
 
@@ -60,12 +61,44 @@ class PrefixProvider with ChangeNotifier {
     _setLoading(true, "Loading prefixes...");
     try {
       if (_settings == null) throw Exception("Settings not loaded before loading prefixes.");
-      _prefixes = await _storageService.loadPrefixes(_settings!); // Pass Settings
-      _updateStatus('Prefixes loaded successfully.');
-      await checkAndDownloadMissingImages();
+      List<WinePrefix> loadedPrefixes = await _storageService.loadPrefixes(_settings!);
+
+      bool prefixesUpdated = false;
+      List<WinePrefix> checkedPrefixes = [];
+      for (final prefix in loadedPrefixes) {
+        List<ExeEntry> updatedEntries = [];
+        bool prefixChanged = false;
+        for (final exe in prefix.exeEntries) {
+          final fileExists = await File(exe.path).exists();
+          if (!fileExists && !exe.notWorking) {
+            // debugPrint('Executable not found, marking as not working: ${exe.path}');
+            updatedEntries.add(exe.copyWith(notWorking: true));
+            prefixChanged = true;
+            prefixesUpdated = true;
+          } else {
+            updatedEntries.add(exe);
+          }
+        }
+        if (prefixChanged) {
+          checkedPrefixes.add(prefix.copyWith(exeEntries: updatedEntries));
+        } else {
+          checkedPrefixes.add(prefix);
+        }
+      }
+
+      _prefixes = checkedPrefixes;
+
+      if (prefixesUpdated) {
+        _updateStatus('Prefixes loaded. Some executables marked as not working (file not found).');
+        await savePrefixes();
+      } else {
+        _updateStatus('Prefixes loaded successfully.');
+      }
+
+      await checkAndDownloadMissingImages(); // Check images after loading
     } catch (e) {
       _updateStatus('Error loading prefixes: $e');
-      debugPrint('Error loading prefixes: $e');
+      // debugPrint('Error loading prefixes: $e');
     } finally {
       _setLoading(false);
     }
@@ -74,15 +107,15 @@ class PrefixProvider with ChangeNotifier {
   Future<void> savePrefixes() async {
     if (_settings == null) {
        _updateStatus('Error saving prefixes: Settings not loaded.');
-       debugPrint('Error saving prefixes: Settings not loaded.');
+       // debugPrint('Error saving prefixes: Settings not loaded.');
        return;
     }
     try {
-      await _storageService.savePrefixes(_prefixes, _settings!); // Pass Settings
-      debugPrint('Prefixes saved via Provider.');
+      await _storageService.savePrefixes(_prefixes, _settings!);
+      // debugPrint('Prefixes saved via Provider.');
     } catch (e) {
       _updateStatus('Error saving prefixes: $e');
-      debugPrint('Error saving prefixes: $e');
+      // debugPrint('Error saving prefixes: $e');
     }
   }
 
@@ -93,35 +126,43 @@ class PrefixProvider with ChangeNotifier {
      }
     _setLoading(true, "Scanning for prefixes...");
     try {
-      // Use correct method name and pass Settings
       final scannedPrefixes = await _managementService.scanForExistingPrefixes(_settings!);
       bool updated = false;
       int addedCount = 0;
-      List<WinePrefix> currentPrefixes = List.from(_prefixes);
+      List<WinePrefix> currentPrefixes = List.from(_prefixes); // Makes a copy
 
       for (final scannedPrefix in scannedPrefixes) {
         final index = currentPrefixes.indexWhere((p) => p.path == scannedPrefix.path);
-        if (index == -1) {
+        if (index == -1) { // <-- Only adds if NOT found
           currentPrefixes.add(scannedPrefix);
-          debugPrint('Discovered new prefix via Provider: ${scannedPrefix.name}');
+          // debugPrint('Discovered new prefix via Provider: ${scannedPrefix.name}');
           updated = true;
           addedCount++;
-        } else {
-           debugPrint('Prefix already known via Provider: ${scannedPrefix.name}');
+        } else { // Prefix already exists, check if it needs updating
+          // Compare relevant fields (e.g., type, buildPath)
+          // Note: We don't compare exeEntries here as the scanner doesn't load them.
+          if (currentPrefixes[index].type != scannedPrefix.type ||
+              currentPrefixes[index].wineBuildPath != scannedPrefix.wineBuildPath) {
+            // debugPrint('Updating existing prefix via Provider: ${scannedPrefix.name} (Type: ${currentPrefixes[index].type.name} -> ${scannedPrefix.type.name}, BuildPath: ${currentPrefixes[index].wineBuildPath} -> ${scannedPrefix.wineBuildPath})');
+            currentPrefixes[index] = scannedPrefix.copyWith(exeEntries: currentPrefixes[index].exeEntries); // Keep existing exeEntries
+            updated = true; // Mark as updated even if no new prefixes were added
+          } else {
+            // debugPrint('Prefix already known and up-to-date via Provider: ${scannedPrefix.name}');
+          }
         }
       }
 
       if (updated) {
-        _prefixes = currentPrefixes;
-        _updateStatus('Scan complete. Added $addedCount new prefix(es).');
+        _prefixes = currentPrefixes; // Only updates _prefixes if a NEW prefix was added or an existing one changed
+        _updateStatus('Scan complete. $addedCount new prefix(es) added/updated.'); // Updated status message
         await savePrefixes();
         notifyListeners();
       } else {
-         _updateStatus('Scan complete. No new prefixes found.');
+         _updateStatus('Scan complete. No new or changed prefixes found.'); // Updated status message
       }
     } catch (e) {
       _updateStatus('Error scanning for prefixes: $e');
-      debugPrint('Error scanning for prefixes: $e');
+      // debugPrint('Error scanning for prefixes: $e');
     } finally {
       _setLoading(false);
     }
@@ -140,9 +181,8 @@ class PrefixProvider with ChangeNotifier {
 
   Future<void> deletePrefix(WinePrefix prefixToDelete) async {
     _setLoading(true, 'Deleting prefix "${prefixToDelete.name}"...');
-    debugPrint('Attempting to delete prefix (Provider): ${prefixToDelete.name}');
+    // debugPrint('Attempting to delete prefix (Provider): ${prefixToDelete.name}');
     try {
-      // Call the correct method in PrefixManagementService
       final success = await _managementService.deletePrefixDirectory(prefixToDelete.path);
       if (success) {
         _prefixes.removeWhere((p) => p.path == prefixToDelete.path);
@@ -154,22 +194,81 @@ class PrefixProvider with ChangeNotifier {
       }
     } catch (e) {
       _updateStatus('Error deleting prefix "${prefixToDelete.name}": $e');
-      debugPrint('Error deleting prefix: $e');
+      // debugPrint('Error deleting prefix: $e');
     } finally {
       _setLoading(false);
     }
   }
 
-  Future<void> addExecutable(WinePrefix prefix, ExeEntry newExe) async {
+  Future<void> renamePrefix(WinePrefix prefixToRename, String newName) async {
+    _setLoading(true, 'Renaming prefix "${prefixToRename.name}" to "$newName"...');
+    try {
+      // 1. Rename the directory
+      final newPath = await _managementService.renamePrefixDirectory(prefixToRename.path, newName);
+
+      // 2. Find the prefix in the list
+      final prefixIndex = _prefixes.indexWhere((p) => p.path == prefixToRename.path);
+      if (prefixIndex == -1) {
+        throw Exception('Prefix not found in provider state after renaming directory.');
+      }
+
+      // 3. Update ExeEntry paths within the prefix
+      final List<ExeEntry> updatedExeEntries = _prefixes[prefixIndex].exeEntries.map((exe) {
+        // Assuming exe paths are relative to the prefix directory's parent is incorrect.
+        // Exe paths are usually absolute. Renaming the prefix directory *should not*
+        // require updating absolute executable paths within it.
+        // If paths *were* relative, we'd need complex logic. Sticking with absolute paths.
+        // String relativePath = p.relative(exe.path, from: prefixToRename.path);
+        // String newExePath = p.join(newPath, relativePath);
+        // return exe.copyWith(path: newExePath);
+        return exe; // Keep original absolute path
+      }).toList();
+
+      // 4. Update the prefix object in the list
+      _prefixes[prefixIndex] = _prefixes[prefixIndex].copyWith(
+        name: newName,
+        path: newPath,
+        exeEntries: updatedExeEntries,
+      );
+
+      // 5. Save and notify
+      _updateStatus('Prefix renamed to "$newName" successfully.');
+      await savePrefixes();
+      notifyListeners();
+
+    } catch (e) {
+      _updateStatus('Error renaming prefix: $e');
+      // Re-throw the exception so the dialog can display it
+      rethrow;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+
+  /// Adds a pre-constructed ExeEntry to a prefix.
+  /// Assumes IGDB fetching/user confirmation has already happened.
+  Future<void> addExecutable(WinePrefix prefix, ExeEntry exeToAdd) async {
     final prefixIndex = _prefixes.indexWhere((p) => p.path == prefix.path);
     if (prefixIndex != -1) {
-      if (!_prefixes[prefixIndex].exeEntries.any((e) => e.path == newExe.path)) {
-        final updatedEntries = List<ExeEntry>.from(_prefixes[prefixIndex].exeEntries)..add(newExe);
+      if (!_prefixes[prefixIndex].exeEntries.any((e) => e.path == exeToAdd.path)) {
+        // Check file existence before adding
+        final fileExists = await File(exeToAdd.path).exists();
+        ExeEntry finalEntry = exeToAdd;
+        if (!fileExists) {
+          finalEntry = exeToAdd.copyWith(notWorking: true);
+        }
+
+        final updatedEntries = List<ExeEntry>.from(_prefixes[prefixIndex].exeEntries)..add(finalEntry);
         _prefixes[prefixIndex] = _prefixes[prefixIndex].copyWith(exeEntries: updatedEntries);
-        _updateStatus('Executable "${newExe.name}" added to prefix "${prefix.name}".');
+        _updateStatus('Executable "${finalEntry.name}" added to prefix "${prefix.name}".${!fileExists ? " (Marked as not working)" : ""}');
         await savePrefixes();
         notifyListeners();
-        await checkAndDownloadMissingImages(forceCheck: true);
+
+        // Trigger image download if URLs were added
+        if (finalEntry.coverUrl != null || finalEntry.screenshotUrls.isNotEmpty) {
+           await checkAndDownloadMissingImages(forceCheck: true);
+        }
       } else {
          _updateStatus('Executable already exists in prefix "${prefix.name}".');
       }
@@ -177,6 +276,7 @@ class PrefixProvider with ChangeNotifier {
        _updateStatus('Error adding executable: Prefix "${prefix.name}" not found.');
     }
   }
+
 
   Future<void> deleteExecutable(WinePrefix prefix, ExeEntry exeToDelete) async {
      final prefixIndex = _prefixes.indexWhere((p) => p.path == prefix.path);
@@ -186,16 +286,16 @@ class PrefixProvider with ChangeNotifier {
         if (updatedEntries.length < _prefixes[prefixIndex].exeEntries.length) {
            _prefixes[prefixIndex] = _prefixes[prefixIndex].copyWith(exeEntries: updatedEntries);
            _updateStatus('Executable "${exeToDelete.name}" deleted.');
-           debugPrint('Deleted executable via Provider: ${exeToDelete.path} from prefix: ${prefix.path}');
+           // debugPrint('Deleted executable via Provider: ${exeToDelete.path} from prefix: ${prefix.path}');
            await savePrefixes();
            notifyListeners();
         } else {
            _updateStatus('Error deleting executable: Executable not found.');
-           debugPrint('Error deleting executable via Provider: ExeEntry not found.');
+           // debugPrint('Error deleting executable via Provider: ExeEntry not found.');
         }
      } else {
         _updateStatus('Error deleting executable: Prefix not found.');
-        debugPrint('Error deleting executable via Provider: Prefix not found.');
+        // debugPrint('Error deleting executable via Provider: Prefix not found.');
      }
   }
 
@@ -204,13 +304,19 @@ class PrefixProvider with ChangeNotifier {
      if (prefixIndex != -1) {
         final exeIndex = _prefixes[prefixIndex].exeEntries.indexWhere((e) => e.path == updatedExe.path);
         if (exeIndex != -1) {
+           // Removed file existence check that overrode notWorking status
+           // The updatedExe passed in now directly reflects the user's choice
+
            final updatedEntries = List<ExeEntry>.from(_prefixes[prefixIndex].exeEntries);
-           updatedEntries[exeIndex] = updatedExe;
+           updatedEntries[exeIndex] = updatedExe; // Use the passed-in updatedExe directly
            _prefixes[prefixIndex] = _prefixes[prefixIndex].copyWith(exeEntries: updatedEntries);
-           _updateStatus('Executable "${updatedExe.name}" updated.');
+           _updateStatus('Executable "${updatedExe.name}" updated.'); // Simplified status message
            await savePrefixes();
            notifyListeners();
-           await checkAndDownloadMissingImages(forceCheck: true);
+           // Trigger image download check if URLs are present
+           if (updatedExe.coverUrl != null || updatedExe.screenshotUrls.isNotEmpty) {
+             await checkAndDownloadMissingImages(forceCheck: true); // Use forceCheck to ensure download attempt
+           }
         } else {
            _updateStatus('Error updating executable: Executable not found.');
         }
@@ -238,25 +344,27 @@ class PrefixProvider with ChangeNotifier {
         notifyListeners();
      } catch (e) {
         _updateStatus('Error moving executable: $e');
-        debugPrint('Error moving executable: $e');
+        // debugPrint('Error moving executable: $e');
      } finally {
         _setLoading(false);
      }
   }
 
+  // Modified: Simplified to only download based on existing URLs
   Future<void> checkAndDownloadMissingImages({bool forceCheck = false}) async {
-    if (_settings == null) {
-       debugPrint("Cannot check images: Settings not loaded.");
+    if (_settings == null) { // Removed token check as it's not needed for download only
+       // debugPrint("[checkAndDownloadMissingImages] Cannot check images: Settings not loaded.");
        return;
     }
 
-    debugPrint("Checking for missing local images (Provider)...");
+    // debugPrint("[checkAndDownloadMissingImages] Starting check for missing local images (forceCheck: $forceCheck)...");
     bool requiresSave = false;
-    int checked = 0;
+    // Removed fetchedCovers/fetchedScreenshots counters
     int downloadedCovers = 0;
     int downloadedScreenshots = 0;
 
     List<WinePrefix> updatedPrefixesList = List.from(_prefixes);
+    // Removed token variable
 
     for (int i = 0; i < updatedPrefixesList.length; i++) {
       WinePrefix prefix = updatedPrefixesList[i];
@@ -265,67 +373,55 @@ class PrefixProvider with ChangeNotifier {
 
       for (int j = 0; j < updatedEntries.length; j++) {
         ExeEntry entry = updatedEntries[j];
-        checked++;
         ExeEntry currentUpdatedEntry = entry;
         bool entryUpdated = false;
+        // debugPrint("[checkAndDownloadMissingImages] Checking entry: ${entry.name} (IGDB ID: ${entry.igdbId})");
 
-        bool coverMissing = entry.igdbId != null && entry.coverUrl != null && entry.coverUrl!.isNotEmpty && (entry.localCoverPath == null || entry.localCoverPath!.isEmpty);
-        bool screenshotsMissing = entry.screenshotUrls.isNotEmpty && (entry.localScreenshotPaths.isEmpty || entry.localScreenshotPaths.length != entry.screenshotUrls.length);
+        // --- Removed Fetch Cover/Screenshot Details logic ---
 
-        // --- Cover Reconstruction & Check ---
-        String? coverUrlToCheck = entry.coverUrl;
-        if (entry.coverImageId != null && entry.coverImageId!.isNotEmpty &&
-            (_settings != null && (coverUrlToCheck == null || coverUrlToCheck.isEmpty || coverUrlToCheck.startsWith('https://api.igdb.com')))) {
-           debugPrint("Reconstructing cover URL for ${entry.name} using image ID ${entry.coverImageId}");
-           coverUrlToCheck = '${_settings!.igdbImageBaseUrl}/t_cover_big/${entry.coverImageId}.jpg';
-    debugPrint("[checkAndDownloadMissingImages] Using Image Base URL: ${_settings?.igdbImageBaseUrl}");
+        // --- Download Cover Image if needed ---
+        bool coverMissingLocally = entry.igdbId != null &&
+                                   entry.coverUrl != null &&
+                                   entry.coverUrl!.isNotEmpty &&
+                                   (entry.localCoverPath == null || entry.localCoverPath!.isEmpty);
+        bool shouldDownloadCover = (forceCheck || coverMissingLocally) && entry.igdbId != null && entry.coverUrl != null && entry.coverUrl!.isNotEmpty;
+        // debugPrint("[checkAndDownloadMissingImages] Should download cover? $shouldDownloadCover (MissingLocally: $coverMissingLocally, URL: ${entry.coverUrl}, Force: $forceCheck)");
 
-           currentUpdatedEntry = currentUpdatedEntry.copyWith(coverUrl: coverUrlToCheck);
-           entryUpdated = true;
-           // Explicitly update entry as well, just in case
-           entry = currentUpdatedEntry;
-        }
-
-        if ((forceCheck || coverMissing) && entry.igdbId != null && coverUrlToCheck != null && coverUrlToCheck.isNotEmpty) {
-           debugPrint("Checking/Downloading cover for ${entry.name} (${entry.igdbId}) from $coverUrlToCheck");
-           final localPath = await _coverArtService.getLocalCoverPath(entry.igdbId!, coverUrlToCheck);
+        if (shouldDownloadCover) {
+           // debugPrint("[checkAndDownloadMissingImages] Checking/Downloading cover for ${entry.name} (${entry.igdbId}) from ${entry.coverUrl}");
+           final localPath = await _coverArtService.getLocalCoverPath(entry.igdbId!, entry.coverUrl!);
            if (localPath != null && localPath != entry.localCoverPath) {
+              // debugPrint("[checkAndDownloadMissingImages] Downloaded/Verified cover at: $localPath");
               currentUpdatedEntry = currentUpdatedEntry.copyWith(localCoverPath: localPath);
-              if (coverMissing) downloadedCovers++;
+              if (coverMissingLocally) downloadedCovers++;
               requiresSave = true;
               entryUpdated = true;
+           } else if (localPath != null) {
+              // debugPrint("[checkAndDownloadMissingImages] Cover already exists locally: $localPath");
+           } else {
+              // debugPrint("[checkAndDownloadMissingImages] Failed to download/verify cover for ${entry.name}");
            }
         }
 
-        // --- Screenshot Reconstruction Check ---
-        List<String> screenshotUrlsToCheck = List.from(currentUpdatedEntry.screenshotUrls);
-           debugPrint("  >> Settings Image Base URL: ${_settings?.igdbImageBaseUrl}");
-           debugPrint("  >> Cover Image ID: ${entry.coverImageId}");
+        // --- Download Screenshot Images if needed ---
+        bool screenshotsMissingLocally = entry.screenshotUrls.isNotEmpty &&
+                                         (entry.localScreenshotPaths.isEmpty || entry.localScreenshotPaths.length != entry.screenshotUrls.length);
+        bool shouldDownloadScreenshots = (forceCheck || screenshotsMissingLocally) && entry.screenshotUrls.isNotEmpty;
+        // debugPrint("[checkAndDownloadMissingImages] Should download screenshots? $shouldDownloadScreenshots (MissingLocally: $screenshotsMissingLocally, URLs: ${entry.screenshotUrls.length}, Force: $forceCheck)");
 
-        bool reconstructedScreenshots = false;
-        if (currentUpdatedEntry.screenshotImageIds.isNotEmpty && _settings != null &&
-            // Removed misplaced debugPrint statement here
-            (screenshotUrlsToCheck.isEmpty || screenshotUrlsToCheck.length != currentUpdatedEntry.screenshotImageIds.length || (screenshotUrlsToCheck.isNotEmpty && screenshotUrlsToCheck.first.startsWith('https://api.igdb.com')))) {
-           debugPrint("Reconstructing screenshot URLs for ${currentUpdatedEntry.name} using image IDs");
-           screenshotUrlsToCheck = currentUpdatedEntry.screenshotImageIds
-               .map((id) => '${_settings!.igdbImageBaseUrl}/t_screenshot_big/$id.jpg')
-               .toList();
-           reconstructedScreenshots = true;
-           currentUpdatedEntry = currentUpdatedEntry.copyWith(screenshotUrls: screenshotUrlsToCheck);
-           entryUpdated = true;
-           // Explicitly update entry as well, just in case
-           entry = currentUpdatedEntry;
-        }
-
-        // --- Screenshot Download Check ---
-        if ((forceCheck || screenshotsMissing || reconstructedScreenshots) && screenshotUrlsToCheck.isNotEmpty) {
-           debugPrint("Checking/Downloading screenshots for ${currentUpdatedEntry.name}...");
-           final localPaths = await _coverArtService.getLocalScreenshotPaths(screenshotUrlsToCheck);
-           if (localPaths.isNotEmpty && !_listEquals(localPaths, currentUpdatedEntry.localScreenshotPaths)) {
+        if (shouldDownloadScreenshots) {
+           // debugPrint("[checkAndDownloadMissingImages] Checking/Downloading ${entry.screenshotUrls.length} screenshots for ${entry.name}...");
+           final localPaths = await _coverArtService.getLocalScreenshotPaths(entry.screenshotUrls);
+           if (localPaths.isNotEmpty && !_listEquals(localPaths, entry.localScreenshotPaths)) {
+                 // debugPrint("[checkAndDownloadMissingImages] Downloaded/Verified ${localPaths.length} screenshots.");
                  currentUpdatedEntry = currentUpdatedEntry.copyWith(localScreenshotPaths: localPaths);
-                 if (screenshotsMissing) downloadedScreenshots += localPaths.length;
+                 if (screenshotsMissingLocally) downloadedScreenshots += localPaths.length;
                  requiresSave = true;
                  entryUpdated = true;
+              } else if (localPaths.isNotEmpty) {
+                 // debugPrint("[checkAndDownloadMissingImages] Screenshots already exist locally.");
+              } else {
+                 // debugPrint("[checkAndDownloadMissingImages] Failed to download/verify screenshots for ${entry.name}");
               }
            }
 
@@ -340,16 +436,17 @@ class PrefixProvider with ChangeNotifier {
       }
     } // End outer loop
 
-    debugPrint("Image check complete."); // Further simplified
+    // debugPrint("[checkAndDownloadMissingImages] Image download check complete. Downloaded: $downloadedCovers covers, $downloadedScreenshots screenshots.");
 
     if (requiresSave) {
-      debugPrint("Saving updated prefix data with new local image paths (Provider)...");
+      // debugPrint("[checkAndDownloadMissingImages] Saving updated prefix data with new local image paths (Provider)...");
       _prefixes = updatedPrefixesList;
-      _updateStatus("Downloaded/Verified missing images.");
+      _updateStatus("Downloaded/Verified missing images."); // Keep status generic
       notifyListeners();
       await savePrefixes();
     }
   }
+
 
   bool _listEquals<T>(List<T>? a, List<T>? b) {
     return listEquals(a, b); // Use foundation's listEquals
@@ -363,10 +460,10 @@ class PrefixProvider with ChangeNotifier {
       final updatedExe = gameEntry.exe.copyWith(path: updatedExePath);
       await updateExecutable(gameEntry.prefix, updatedExe);
       _updateStatus('Successfully moved folder and updated path for "${gameEntry.exe.name}".');
-      debugPrint('Successfully moved folder and updated path for "${gameEntry.exe.name}".');
+      // debugPrint('Successfully moved folder and updated path for "${gameEntry.exe.name}".');
     } catch (e) {
       _updateStatus('Error moving game folder: $e');
-      debugPrint('Error moving game folder (Provider): $e');
+      // debugPrint('Error moving game folder (Provider): $e');
     } finally {
       _setLoading(false);
     }
@@ -377,63 +474,38 @@ class PrefixProvider with ChangeNotifier {
     try {
       _status = 'Updating executable path...';
       notifyListeners();
-      
+
       // Check if file exists
       final file = File(newPath);
       if (!await file.exists()) {
-        throw Exception('The selected file does not exist.');
+        throw Exception('New executable path does not exist: $newPath');
       }
-      
-      // Create updated entry with new path
-      final updatedExe = exeEntry.copyWith(path: newPath);
-      
-      // Find prefix and exe indexes
+
       final prefixIndex = _prefixes.indexWhere((p) => p.path == prefix.path);
       if (prefixIndex == -1) {
-        throw Exception('Prefix not found.');
+        throw Exception('Prefix not found');
       }
-      
+
       final exeIndex = _prefixes[prefixIndex].exeEntries.indexWhere((e) => e.path == exeEntry.path);
       if (exeIndex == -1) {
-        throw Exception('Executable not found in prefix.');
+        throw Exception('Executable not found in prefix');
       }
-      
-      // Update the exe entry
-      final updatedPrefixes = List<WinePrefix>.from(_prefixes);
-      final updatedExeEntries = List<ExeEntry>.from(updatedPrefixes[prefixIndex].exeEntries);
-      updatedExeEntries[exeIndex] = updatedExe;
-      
-      updatedPrefixes[prefixIndex] = updatedPrefixes[prefixIndex].copyWith(exeEntries: updatedExeEntries);
-      
-      // Update state
-      _prefixes = updatedPrefixes;
+
+      // Create updated executable entry
+      final updatedExe = exeEntry.copyWith(path: newPath);
+
+      // Update the list
+      final updatedEntries = List<ExeEntry>.from(_prefixes[prefixIndex].exeEntries);
+      updatedEntries[exeIndex] = updatedExe;
+      _prefixes[prefixIndex] = _prefixes[prefixIndex].copyWith(exeEntries: updatedEntries);
+
       _status = 'Executable path updated successfully.';
+      await savePrefixes();
       notifyListeners();
-      
-      // Save changes
-      await _prefixStorageService.savePrefixes(_prefixes, _settings!);
     } catch (e) {
       _status = 'Error updating executable path: $e';
       notifyListeners();
-      rethrow;
-    }
-  }
-
-  Future<void> _savePrefixes() async {
-    try {
-      if (_settings == null) {
-        _status = 'Error saving prefixes: Settings not initialized';
-        print(_status);
-        return;
-      }
-      
-      // Pass _settings (now guaranteed non-null) to savePrefixes
-      await _prefixStorageService.savePrefixes(_prefixes, _settings!);
-      
-      notifyListeners();
-    } catch (e) {
-      _status = 'Error saving prefixes: $e';
-      print(_status);
+      // Optionally rethrow or handle more gracefully
     }
   }
 }

@@ -1,59 +1,281 @@
 import 'dart:convert';
+import 'dart:io'; // Added for Directory/File operations
 import 'package:http/http.dart' as http;
-import '../models/wine_build.dart'; // Adjust import path as needed
-import '../models/settings.dart'; // Import Settings model
+import 'package:path/path.dart' as p; // Added for path manipulation
+import '../models/wine_build.dart';
+import '../models/settings.dart';
+import '../models/prefix_models.dart'; // Import PrefixType
 
 class BuildService {
+
+  /// Parses Steam's libraryfolders.vdf to find library paths.
+  Future<List<String>> _getSteamLibraryPaths(String steamRootPath) async {
+    // Look for VDF in root/steamapps and root itself
+    final List<String> potentialVdfPaths = [
+      p.join(steamRootPath, 'steamapps', 'libraryfolders.vdf'),
+      p.join(steamRootPath, 'libraryfolders.vdf'),
+    ];
+    File? vdfFile;
+    String? foundVdfPath;
+
+    for (final vdfPath in potentialVdfPaths) {
+       final file = File(vdfPath);
+       if (await file.exists()) {
+          vdfFile = file;
+          foundVdfPath = vdfPath;
+          break;
+       }
+    }
+
+    List<String> libraryPaths = [];
+
+    // Always add the default library path relative to the steam root if it exists
+    final defaultLibraryPath = p.join(steamRootPath);
+    // Check for steamapps dir as a sign of a valid library root
+    if (await Directory(p.join(defaultLibraryPath, 'steamapps')).exists()) {
+       libraryPaths.add(defaultLibraryPath);
+    } else {
+       // Default library path steamapps not found
+    }
+
+    if (vdfFile != null && foundVdfPath != null) {
+      try {
+        final content = await vdfFile.readAsString();
+        final regex = RegExp(r'"\d+"\s*{\s*"path"\s*"([^"]+)"', multiLine: true);
+        final matches = regex.allMatches(content);
+
+
+        for (final match in matches) {
+          if (match.groupCount >= 1) {
+            final libraryPath = match.group(1);
+            if (libraryPath != null && libraryPath.isNotEmpty) {
+              final absolutePath = p.isAbsolute(libraryPath) ? libraryPath : p.join(p.dirname(foundVdfPath), libraryPath);
+              final libraryDir = Directory(absolutePath);
+              final steamappsDir = Directory(p.join(absolutePath, 'steamapps'));
+
+              if (await libraryDir.exists() && await steamappsDir.exists()) {
+                 libraryPaths.add(absolutePath);
+              } else {
+                 // VDF library path invalid or missing steamapps
+              }
+            }
+          }
+        }
+      } catch (e) {
+        // Error reading or parsing libraryfolders.vdf
+      }
+    } else {
+       // libraryfolders.vdf not found in checked locations
+    }
+    final uniquePaths = libraryPaths.toSet().toList();
+    return uniquePaths;
+  }
+
+  /// Scans Steam directories for installed Proton builds.
+  Future<List<ProtonBuild>> _scanForSteamProtonBuilds() async {
+    List<ProtonBuild> foundBuilds = [];
+    final homeDir = Platform.environment['HOME'];
+    if (homeDir == null) {
+      // ERROR: HOME environment variable not set. Cannot scan for Steam Proton builds.
+      return foundBuilds;
+    }
+
+    // Potential Steam installation roots
+    final List<String> potentialSteamRoots = [
+      p.join(homeDir, '.steam', 'steam'),
+      p.join(homeDir, '.steam', 'root'),
+      p.join(homeDir, '.local', 'share', 'Steam'),
+      p.join(homeDir, '.var', 'app', 'com.valvesoftware.Steam', '.local', 'share', 'Steam'), // Flatpak
+    ];
+
+    Set<String> pathsToScanForCompatTools = {};
+
+    // Find actual Steam roots and add their potential compat tools dirs
+    for (final steamRoot in potentialSteamRoots) {
+       final steamRootDir = Directory(steamRoot);
+       if (await steamRootDir.exists()) {
+          // Add the compat tools dir directly under the root
+          pathsToScanForCompatTools.add(p.join(steamRoot, 'compatibilitytools.d'));
+
+          // Also check libraries defined in VDF for their own compat tools dirs
+          final libraryPaths = await _getSteamLibraryPaths(steamRoot);
+          for (final libPath in libraryPaths) {
+             // It's less common, but check if compat tools exist directly in library roots too
+             pathsToScanForCompatTools.add(p.join(libPath, 'compatibilitytools.d'));
+          }
+       } else {
+          // Potential Steam root not found
+       }
+    }
+
+    if (pathsToScanForCompatTools.isEmpty) {
+       // No potential compatibilitytools.d paths found.
+       return foundBuilds;
+    }
+
+
+    for (final compatPath in pathsToScanForCompatTools) {
+      final compatDir = Directory(compatPath);
+
+      if (await compatDir.exists()) {
+        try {
+          await for (final entity in compatDir.list()) {
+            // Proton builds are directories within compatibilitytools.d
+            if (entity is Directory) {
+              // final dirName = p.basename(entity.path); // Removed unused variable
+              try {
+                // Check for key files/dirs to confirm validity
+                final protonScript = File(p.join(entity.path, 'proton'));
+                final versionFile = File(p.join(entity.path, 'version'));
+                final distDir = Directory(p.join(entity.path, 'dist')); // Official builds have 'dist'
+
+                // Use existence of 'proton' script OR 'version' file OR 'dist' dir
+                if (await protonScript.exists() || await versionFile.exists() || await distDir.exists()) {
+                   if (!foundBuilds.any((b) => b.installPath == entity.path)) {
+                      // FIX: Corrected call to only pass path
+                      foundBuilds.add(ProtonBuild.fromInstallPath(entity.path));
+                   } else {
+                      // Skipping duplicate found build
+                   }
+                } else {
+                   // Skipping: Missing key files/dirs
+                }
+              } catch (e) {
+                // Error processing Proton directory
+              }
+            }
+          }
+        } catch (e) {
+          // Error listing directory
+        }
+      } else {
+         // Compatibility path does not exist
+      }
+    }
+
+    // Found installed Steam Proton builds after scan.
+    return foundBuilds;
+  }
+
   Future<List<BaseBuild>> fetchBuilds(Settings? settings) async {
     if (settings == null) {
       throw Exception('Settings not initialized');
     }
-    
-    // Remove the specific property check since the property name is unknown
-    // Instead, let's try to fetch using whatever URL property is available in the settings
-    
+
+    List<BaseBuild> builds = [];
+
+    // --- Fetch Wine builds ---
     try {
-      final String url = '${settings.buildsApiUrl}/api/v1/builds'; // Use the correct property name
-
-      List<BaseBuild> builds = [];
-
-      // Fetch Wine builds
-      final wineResponse = await http.get(Uri.parse(settings.wineBuildsApiUrl)); // Use settings URL
-
+      final wineResponse = await http.get(Uri.parse(settings.wineBuildsApiUrl));
       if (wineResponse.statusCode == 200) {
         final wineData = json.decode(wineResponse.body);
-        final wineAssets = wineData['assets'] as List;
+        final List<dynamic> wineAssets = (wineData is Map && wineData.containsKey('assets'))
+            ? wineData['assets']
+            : (wineData is List ? wineData : []);
 
-        builds.addAll(
-          wineAssets
-              .where((asset) => asset['name'].toString().endsWith('.tar.xz'))
-              .map((asset) => WineBuild.fromGitHubAsset(asset, '10.4'))
-              .toList()
-        );
+        final List<Map<String, dynamic>> typedWineAssets = wineAssets
+            .whereType<Map<String, dynamic>>()
+            .where((asset) => asset['name']?.toString().endsWith('.tar.xz') == true)
+            .toList();
+
+        List<WineBuild> wineBuilds = [];
+        for (var asset in typedWineAssets) {
+           try {
+              wineBuilds.add(WineBuild.fromGitHubAsset(asset, wineData['tag_name'] ?? 'unknown'));
+           } catch (e) {
+              // Error parsing Wine asset
+           }
+        }
+        builds.addAll(wineBuilds);
+        // Fetched Wine builds.
       } else {
-        print('Failed to fetch Wine builds: ${wineResponse.statusCode}');
-        // Optionally throw an exception or return partial results
+        // Failed to fetch Wine builds
       }
+    } catch (e) {
+       // Error fetching Wine builds
+    }
 
-      // Fetch Proton builds
-      final protonResponse = await http.get(Uri.parse(settings.protonGeApiUrl)); // Use settings URL
-
+    // --- Fetch Proton-GE builds ---
+    try {
+      final protonResponse = await http.get(Uri.parse(settings.protonGeApiUrl));
       if (protonResponse.statusCode == 200) {
         final List<dynamic> releases = json.decode(protonResponse.body);
-        builds.addAll(
-          releases
-              .take(5) // Only get the latest 5 releases
-              .map((release) => ProtonBuild.fromGitHubRelease(release))
-              .toList()
-        );
+        List<ProtonBuild> protonBuilds = [];
+        releases
+            .whereType<Map<String, dynamic>>()
+            .where((release) => release['tag_name'] != null)
+            .take(10) // Limit fetched Proton-GE builds
+            .forEach((release) {
+              try {
+                // Pass PrefixType.proton, ProtonBuild might override based on content/name
+                protonBuilds.add(ProtonBuild.fromGitHubRelease(release, PrefixType.proton));
+              } catch (e) {
+                // Error parsing Proton-GE release
+              }
+            });
+        builds.addAll(protonBuilds);
+        // Fetched Proton-GE builds.
       } else {
-        print('Failed to fetch Proton builds: ${protonResponse.statusCode}');
-        // Optionally throw an exception or return partial results
+        // Failed to fetch Proton-GE builds
       }
-
-      return builds;
     } catch (e) {
-      throw Exception('Error fetching builds: ${e.toString()}. Check your settings configuration.');
+       // Error fetching Proton-GE builds
     }
+
+    // --- Scan for installed Steam Proton builds ---
+    try {
+       List<ProtonBuild> installedProtonBuilds = await _scanForSteamProtonBuilds();
+       builds.addAll(installedProtonBuilds);
+    } catch (e) {
+       // Error scanning for installed Steam Proton builds
+    }
+
+    // --- Filter out unwanted builds ---
+    builds.removeWhere((build) {
+      // Remove Proton Experimental type (enum value was removed, check type just in case)
+      // if (build.type == PrefixType.protonExperimental) return true; // No longer needed
+      // Remove builds containing "UMU" in the name (case-insensitive)
+      if (build.name.toLowerCase().contains('umu')) return true;
+      return false;
+    });
+
+
+    // Total builds available for selection after fetch and scan
+    // Sort builds: Installed first, then by type, then by version descending
+    builds.sort((a, b) {
+      int installSort = (a.installPath != null ? 0 : 1).compareTo(b.installPath != null ? 0 : 1);
+      if (installSort != 0) return installSort;
+
+      int typeSort = a.type.index.compareTo(b.type.index);
+      if (typeSort != 0) return typeSort;
+
+      // Attempt a more robust version sort (basic numeric comparison)
+      final RegExp versionRegex = RegExp(r'(\d+)\.(\d+)(?:[.-](\d+))?');
+      final Match? aMatch = versionRegex.firstMatch(a.version);
+      final Match? bMatch = versionRegex.firstMatch(b.version);
+
+      if (aMatch != null && bMatch != null) {
+        try {
+          int aMajor = int.parse(aMatch.group(1)!);
+          int bMajor = int.parse(bMatch.group(1)!);
+          if (aMajor != bMajor) return bMajor.compareTo(aMajor); // Descending major
+
+          int aMinor = int.parse(aMatch.group(2)!);
+          int bMinor = int.parse(bMatch.group(2)!);
+          if (aMinor != bMinor) return bMinor.compareTo(aMinor); // Descending minor
+
+          int aPatch = int.tryParse(aMatch.group(3) ?? '0') ?? 0;
+          int bPatch = int.tryParse(bMatch.group(3) ?? '0') ?? 0;
+          if (aPatch != bPatch) return bPatch.compareTo(aPatch); // Descending patch
+        } catch (_) {
+           // Fallback to string compare if parsing fails
+           return b.version.compareTo(a.version);
+        }
+      }
+      // Fallback for non-matching version strings
+      return b.version.compareTo(a.version);
+    });
+
+    return builds;
   }
 }

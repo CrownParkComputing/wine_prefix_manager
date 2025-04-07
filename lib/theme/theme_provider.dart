@@ -23,19 +23,19 @@ class ThemeProvider extends ChangeNotifier {
         notifyListeners();
       }
     } catch (e) {
-      print('Error loading theme settings: $e');
+      // Error loading theme settings
     }
   }
 
   Future<void> toggleTheme() async {
     _isDarkMode = !_isDarkMode;
     notifyListeners();
-    
+
     try {
       final file = _getSettingsFile();
       await file.writeAsString(jsonEncode({'darkMode': _isDarkMode}));
     } catch (e) {
-      print('Error saving theme settings: $e');
+      // Error saving theme settings
     }
   }
 

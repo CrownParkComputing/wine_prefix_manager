@@ -17,10 +17,10 @@ class PrefixStorageService {
         final dir = Directory(path.dirname(settings.gameLibraryPath!));
         if (!await dir.exists()) {
           await dir.create(recursive: true);
-          print('Created directory for custom game library path: ${dir.path}');
+          // Created directory for custom game library path
         }
       } catch (e) {
-        print('Warning: Could not create directory for custom game library path: $e');
+        // Warning: Could not create directory for custom game library path
         // Fallback to default path if directory creation fails
         return _getDefaultConfigPath();
       }
@@ -44,7 +44,7 @@ class PrefixStorageService {
   Future<List<WinePrefix>> loadPrefixes(Settings settings) async { // Accept Settings
     try {
       final filePath = await _getConfigPath(settings); // Pass settings
-      print('Loading prefixes from: $filePath'); // Log the path being used
+      // Loading prefixes from: $filePath
       final file = File(filePath);
       if (await file.exists()) {
         final content = await file.readAsString();
@@ -55,10 +55,10 @@ class PrefixStorageService {
         final List<dynamic> jsonList = jsonDecode(content);
         return jsonList.map((p) => WinePrefix.fromJson(p)).toList();
       } else {
-        print('Prefix file not found at: $filePath');
+        // Prefix file not found at: $filePath
       }
     } catch (e) {
-      print('Error loading prefixes: $e');
+      // Error loading prefixes
       // Depending on requirements, might rethrow, return empty list, or handle differently
     }
     return []; // Return empty list if file doesn't exist or on error
@@ -68,18 +68,18 @@ class PrefixStorageService {
   Future<void> savePrefixes(List<WinePrefix> prefixes, Settings settings) async { // Accept Settings
     try {
       final filePath = await _getConfigPath(settings); // Pass settings
-      print('Saving prefixes to: $filePath'); // Log the path being used
+      // Saving prefixes to: $filePath
       final file = File(filePath);
       // Ensure the directory exists before writing
       final dir = file.parent;
       if (!await dir.exists()) {
         await dir.create(recursive: true);
-        print('Created directory for saving prefixes: ${dir.path}');
+        // Created directory for saving prefixes
       }
       final jsonString = jsonEncode(prefixes.map((p) => p.toJson()).toList());
       await file.writeAsString(jsonString);
     } catch (e) {
-      print('Error saving prefixes: $e');
+      // Error saving prefixes
       // Rethrow or handle as appropriate
       rethrow;
     }

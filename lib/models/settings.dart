@@ -23,6 +23,7 @@ class Settings {
   final String vkd3dApiUrl;
   final String wineBuildsApiUrl;
   final String protonGeApiUrl;
+  final String protonExperimentalApiUrl; // Added for Proton Experimental
   final String twitchOAuthUrl;
   final String igdbApiBaseUrl;
   final String igdbImageBaseUrl;
@@ -41,6 +42,8 @@ class Settings {
     this.vkd3dApiUrl = 'https://api.github.com/repos/HansKristian-Work/vkd3d-proton/releases/latest',
     this.wineBuildsApiUrl = 'https://api.github.com/repos/Kron4ek/Wine-Builds/releases/tags/10.4', // Consider making tag configurable later
     this.protonGeApiUrl = 'https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases',
+    // Placeholder default - User should configure this in settings UI ideally
+    this.protonExperimentalApiUrl = 'https://api.github.com/repos/ValveSoftware/Proton/releases',
     this.twitchOAuthUrl = 'https://id.twitch.tv/oauth2/token',
     this.igdbApiBaseUrl = 'https://api.igdb.com/v4',
     required this.igdbImageBaseUrl, // Make it required, handle default in fromJson/load
@@ -60,6 +63,7 @@ class Settings {
     'vkd3dApiUrl': vkd3dApiUrl,
     'wineBuildsApiUrl': wineBuildsApiUrl,
     'protonGeApiUrl': protonGeApiUrl,
+    'protonExperimentalApiUrl': protonExperimentalApiUrl, // Add to toJson
     'twitchOAuthUrl': twitchOAuthUrl,
     'igdbApiBaseUrl': igdbApiBaseUrl,
     'igdbImageBaseUrl': igdbImageBaseUrl,
@@ -87,6 +91,7 @@ class Settings {
    vkd3dApiUrl: json['vkd3dApiUrl'] ?? 'https://api.github.com/repos/HansKristian-Work/vkd3d-proton/releases/latest',
    wineBuildsApiUrl: json['wineBuildsApiUrl'] ?? 'https://api.github.com/repos/Kron4ek/Wine-Builds/releases/tags/10.4',
    protonGeApiUrl: json['protonGeApiUrl'] ?? 'https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases',
+   protonExperimentalApiUrl: json['protonExperimentalApiUrl'] ?? 'https://api.github.com/repos/ValveSoftware/Proton/releases', // Add to fromJson
    twitchOAuthUrl: json['twitchOAuthUrl'] ?? 'https://id.twitch.tv/oauth2/token',
    igdbApiBaseUrl: json['igdbApiBaseUrl'] ?? 'https://api.igdb.com/v4',
    // Robust default handling for igdbImageBaseUrl
@@ -108,6 +113,7 @@ class Settings {
     String? vkd3dApiUrl,
     String? wineBuildsApiUrl,
     String? protonGeApiUrl,
+    String? protonExperimentalApiUrl, // Add to copyWith
     String? twitchOAuthUrl,
     String? igdbApiBaseUrl,
     String? igdbImageBaseUrl,
@@ -125,6 +131,7 @@ class Settings {
       vkd3dApiUrl: vkd3dApiUrl ?? this.vkd3dApiUrl,
       wineBuildsApiUrl: wineBuildsApiUrl ?? this.wineBuildsApiUrl,
       protonGeApiUrl: protonGeApiUrl ?? this.protonGeApiUrl,
+      protonExperimentalApiUrl: protonExperimentalApiUrl ?? this.protonExperimentalApiUrl, // Add logic
       twitchOAuthUrl: twitchOAuthUrl ?? this.twitchOAuthUrl,
       igdbApiBaseUrl: igdbApiBaseUrl ?? this.igdbApiBaseUrl,
       // Ensure non-nullable field is handled correctly
@@ -134,7 +141,7 @@ class Settings {
 
   // Add the missing buildsApiUrl property
   String get buildsApiUrl => 'https://api.default-builds-url.com';  // Add default URL
-  
+
   // Add a setter if you need to allow changing this value
   // set buildsApiUrl(String url) {
   //   // Implement using your existing storage mechanism
@@ -152,7 +159,7 @@ class AppSettings {
         return Settings.fromJson(jsonDecode(content));
       }
     } catch (e) {
-      print('Error loading settings: $e');
+      // Removed print statement
     }
 
     // Return default settings
@@ -168,6 +175,7 @@ class AppSettings {
       vkd3dApiUrl: 'https://api.github.com/repos/HansKristian-Work/vkd3d-proton/releases/latest',
       wineBuildsApiUrl: 'https://api.github.com/repos/Kron4ek/Wine-Builds/releases/tags/10.4',
       protonGeApiUrl: 'https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases',
+      protonExperimentalApiUrl: 'https://api.github.com/repos/ValveSoftware/Proton/releases', // Add default
       twitchOAuthUrl: 'https://id.twitch.tv/oauth2/token',
       igdbApiBaseUrl: 'https://api.igdb.com/v4',
       igdbImageBaseUrl: 'https://images.igdb.com/igdb/image/upload', // Correct default
@@ -180,7 +188,7 @@ class AppSettings {
       final file = File('$homeDir/.wine_prefix_manager_settings.json');
       await file.writeAsString(jsonEncode(settings.toJson()));
     } catch (e) {
-      print('Error saving settings: $e');
+      // Removed print statement
     }
   }
 
@@ -199,6 +207,7 @@ class AppSettings {
       vkd3dApiUrl: settings.vkd3dApiUrl,
       wineBuildsApiUrl: settings.wineBuildsApiUrl,
       protonGeApiUrl: settings.protonGeApiUrl,
+      protonExperimentalApiUrl: settings.protonExperimentalApiUrl, // Pass through
       twitchOAuthUrl: settings.twitchOAuthUrl,
       igdbApiBaseUrl: settings.igdbApiBaseUrl,
       igdbImageBaseUrl: settings.igdbImageBaseUrl,
