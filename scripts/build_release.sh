@@ -5,7 +5,7 @@
 
 set -e  # Exit on error
 
-VERSION="1.65.0"
+VERSION="1.7.0"
 APP_NAME="wine_prefix_manager"
 RELEASE_DIR="release"
 BUILD_DIR="build/linux/x64/release/bundle"
