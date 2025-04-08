@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import '../services/log_service.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
@@ -80,182 +81,244 @@ class _LogsPageState extends State<LogsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final filteredLogs = _getFilteredLogs();
+    final theme = Theme.of(context);
 
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Title and action buttons (Title Text Removed)
-              Row(
-                children: [
-                  // Removed Title Text Widget
-                  // const Text(
-                  //   'Application Logs',
-                  //   style: TextStyle(
-                  //     fontSize: 24,
-                  //     fontWeight: FontWeight.bold,
-                  //   ),
-                  // ),
-                  const Spacer(), // Takes up space where title was
-                  IconButton(
-                    icon: const Icon(Icons.save_alt),
-                    tooltip: 'Export Logs',
-                    onPressed: _exportLogs,
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.delete_sweep),
-                    tooltip: 'Clear Logs',
-                    onPressed: () {
-                      showDialog(
-                        context: context,
-                        builder: (context) => AlertDialog(
-                          title: const Text('Clear Logs'),
-                          content: const Text('Are you sure you want to clear all logs?'),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(context),
-                              child: const Text('Cancel'),
-                            ),
-                            TextButton(
-                              onPressed: () {
-                                _logService.clearLogs();
-                                Navigator.pop(context);
-                                setState(() {});
-                              },
-                              child: const Text('Clear'),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 8),
-
-              // Filter and search controls
-              Row(
-                children: [
-                  // Level filter
-                  DropdownButton<LogLevel>(
-                    value: _filterLevel,
-                    onChanged: (LogLevel? value) {
-                      if (value != null) {
-                        setState(() {
-                          _filterLevel = value;
-                        });
-                      }
-                    },
-                    items: LogLevel.values.map((level) {
-                      return DropdownMenuItem<LogLevel>(
-                        value: level,
-                        child: Text(level.toString().split('.').last),
-                      );
-                    }).toList(),
-                  ),
-
-                  const SizedBox(width: 16),
-
-                  // Search field
-                  Expanded(
-                    child: TextField(
-                      controller: _searchController,
-                      decoration: InputDecoration(
-                        hintText: 'Search logs',
-                        prefixIcon: const Icon(Icons.search),
-                        suffixIcon: _searchQuery.isNotEmpty
-                          ? IconButton(
-                              icon: const Icon(Icons.clear),
-                              onPressed: () {
-                                setState(() {
-                                  _searchController.clear();
-                                  _searchQuery = '';
-                                });
-                              },
-                            )
-                          : null,
-                        border: const OutlineInputBorder(),
-                        contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                      ),
-                      onChanged: (value) {
-                        setState(() {
-                          _searchQuery = value;
-                        });
-                      },
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Logs'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.delete),
+            tooltip: 'Clear Logs',
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text('Clear Logs'),
+                  content: const Text('Are you sure you want to clear all logs?'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Cancel'),
                     ),
+                    TextButton(
+                      onPressed: () {
+                        _logService.clearLogs();
+                        Navigator.pop(context);
+                        setState(() {});
+                      },
+                      child: const Text('Clear'),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.save),
+            tooltip: 'Export Logs',
+            onPressed: _exportLogs,
+          ),
+        ],
+      ),
+      body: Container(
+        color: theme.scaffoldBackgroundColor, // Use scaffold background color
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Spacer(),
+                      IconButton(
+                        icon: const Icon(Icons.save_alt),
+                        tooltip: 'Export Logs',
+                        onPressed: _exportLogs,
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete_sweep),
+                        tooltip: 'Clear Logs',
+                        onPressed: () {
+                          showDialog(
+                            context: context,
+                            builder: (context) => AlertDialog(
+                              title: const Text('Clear Logs'),
+                              content: const Text('Are you sure you want to clear all logs?'),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context),
+                                  child: const Text('Cancel'),
+                                ),
+                                TextButton(
+                                  onPressed: () {
+                                    _logService.clearLogs();
+                                    Navigator.pop(context);
+                                    setState(() {});
+                                  },
+                                  child: const Text('Clear'),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      DropdownButton<LogLevel>(
+                        value: _filterLevel,
+                        onChanged: (LogLevel? value) {
+                          if (value != null) {
+                            setState(() {
+                              _filterLevel = value;
+                            });
+                          }
+                        },
+                        items: LogLevel.values.map((level) {
+                          return DropdownMenuItem<LogLevel>(
+                            value: level,
+                            child: Text(level.toString().split('.').last),
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: TextField(
+                          controller: _searchController,
+                          decoration: InputDecoration(
+                            hintText: 'Search logs',
+                            prefixIcon: const Icon(Icons.search),
+                            suffixIcon: _searchQuery.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(Icons.clear),
+                                    onPressed: () {
+                                      setState(() {
+                                        _searchController.clear();
+                                        _searchQuery = '';
+                                      });
+                                    },
+                                  )
+                                : null,
+                            border: const OutlineInputBorder(),
+                            contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                          ),
+                          onChanged: (value) {
+                            setState(() {
+                              _searchQuery = value;
+                            });
+                          },
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
-            ],
-          ),
-        ),
+            ),
+            Divider(),
+            Expanded(
+              child: Builder(
+                builder: (context) {
+                  final logService = Provider.of<LogService>(context);
+                  // Fix: Use getLogs() method instead of the non-existent logEntries getter
+                  final logs = logService.getLogs();
 
-        Divider(),
-
-        // Logs list
-        Expanded(
-          child: filteredLogs.isEmpty
-            ? const Center(
-                child: Text('No logs matching the current filters'),
-              )
-            : ListView.builder(
-                itemCount: filteredLogs.length,
-                itemBuilder: (context, index) {
-                  final log = filteredLogs[index];
-                  return _buildLogItem(log);
+                  return logs.isEmpty
+                      ? const Center(
+                          child: Text('No logs matching the current filters'),
+                        )
+                      : ListView.builder(
+                          itemCount: logs.length,
+                          reverse: true,
+                          itemBuilder: (context, index) {
+                            final log = logs[logs.length - 1 - index];
+                            return _buildLogItem(log, theme);
+                          },
+                        );
                 },
               ),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 
-  Widget _buildLogItem(LogEntry log) {
-    Color? color;
-    Icon? icon;
-
-    // Set color and icon based on log level
+  Widget _buildLogItem(LogEntry log, ThemeData theme) {
+    Color textColor;
     switch (log.level) {
       case LogLevel.error:
-        color = Colors.red.shade100;
-        icon = const Icon(Icons.error_outline, color: Colors.red, size: 18);
+        textColor = theme.colorScheme.error;
         break;
       case LogLevel.warning:
-        color = Colors.orange.shade100;
-        icon = const Icon(Icons.warning_amber_outlined, color: Colors.orange, size: 18);
+        textColor = theme.colorScheme.tertiary;
         break;
-      case LogLevel.info:
-        color = null;
-        icon = const Icon(Icons.info_outline, color: Colors.blue, size: 18);
-        break;
-      case LogLevel.debug:
-        color = Colors.grey.shade200;
-        icon = const Icon(Icons.code, color: Colors.grey, size: 18);
-        break;
+      default:
+        textColor = theme.textTheme.bodyMedium?.color ?? Colors.white;
     }
 
     return Container(
-      color: color,
-      child: ListTile(
-        dense: true,
-        leading: icon,
-        title: Text(log.message),
-        subtitle: Text(
-          log.timestamp.toString().split('.')[0],
-          style: TextStyle(fontSize: 11),
+      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: theme.dividerColor, width: 0.5),
         ),
-        onLongPress: () {
-          Clipboard.setData(ClipboardData(text: log.toString()));
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Log copied to clipboard')),
-          );
-        },
+        color: Colors.transparent, // Ensure log items have transparent background
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                '${log.timestamp.hour}:${log.timestamp.minute}:${log.timestamp.second}',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: theme.textTheme.bodySmall?.color,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: _getLevelColor(log.level, theme).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  log.level.name.toUpperCase(),
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: _getLevelColor(log.level, theme),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            log.message,
+            style: TextStyle(color: textColor),
+          ),
+        ],
       ),
     );
+  }
+
+  Color _getLevelColor(LogLevel level, ThemeData theme) {
+    switch (level) {
+      case LogLevel.error:
+        return theme.colorScheme.error;
+      case LogLevel.warning:
+        return theme.colorScheme.tertiary;
+      case LogLevel.info:
+        return theme.colorScheme.primary;
+      default:
+        return theme.textTheme.bodyMedium?.color ?? Colors.white;
+    }
   }
 }

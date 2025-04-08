@@ -20,6 +20,7 @@ class _SettingsPageState extends State<SettingsPage> {
   late TextEditingController _igdbClientIdController;
   late TextEditingController _igdbClientSecretController;
   late TextEditingController _gameLibraryPathController;
+  late TextEditingController _backupPathController; // Add a controller for the backup path
   Settings? _settings;
   // Controllers for URL settings
   late TextEditingController _dxvkApiUrlController;
@@ -47,6 +48,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _twitchOAuthUrlController = TextEditingController();
     _igdbApiBaseUrlController = TextEditingController();
     _igdbImageBaseUrlController = TextEditingController();
+    _backupPathController = TextEditingController(); // Initialize the backup path controller
 
     _gameLibraryPathController = TextEditingController();
     _loadSettings();
@@ -63,6 +65,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _twitchOAuthUrlController.dispose();
     _igdbApiBaseUrlController.dispose();
     _igdbImageBaseUrlController.dispose();
+    _backupPathController.dispose(); // Dispose the backup path controller
 
     _igdbClientSecretController.dispose();
     _gameLibraryPathController.dispose();
@@ -89,6 +92,7 @@ class _SettingsPageState extends State<SettingsPage> {
       _igdbClientSecretController.text = settings.igdbClientSecret;
       _selectedCoverSize = settings.coverSize;
       _gameLibraryPathController.text = settings.gameLibraryPath ?? '';
+      _backupPathController.text = settings.backupPath ?? ''; // Add backup path to the initialization
       _imageCachePath = cachePath;
       _dxvkApiUrlController.text = settings.dxvkApiUrl;
       _vkd3dApiUrlController.text = settings.vkd3dApiUrl;
@@ -127,6 +131,9 @@ class _SettingsPageState extends State<SettingsPage> {
         gameLibraryPath: _gameLibraryPathController.text.trim().isEmpty
             ? null
             : _gameLibraryPathController.text.trim(),
+        backupPath: _backupPathController.text.trim().isEmpty
+            ? null
+            : _backupPathController.text.trim(), // Include the backup path
         dxvkApiUrl: _dxvkApiUrlController.text.trim().isEmpty
             ? defaultSettings.dxvkApiUrl
             : _dxvkApiUrlController.text.trim(),
@@ -174,27 +181,37 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _pickGameLibraryPath() async {
-    String? outputFile = await FilePicker.platform.saveFile(
-      dialogTitle: 'Select Game Library File Location',
-      fileName: '.wine_prefix_manager.json',
+    final outputFile = await FilePicker.platform.getDirectoryPath(
+      dialogTitle: 'Select Game Library Path',
+      initialDirectory: _gameLibraryPathController.text.isNotEmpty
+          ? _gameLibraryPathController.text
+          : _settings?.prefixDirectory,
     );
+
     if (outputFile != null) {
-      if (!outputFile.toLowerCase().endsWith('.json')) {
-        outputFile += '.json';
-      }
-      // Removed redundant null check here
       setState(() {
-        _gameLibraryPathController.text = outputFile!; // Use null assertion operator
+        _gameLibraryPathController.text = outputFile;
       });
     }
   }
 
-  // Function to reset API URLs to default - CORRECTLY PLACED IN CLASS SCOPE
+  Future<void> _pickBackupPath() async {
+    final directory = await FilePicker.platform.getDirectoryPath(
+      dialogTitle: 'Select Backup Folder',
+      initialDirectory: _backupPathController.text.isNotEmpty
+          ? _backupPathController.text
+          : _settings?.prefixDirectory,
+    );
+    if (directory != null) {
+      setState(() {
+        _backupPathController.text = directory;
+      });
+    }
+  }
+
   void _resetApiUrls() {
-    // Provide all required fields when creating default settings instance
     final defaultSettings = Settings(
       prefixDirectory: '', igdbClientId: '', igdbClientSecret: '', categories: [],
-      // Provide required URL fields (using their actual defaults from Settings constructor)
       dxvkApiUrl: 'https://api.github.com/repos/doitsujin/dxvk/releases/latest',
       vkd3dApiUrl: 'https://api.github.com/repos/HansKristian-Work/vkd3d-proton/releases/latest',
       wineBuildsApiUrl: 'https://api.github.com/repos/Kron4ek/Wine-Builds/releases/tags/10.4',
@@ -232,9 +249,9 @@ class _SettingsPageState extends State<SettingsPage> {
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
-            Wrap( // CORRECTED Wrap syntax
+            Wrap(
               spacing: 8,
-              runSpacing: 8, // Correctly placed parameter
+              runSpacing: 8,
               children: [
                 ..._settings!.categories.map((category) {
                   return Chip(
@@ -244,12 +261,12 @@ class _SettingsPageState extends State<SettingsPage> {
                       final updatedCategories =
                           List<String>.from(_settings!.categories)..remove(category);
                       setState(() {
-                        _settings = _settings!.copyWith(categories: updatedCategories); // Use copyWith
+                        _settings = _settings!.copyWith(categories: updatedCategories);
                       });
                       _saveSettings();
                     },
                   );
-                }).toList(), // Added toList() here
+                }).toList(),
                 ActionChip(
                   avatar: const Icon(Icons.add),
                   label: const Text('Add'),
@@ -288,12 +305,11 @@ class _SettingsPageState extends State<SettingsPage> {
               onPressed: () {
                 if (controller.text.isNotEmpty) {
                   final newCategory = controller.text.trim();
-                  // Avoid adding duplicates
                   if (!_settings!.categories.contains(newCategory)) {
                     final updatedCategories =
                         List<String>.from(_settings!.categories)..add(newCategory);
                     setState(() {
-                       _settings = _settings!.copyWith(categories: updatedCategories); // Use copyWith
+                      _settings = _settings!.copyWith(categories: updatedCategories);
                     });
                     _saveSettings();
                   }
@@ -313,7 +329,6 @@ class _SettingsPageState extends State<SettingsPage> {
     final themeProvider = Provider.of<ThemeProvider>(context);
 
     return Scaffold(
-      // appBar removed previously
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : Padding(
@@ -322,7 +337,6 @@ class _SettingsPageState extends State<SettingsPage> {
                 key: _formKey,
                 child: ListView(
                   children: [
-                    // Theme selector Card... (content omitted for brevity)
                     Card(
                       margin: const EdgeInsets.only(bottom: 16),
                       child: Padding(
@@ -330,36 +344,34 @@ class _SettingsPageState extends State<SettingsPage> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                             const Text(
-                               'Appearance',
-                               style: TextStyle(
-                                 fontSize: 18,
-                                 fontWeight: FontWeight.bold,
-                               ),
-                             ),
-                             const SizedBox(height: 16),
-                             SwitchListTile(
-                               title: const Text('Dark Mode'),
-                               subtitle: const Text('Enable dark theme'),
-                               secondary: Icon(
-                                 themeProvider.isDarkMode
-                                     ? Icons.dark_mode
-                                     : Icons.light_mode,
-                                 color: themeProvider.isDarkMode
-                                     ? Colors.amber
-                                     : Colors.deepPurple,
-                               ),
-                               value: themeProvider.isDarkMode,
-                               onChanged: (_) {
-                                 themeProvider.toggleTheme();
-                               },
-                             ),
+                            const Text(
+                              'Appearance',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            SwitchListTile(
+                              title: const Text('Dark Mode'),
+                              subtitle: const Text('Enable dark theme'),
+                              secondary: Icon(
+                                themeProvider.isDarkMode
+                                    ? Icons.dark_mode
+                                    : Icons.light_mode,
+                                color: themeProvider.isDarkMode
+                                    ? Colors.amber
+                                    : Colors.deepPurple,
+                              ),
+                              value: themeProvider.isDarkMode,
+                              onChanged: (_) {
+                                themeProvider.toggleTheme();
+                              },
+                            ),
                           ],
                         ),
                       ),
                     ),
-
-                    // Game Library Card... (content omitted for brevity)
                     Card(
                       margin: const EdgeInsets.only(bottom: 16),
                       child: Padding(
@@ -367,202 +379,194 @@ class _SettingsPageState extends State<SettingsPage> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                             const Text(
-                               'Game Library',
-                               style: TextStyle(
-                                 fontSize: 18,
-                                 fontWeight: FontWeight.bold,
-                               ),
-                             ),
-                             const SizedBox(height: 16),
-                             const Text('Cover Size'),
-                             const SizedBox(height: 8),
-                             SegmentedButton<CoverSize>(
-                               segments: const [
-                                 ButtonSegment<CoverSize>(
-                                   value: CoverSize.small,
-                                   label: Text('Small'),
-                                   icon: Icon(Icons.photo_size_select_small),
-                                 ),
-                                 ButtonSegment<CoverSize>(
-                                   value: CoverSize.medium,
-                                   label: Text('Medium'),
-                                   icon: Icon(Icons.photo_size_select_actual),
-                                 ),
-                                 ButtonSegment<CoverSize>(
-                                   value: CoverSize.large,
-                                   label: Text('Large'),
-                                   icon: Icon(Icons.photo_size_select_large),
-                                 ),
-                               ],
-                               selected: <CoverSize>{_selectedCoverSize},
-                               onSelectionChanged: (Set<CoverSize> newSelection) {
-                                 setState(() {
-                                   _selectedCoverSize = newSelection.first;
-                                 });
-                               },
-                             ),
+                            const Text(
+                              'Game Library',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            const Text('Cover Size'),
+                            const SizedBox(height: 8),
+                            SegmentedButton<CoverSize>(
+                              segments: const [
+                                ButtonSegment<CoverSize>(
+                                  value: CoverSize.small,
+                                  label: Text('Small'),
+                                  icon: Icon(Icons.photo_size_select_small),
+                                ),
+                                ButtonSegment<CoverSize>(
+                                  value: CoverSize.medium,
+                                  label: Text('Medium'),
+                                  icon: Icon(Icons.photo_size_select_actual),
+                                ),
+                                ButtonSegment<CoverSize>(
+                                  value: CoverSize.large,
+                                  label: Text('Large'),
+                                  icon: Icon(Icons.photo_size_select_large),
+                                ),
+                              ],
+                              selected: <CoverSize>{_selectedCoverSize},
+                              onSelectionChanged: (Set<CoverSize> newSelection) {
+                                setState(() {
+                                  _selectedCoverSize = newSelection.first;
+                                });
+                              },
+                            ),
                           ],
                         ),
                       ),
                     ),
-
-                    // Directories & Files Card... (content omitted for brevity)
-                     Card(
-                       margin: const EdgeInsets.only(bottom: 16),
-                       child: Padding(
-                         padding: const EdgeInsets.all(16.0),
-                         child: Column(
-                           crossAxisAlignment: CrossAxisAlignment.start,
-                           children: [
-                             const Text(
-                               'Directories & Files',
-                               style: TextStyle(
-                                 fontSize: 18,
-                                 fontWeight: FontWeight.bold,
-                               ),
-                             ),
-                             const SizedBox(height: 16),
-                             TextFormField(
-                               controller: _prefixDirController,
-                               decoration: InputDecoration(
-                                 labelText: 'Prefix Directory',
-                                 helperText: 'Main directory where prefixes are stored',
-                                 prefixIcon: const Icon(Icons.folder),
-                                 suffixIcon: IconButton(
-                                   icon: const Icon(Icons.more_horiz),
-                                   tooltip: 'Browse',
-                                   onPressed: _pickPrefixDirectory,
-                                 ),
-                               ),
-                               validator: (value) {
-                                 if (value == null || value.isEmpty) {
-                                   return 'Please enter a directory path';
-                                 }
-                                 return null;
-                               },
-                               readOnly: true,
-                               onTap: _pickPrefixDirectory,
-                             ),
-                             const SizedBox(height: 16),
-                             TextFormField(
-                               controller: _gameLibraryPathController,
-                               decoration: InputDecoration(
-                                 labelText: 'Game Library File Path (Optional)',
-                                 helperText: 'Path to save the game library JSON file. Leave blank for default (~/.wine_prefix_manager.json).',
-                                 prefixIcon: const Icon(Icons.save_alt),
-                                 suffixIcon: IconButton(
-                                   icon: const Icon(Icons.more_horiz),
-                                   tooltip: 'Browse',
-                                   onPressed: _pickGameLibraryPath,
-                                 ),
-                               ),
-                               readOnly: true,
-                               onTap: _pickGameLibraryPath,
-                             ),
-                           ],
-                         ),
-                       ),
-                     ),
-
-                    // Image Cache Path Display Card... (content omitted for brevity)
-                     Card(
-                       margin: const EdgeInsets.only(bottom: 16),
-                       child: ListTile(
-                         leading: const Icon(Icons.image),
-                         title: const Text('Image Cache Location'),
-                         subtitle: Text(_imageCachePath),
-                       ),
-                     ),
-
-                    // IGDB API Settings Card... (content omitted for brevity)
-                     Card(
-                       margin: const EdgeInsets.only(bottom: 16),
-                       child: Padding(
-                         padding: const EdgeInsets.all(16.0),
-                         child: Column(
-                           crossAxisAlignment: CrossAxisAlignment.start,
-                           children: [
-                             const Text(
-                               'IGDB API Settings',
-                               style: TextStyle(
-                                 fontSize: 18,
-                                 fontWeight: FontWeight.bold,
-                               ),
-                             ),
-                             const SizedBox(height: 16),
-                             TextFormField(
-                               controller: _igdbClientIdController,
-                               decoration: const InputDecoration(
-                                 labelText: 'IGDB Client ID',
-                                 hintText: 'Enter your Twitch/IGDB Client ID',
-                               ),
-                               validator: (value) {
-                                 if (value == null || value.isEmpty) {
-                                   return 'Please enter your IGDB Client ID';
-                                 }
-                                 return null;
-                               },
-                             ),
-                             const SizedBox(height: 16),
-                             TextFormField(
-                               controller: _igdbClientSecretController,
-                               decoration: const InputDecoration(
-                                 labelText: 'IGDB Client Secret',
-                                 hintText: 'Enter your Twitch/IGDB Client Secret',
-                               ),
-                               obscureText: true,
-                               validator: (value) {
-                                 if (value == null || value.isEmpty) {
-                                   return 'Please enter your IGDB Client Secret';
-                                 }
-                                 return null;
-                               },
-                             ),
-                           ],
-                         ),
-                       ),
-                     ),
-
-                    // API URLs Card... (content omitted for brevity)
-                     Card(
-                       margin: const EdgeInsets.only(bottom: 16),
-                       child: Padding(
-                         padding: const EdgeInsets.all(16.0),
-                         child: Column(
-                           crossAxisAlignment: CrossAxisAlignment.start,
-                           children: [
-                             Row(
-                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                               children: [
-                                 const Text(
-                                   'API URLs (Advanced)',
-                                   style: TextStyle(
-                                     fontSize: 18,
-                                     fontWeight: FontWeight.bold,
-                                   ),
-                                 ),
-                                 TextButton(
-                                   onPressed: _resetApiUrls,
-                                   child: const Text('Reset Defaults'),
-                                 ),
-                               ],
-                             ),
-                             const SizedBox(height: 16),
-                             _buildUrlTextField(_dxvkApiUrlController, 'DXVK API URL'),
-                             _buildUrlTextField(_vkd3dApiUrlController, 'VKD3D-Proton API URL'),
-                             _buildUrlTextField(_wineBuildsApiUrlController, 'Wine Builds API URL'),
-                             _buildUrlTextField(_protonGeApiUrlController, 'Proton-GE API URL'),
-                             _buildUrlTextField(_twitchOAuthUrlController, 'Twitch OAuth URL'),
-                             _buildUrlTextField(_igdbApiBaseUrlController, 'IGDB API Base URL'),
-                             _buildUrlTextField(_igdbImageBaseUrlController, 'IGDB Image Base URL'),
-                           ],
-                         ),
-                       ),
-                     ),
-
+                    Card(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Directories & Files',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            TextFormField(
+                              controller: _prefixDirController,
+                              decoration: InputDecoration(
+                                labelText: 'Prefix Directory',
+                                helperText: 'Main directory where prefixes are stored',
+                                prefixIcon: const Icon(Icons.folder),
+                                suffixIcon: IconButton(
+                                  icon: const Icon(Icons.more_horiz),
+                                  tooltip: 'Browse',
+                                  onPressed: _pickPrefixDirectory,
+                                ),
+                              ),
+                              validator: (value) {
+                                if (value == null || value.isEmpty) {
+                                  return 'Please enter a directory path';
+                                }
+                                return null;
+                              },
+                              readOnly: true,
+                              onTap: _pickPrefixDirectory,
+                            ),
+                            const SizedBox(height: 16),
+                            TextFormField(
+                              controller: _gameLibraryPathController,
+                              decoration: InputDecoration(
+                                labelText: 'Game Library File Path (Optional)',
+                                helperText: 'Path to save the game library JSON file. Leave blank for default (~/.wine_prefix_manager.json).',
+                                prefixIcon: const Icon(Icons.save_alt),
+                                suffixIcon: IconButton(
+                                  icon: const Icon(Icons.more_horiz),
+                                  tooltip: 'Browse',
+                                  onPressed: _pickGameLibraryPath,
+                                ),
+                              ),
+                              readOnly: true,
+                              onTap: _pickGameLibraryPath,
+                            ),
+                            const SizedBox(height: 16),
+                            _buildBackupFolderSetting(), // Add backup path setting
+                          ],
+                        ),
+                      ),
+                    ),
+                    Card(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      child: ListTile(
+                        leading: const Icon(Icons.image),
+                        title: const Text('Image Cache Location'),
+                        subtitle: Text(_imageCachePath),
+                      ),
+                    ),
+                    Card(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'IGDB API Settings',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            TextFormField(
+                              controller: _igdbClientIdController,
+                              decoration: const InputDecoration(
+                                labelText: 'IGDB Client ID',
+                                hintText: 'Enter your Twitch/IGDB Client ID',
+                              ),
+                              validator: (value) {
+                                if (value == null || value.isEmpty) {
+                                  return 'Please enter your IGDB Client ID';
+                                }
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 16),
+                            TextFormField(
+                              controller: _igdbClientSecretController,
+                              decoration: const InputDecoration(
+                                labelText: 'IGDB Client Secret',
+                                hintText: 'Enter your Twitch/IGDB Client Secret',
+                              ),
+                              obscureText: true,
+                              validator: (value) {
+                                if (value == null || value.isEmpty) {
+                                  return 'Please enter your IGDB Client Secret';
+                                }
+                                return null;
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    Card(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text(
+                                  'API URLs (Advanced)',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                TextButton(
+                                  onPressed: _resetApiUrls,
+                                  child: const Text('Reset Defaults'),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            _buildUrlTextField(_dxvkApiUrlController, 'DXVK API URL'),
+                            _buildUrlTextField(_vkd3dApiUrlController, 'VKD3D-Proton API URL'),
+                            _buildUrlTextField(_wineBuildsApiUrlController, 'Wine Builds API URL'),
+                            _buildUrlTextField(_protonGeApiUrlController, 'Proton-GE API URL'),
+                            _buildUrlTextField(_twitchOAuthUrlController, 'Twitch OAuth URL'),
+                            _buildUrlTextField(_igdbApiBaseUrlController, 'IGDB API Base URL'),
+                            _buildUrlTextField(_igdbImageBaseUrlController, 'IGDB Image Base URL'),
+                          ],
+                        ),
+                      ),
+                    ),
                     _buildCategoryManagement(),
-
                     const SizedBox(height: 24),
                     ElevatedButton(
                       onPressed: _saveSettings,
@@ -589,6 +593,41 @@ class _SettingsPageState extends State<SettingsPage> {
           border: const OutlineInputBorder(),
         ),
       ),
+    );
+  }
+
+  Widget _buildBackupFolderSetting() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Backup Folder', style: TextStyle(fontWeight: FontWeight.bold)),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _backupPathController,
+                readOnly: true,
+                decoration: const InputDecoration(
+                  hintText: 'Path for game backups',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            ElevatedButton.icon(
+              icon: const Icon(Icons.folder_open),
+              label: const Text('Browse'),
+              onPressed: _pickBackupPath,
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        const Text(
+          'This is where game backups will be stored.',
+          style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+        ),
+      ],
     );
   }
 }

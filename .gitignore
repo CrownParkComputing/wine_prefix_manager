@@ -109,3 +109,10 @@ wine_builds/
 *.sqlite3
 *.log
 *.lock
+
+# Release build artifacts (unpacked and temp)
+release/AppDir/
+release/appimagetool-extracted/
+release/*-linux-x64/
+release/appimagetool
+release/run-appimagetool.sh

@@ -508,4 +508,18 @@ class PrefixProvider with ChangeNotifier {
       // Optionally rethrow or handle more gracefully
     }
   }
+
+  // Fix this method to properly create GameEntry objects for all executables
+  List<GameEntry> getAllGamesFromPrefixes() {
+    final allGames = <GameEntry>[];
+    
+    for (final prefix in _prefixes) {
+      // For each executable in the prefix, create a GameEntry
+      for (final exe in prefix.exeEntries) {
+        allGames.add(GameEntry(prefix: prefix, exe: exe));
+      }
+    }
+    
+    return allGames;
+  }
 }

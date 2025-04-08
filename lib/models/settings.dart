@@ -16,14 +16,15 @@ class Settings {
   final DateTime? igdbTokenExpiry;
   final CoverSize coverSize;
   final List<String> categories;
-  final String? gameLibraryPath; // Path to save the prefix/game data JSON
+  final String? gameLibraryPath;
+  final String? backupPath; // Add backupPath field
 
   // API and Service URLs
   final String dxvkApiUrl;
   final String vkd3dApiUrl;
   final String wineBuildsApiUrl;
   final String protonGeApiUrl;
-  final String protonExperimentalApiUrl; // Added for Proton Experimental
+  final String protonExperimentalApiUrl;
   final String twitchOAuthUrl;
   final String igdbApiBaseUrl;
   final String igdbImageBaseUrl;
@@ -36,69 +37,74 @@ class Settings {
     this.igdbTokenExpiry,
     this.coverSize = CoverSize.medium,
     required this.categories,
-    this.gameLibraryPath, // Add to constructor
-    // Add new URL fields (optional with defaults)
+    this.gameLibraryPath,
+    this.backupPath, // Add to constructor
     this.dxvkApiUrl = 'https://api.github.com/repos/doitsujin/dxvk/releases/latest',
     this.vkd3dApiUrl = 'https://api.github.com/repos/HansKristian-Work/vkd3d-proton/releases/latest',
-    this.wineBuildsApiUrl = 'https://api.github.com/repos/Kron4ek/Wine-Builds/releases/tags/10.4', // Consider making tag configurable later
+    this.wineBuildsApiUrl = 'https://api.github.com/repos/Kron4ek/Wine-Builds/releases/tags/10.4',
     this.protonGeApiUrl = 'https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases',
-    // Placeholder default - User should configure this in settings UI ideally
     this.protonExperimentalApiUrl = 'https://api.github.com/repos/ValveSoftware/Proton/releases',
     this.twitchOAuthUrl = 'https://id.twitch.tv/oauth2/token',
     this.igdbApiBaseUrl = 'https://api.igdb.com/v4',
-    required this.igdbImageBaseUrl, // Make it required, handle default in fromJson/load
+    required this.igdbImageBaseUrl,
   });
 
   Map<String, dynamic> toJson() => {
-    'prefixDirectory': prefixDirectory,
-    'igdbClientId': igdbClientId,
-    'igdbClientSecret': igdbClientSecret,
-    'igdbAccessToken': igdbAccessToken,
-    'igdbTokenExpiry': igdbTokenExpiry?.toIso8601String(),
-    'coverSize': coverSize.toString(),
-    'categories': categories,
-    'gameLibraryPath': gameLibraryPath, // Add to toJson
-    // Add URLs to toJson
-    'dxvkApiUrl': dxvkApiUrl,
-    'vkd3dApiUrl': vkd3dApiUrl,
-    'wineBuildsApiUrl': wineBuildsApiUrl,
-    'protonGeApiUrl': protonGeApiUrl,
-    'protonExperimentalApiUrl': protonExperimentalApiUrl, // Add to toJson
-    'twitchOAuthUrl': twitchOAuthUrl,
-    'igdbApiBaseUrl': igdbApiBaseUrl,
-    'igdbImageBaseUrl': igdbImageBaseUrl,
-  };
+        'prefixDirectory': prefixDirectory,
+        'igdbClientId': igdbClientId,
+        'igdbClientSecret': igdbClientSecret,
+        'igdbAccessToken': igdbAccessToken,
+        'igdbTokenExpiry': igdbTokenExpiry?.toIso8601String(),
+        'coverSize': coverSize.toString(),
+        'categories': categories,
+        'gameLibraryPath': gameLibraryPath,
+        'backupPath': backupPath, // Add to toJson
+        'dxvkApiUrl': dxvkApiUrl,
+        'vkd3dApiUrl': vkd3dApiUrl,
+        'wineBuildsApiUrl': wineBuildsApiUrl,
+        'protonGeApiUrl': protonGeApiUrl,
+        'protonExperimentalApiUrl': protonExperimentalApiUrl,
+        'twitchOAuthUrl': twitchOAuthUrl,
+        'igdbApiBaseUrl': igdbApiBaseUrl,
+        'igdbImageBaseUrl': igdbImageBaseUrl,
+      };
 
   factory Settings.fromJson(Map<String, dynamic> json) => Settings(
-    prefixDirectory: json['prefixDirectory'] ?? '',
-    igdbClientId: json['igdbClientId'] ?? '',
-    igdbClientSecret: json['igdbClientSecret'] ?? '',
-    igdbAccessToken: json['igdbAccessToken'],
-    igdbTokenExpiry: json['igdbTokenExpiry'] != null
-      ? DateTime.parse(json['igdbTokenExpiry'])
-      : null,
-    coverSize: json['coverSize'] != null
-      ? CoverSize.values.firstWhere(
-          (e) => e.toString() == json['coverSize'],
-          orElse: () => CoverSize.medium,
-        )
-      : CoverSize.medium,
-    categories: (json['categories'] as List<dynamic>?)?.cast<String>() ??
-               ['Favorites', 'Currently Playing', 'Completed', 'Backlog'],
-   gameLibraryPath: json['gameLibraryPath'], // Add to fromJson
-   // Add URLs to fromJson, providing defaults if missing
-   dxvkApiUrl: json['dxvkApiUrl'] ?? 'https://api.github.com/repos/doitsujin/dxvk/releases/latest',
-   vkd3dApiUrl: json['vkd3dApiUrl'] ?? 'https://api.github.com/repos/HansKristian-Work/vkd3d-proton/releases/latest',
-   wineBuildsApiUrl: json['wineBuildsApiUrl'] ?? 'https://api.github.com/repos/Kron4ek/Wine-Builds/releases/tags/10.4',
-   protonGeApiUrl: json['protonGeApiUrl'] ?? 'https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases',
-   protonExperimentalApiUrl: json['protonExperimentalApiUrl'] ?? 'https://api.github.com/repos/ValveSoftware/Proton/releases', // Add to fromJson
-   twitchOAuthUrl: json['twitchOAuthUrl'] ?? 'https://id.twitch.tv/oauth2/token',
-   igdbApiBaseUrl: json['igdbApiBaseUrl'] ?? 'https://api.igdb.com/v4',
-   // Robust default handling for igdbImageBaseUrl
-   igdbImageBaseUrl: (json['igdbImageBaseUrl'] != null && json['igdbImageBaseUrl'].isNotEmpty)
-                      ? json['igdbImageBaseUrl']
-                      : 'https://images.igdb.com/igdb/image/upload', // Default if null or empty
- );
+        prefixDirectory: json['prefixDirectory'] ?? '',
+        igdbClientId: json['igdbClientId'] ?? '',
+        igdbClientSecret: json['igdbClientSecret'] ?? '',
+        igdbAccessToken: json['igdbAccessToken'],
+        igdbTokenExpiry: json['igdbTokenExpiry'] != null
+            ? DateTime.parse(json['igdbTokenExpiry'])
+            : null,
+        coverSize: json['coverSize'] != null
+            ? CoverSize.values.firstWhere(
+                (e) => e.toString() == json['coverSize'],
+                orElse: () => CoverSize.medium,
+              )
+            : CoverSize.medium,
+        categories: (json['categories'] as List<dynamic>?)?.cast<String>() ??
+            ['Favorites', 'Currently Playing', 'Completed', 'Backlog'],
+        gameLibraryPath: json['gameLibraryPath'],
+        backupPath: json['backupPath'], // Add to fromJson
+        dxvkApiUrl: json['dxvkApiUrl'] ??
+            'https://api.github.com/repos/doitsujin/dxvk/releases/latest',
+        vkd3dApiUrl: json['vkd3dApiUrl'] ??
+            'https://api.github.com/repos/HansKristian-Work/vkd3d-proton/releases/latest',
+        wineBuildsApiUrl: json['wineBuildsApiUrl'] ??
+            'https://api.github.com/repos/Kron4ek/Wine-Builds/releases/tags/10.4',
+        protonGeApiUrl: json['protonGeApiUrl'] ??
+            'https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases',
+        protonExperimentalApiUrl: json['protonExperimentalApiUrl'] ??
+            'https://api.github.com/repos/ValveSoftware/Proton/releases',
+        twitchOAuthUrl: json['twitchOAuthUrl'] ??
+            'https://id.twitch.tv/oauth2/token',
+        igdbApiBaseUrl: json['igdbApiBaseUrl'] ?? 'https://api.igdb.com/v4',
+        igdbImageBaseUrl: (json['igdbImageBaseUrl'] != null &&
+                json['igdbImageBaseUrl'].isNotEmpty)
+            ? json['igdbImageBaseUrl']
+            : 'https://images.igdb.com/igdb/image/upload',
+      );
 
   Settings copyWith({
     String? prefixDirectory,
@@ -109,11 +115,12 @@ class Settings {
     CoverSize? coverSize,
     List<String>? categories,
     String? gameLibraryPath,
+    String? backupPath, // Add to copyWith
     String? dxvkApiUrl,
     String? vkd3dApiUrl,
     String? wineBuildsApiUrl,
     String? protonGeApiUrl,
-    String? protonExperimentalApiUrl, // Add to copyWith
+    String? protonExperimentalApiUrl,
     String? twitchOAuthUrl,
     String? igdbApiBaseUrl,
     String? igdbImageBaseUrl,
@@ -127,26 +134,20 @@ class Settings {
       coverSize: coverSize ?? this.coverSize,
       categories: categories ?? this.categories,
       gameLibraryPath: gameLibraryPath ?? this.gameLibraryPath,
+      backupPath: backupPath ?? this.backupPath, // Add logic
       dxvkApiUrl: dxvkApiUrl ?? this.dxvkApiUrl,
       vkd3dApiUrl: vkd3dApiUrl ?? this.vkd3dApiUrl,
       wineBuildsApiUrl: wineBuildsApiUrl ?? this.wineBuildsApiUrl,
       protonGeApiUrl: protonGeApiUrl ?? this.protonGeApiUrl,
-      protonExperimentalApiUrl: protonExperimentalApiUrl ?? this.protonExperimentalApiUrl, // Add logic
+      protonExperimentalApiUrl:
+          protonExperimentalApiUrl ?? this.protonExperimentalApiUrl,
       twitchOAuthUrl: twitchOAuthUrl ?? this.twitchOAuthUrl,
       igdbApiBaseUrl: igdbApiBaseUrl ?? this.igdbApiBaseUrl,
-      // Ensure non-nullable field is handled correctly
       igdbImageBaseUrl: igdbImageBaseUrl ?? this.igdbImageBaseUrl,
     );
   }
 
-  // Add the missing buildsApiUrl property
-  String get buildsApiUrl => 'https://api.default-builds-url.com';  // Add default URL
-
-  // Add a setter if you need to allow changing this value
-  // set buildsApiUrl(String url) {
-  //   // Implement using your existing storage mechanism
-  // }
-
+  String get buildsApiUrl => 'https://api.default-builds-url.com';
 }
 
 class AppSettings {
@@ -158,27 +159,28 @@ class AppSettings {
         final content = await file.readAsString();
         return Settings.fromJson(jsonDecode(content));
       }
-    } catch (e) {
-      // Removed print statement
-    }
+    } catch (e) {}
 
-    // Return default settings
     final homeDir = Platform.environment['HOME']!;
     return Settings(
-      prefixDirectory: path.join(homeDir, '.wine_prefixes'), // Use path.join
+      prefixDirectory: path.join(homeDir, '.wine_prefixes'),
       igdbClientId: '',
       igdbClientSecret: '',
       categories: ['Favorites', 'Currently Playing', 'Completed', 'Backlog'],
       gameLibraryPath: null,
-      // Provide ALL required fields for the default constructor call
+      backupPath: null,
       dxvkApiUrl: 'https://api.github.com/repos/doitsujin/dxvk/releases/latest',
-      vkd3dApiUrl: 'https://api.github.com/repos/HansKristian-Work/vkd3d-proton/releases/latest',
-      wineBuildsApiUrl: 'https://api.github.com/repos/Kron4ek/Wine-Builds/releases/tags/10.4',
-      protonGeApiUrl: 'https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases',
-      protonExperimentalApiUrl: 'https://api.github.com/repos/ValveSoftware/Proton/releases', // Add default
+      vkd3dApiUrl:
+          'https://api.github.com/repos/HansKristian-Work/vkd3d-proton/releases/latest',
+      wineBuildsApiUrl:
+          'https://api.github.com/repos/Kron4ek/Wine-Builds/releases/tags/10.4',
+      protonGeApiUrl:
+          'https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases',
+      protonExperimentalApiUrl:
+          'https://api.github.com/repos/ValveSoftware/Proton/releases',
       twitchOAuthUrl: 'https://id.twitch.tv/oauth2/token',
       igdbApiBaseUrl: 'https://api.igdb.com/v4',
-      igdbImageBaseUrl: 'https://images.igdb.com/igdb/image/upload', // Correct default
+      igdbImageBaseUrl: 'https://images.igdb.com/igdb/image/upload',
     );
   }
 
@@ -187,12 +189,11 @@ class AppSettings {
       final homeDir = Platform.environment['HOME']!;
       final file = File('$homeDir/.wine_prefix_manager_settings.json');
       await file.writeAsString(jsonEncode(settings.toJson()));
-    } catch (e) {
-      // Removed print statement
-    }
+    } catch (e) {}
   }
 
-  static Future<Settings> updateToken(Settings settings, String token, Duration expiry) async {
+  static Future<Settings> updateToken(
+      Settings settings, String token, Duration expiry) async {
     final updatedSettings = Settings(
       prefixDirectory: settings.prefixDirectory,
       igdbClientId: settings.igdbClientId,
@@ -201,13 +202,13 @@ class AppSettings {
       igdbTokenExpiry: DateTime.now().add(expiry),
       coverSize: settings.coverSize,
       categories: settings.categories,
-      gameLibraryPath: settings.gameLibraryPath, // Pass through gameLibraryPath
-      // Pass through URL fields
+      gameLibraryPath: settings.gameLibraryPath,
+      backupPath: settings.backupPath,
       dxvkApiUrl: settings.dxvkApiUrl,
       vkd3dApiUrl: settings.vkd3dApiUrl,
       wineBuildsApiUrl: settings.wineBuildsApiUrl,
       protonGeApiUrl: settings.protonGeApiUrl,
-      protonExperimentalApiUrl: settings.protonExperimentalApiUrl, // Pass through
+      protonExperimentalApiUrl: settings.protonExperimentalApiUrl,
       twitchOAuthUrl: settings.twitchOAuthUrl,
       igdbApiBaseUrl: settings.igdbApiBaseUrl,
       igdbImageBaseUrl: settings.igdbImageBaseUrl,

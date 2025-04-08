@@ -25,6 +25,7 @@ import 'pages/home_page.dart';
 import 'pages/manage_prefixes_page.dart';
 import 'pages/settings_page.dart';
 import 'pages/logs_page.dart';
+import 'pages/file_manager_page.dart';
 import 'widgets/rename_prefix_dialog.dart'; // Import RenamePrefixDialog
 
 // Constants
@@ -148,13 +149,12 @@ class _MyAppState extends State<MyApp> {
     return Consumer<ThemeProvider>(
       builder: (context, themeProvider, child) {
         return MaterialApp(
-          // title: appTitle, // Removed title
-          // FIX: Use themeProvider.themeData and check dark theme definition
+          title: 'Wine Prefix Manager',
+          // Replace the routes and initialRoute with home: MainScaffold() to use the navigation rail
+          home: const MainScaffold(),
           theme: themeProvider.themeData, // Use dynamic theme data
-          // darkTheme: ThemeProvider._darkTheme, // Access static dark theme if needed
           themeMode: themeProvider.isDarkMode ? ThemeMode.dark : ThemeMode.light, // Set mode based on provider state
           debugShowCheckedModeBanner: false,
-          home: const MainScaffold(),
         );
       },
     );
@@ -225,29 +225,23 @@ class _MainScaffoldState extends State<MainScaffold> {
     // Pass the UIActionService methods down as needed
     switch (index) {
       case 0:
-        // FIX: Remove onGameTap parameter again
         return const HomePage();
       case 1:
-        // FIX: Provide all required parameters for ManagePrefixesPage
         return ManagePrefixesPage(
-           settings: Provider.of<Settings>(context, listen: false), // Provide settings
+           settings: Provider.of<Settings>(context, listen: false),
            onAddExecutable: (prefix) => _uiActionService.addExecutableToPrefix(context, prefix),
            onShowCommonComponents: (context, prefix) => _uiActionService.showCommonComponentsDialog(context, prefix),
-           // Implement delete callbacks using PrefixProvider
            onDeletePrefix: (ctx, pfx) => prefixProvider.deletePrefix(pfx),
            onDeleteExecutable: (ctx, pfx, exe) => prefixProvider.deleteExecutable(pfx, exe),
-           // Implement rename callback
            onRenamePrefix: (ctx, pfx, newName) async {
               try {
                  await prefixProvider.renamePrefix(pfx, newName);
-                 // Optionally show success message
                  if (mounted) {
                     ScaffoldMessenger.of(ctx).showSnackBar(
                        SnackBar(content: Text('Prefix renamed to "$newName"')),
                     );
                  }
               } catch (e) {
-                 // Error is handled by the provider, but show snackbar here too
                  if (mounted) {
                     ScaffoldMessenger.of(ctx).showSnackBar(
                        SnackBar(content: Text('Error renaming prefix: $e'), backgroundColor: Theme.of(ctx).colorScheme.error),
@@ -255,7 +249,6 @@ class _MainScaffoldState extends State<MainScaffold> {
                  }
               }
            },
-           // Implement other callbacks
            onRunExe: (pfx, exe) async {
              try {
                await processService.runExecutable(
@@ -277,7 +270,6 @@ class _MainScaffoldState extends State<MainScaffold> {
                final success = await processService.killProcess(pid);
                if (success) {
                  logService.log('Kill signal sent to ${exe.name} (PID: $pid)');
-                 // State update happens in _onProcessExit
                } else {
                  logService.log('Failed to send kill signal to ${exe.name} (PID: $pid)', LogLevel.error);
                  ScaffoldMessenger.of(context).showSnackBar(
@@ -288,7 +280,7 @@ class _MainScaffoldState extends State<MainScaffold> {
                 logService.log('Process for ${exe.name} not found in running list.', LogLevel.warning);
              }
            },
-           runningProcesses: _runningProcesses, // Pass the state map
+           runningProcesses: _runningProcesses,
            onRunWinetricksGui: (pfx) async {
               try {
                 await prefixManagementService.runWinetricksGui(pfx);
@@ -299,13 +291,10 @@ class _MainScaffoldState extends State<MainScaffold> {
                 );
               }
            },
-           // onShowWinetricksVerbs callback removed
            onRunInstaller: (pfx) async {
-              // Use UIActionService to handle file picking and execution
               await _uiActionService.runInstallerInPrefix(context, pfx);
            },
            onExploreHostFiles: (pfx) async {
-              // Call PrefixManagementService to run wine explorer
               try {
                 await prefixManagementService.runWineExplorer(pfx);
               } catch (e) {
@@ -330,9 +319,21 @@ class _MainScaffoldState extends State<MainScaffold> {
         return const SettingsPage();
       case 3:
         return const LogsPage();
+      case 4:
+        return _buildFileManagerPage(context);
       default:
         return const Center(child: Text('Unknown Page'));
     }
+  }
+
+  Widget _buildFileManagerPage(BuildContext context) {
+    final prefixProvider = Provider.of<PrefixProvider>(context, listen: false);
+    // Use getAllGamesFromPrefixes() directly
+    final allGames = prefixProvider.getAllGamesFromPrefixes();
+    
+    // Even if no games are available, we still want to show the FileManagerPage
+    // to allow users to see any in-progress backup operations
+    return FileManagerPage(game: allGames.isNotEmpty ? allGames.first : null);
   }
 
   @override
@@ -382,10 +383,15 @@ class _MainScaffoldState extends State<MainScaffold> {
                       selectedIcon: Icon(Icons.settings),
                       label: Text('Settings'),
                     ),
-                     NavigationRailDestination(
+                    NavigationRailDestination(
                       icon: Icon(Icons.article_outlined),
                       selectedIcon: Icon(Icons.article),
                       label: Text('Logs'),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.archive_outlined),
+                      selectedIcon: Icon(Icons.archive),
+                      label: Text('Files'),
                     ),
                   ],
                 ),

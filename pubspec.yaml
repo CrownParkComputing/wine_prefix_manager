@@ -1,7 +1,7 @@
 name: wine_prefix_manager
 description: A wine prefix manager for Linux gaming
 publish_to: 'none'
-version: 1.6.0
+version: 1.6.1
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -17,7 +17,7 @@ dependencies:
   http: ^1.1.0  # For API requests to GitHub
   dio: ^5.0.0
   process_run: ^0.13.0
-  file_picker: ^10.0.0
+  file_picker: ^5.3.1
   url_launcher: ^6.1.6
   window_manager: ^0.4.3 # Updated version
   archive: ^3.3.7  # For tar.gz extraction

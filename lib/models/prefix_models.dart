@@ -12,12 +12,15 @@ class WinePrefix {
   final PrefixType type;
   final List<ExeEntry> exeEntries;
 
+  final List<GameEntry>? gameEntries; // Change to final since the constructor is const
+
   const WinePrefix({
     required this.name,
     required this.path,
     required this.wineBuildPath,
     required this.type,
     required this.exeEntries,
+    this.gameEntries,
   });
 
   Map<String, dynamic> toJson() => {
