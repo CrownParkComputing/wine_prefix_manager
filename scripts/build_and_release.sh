@@ -22,8 +22,10 @@ VERSION=${VERSION//+/}
 
 # Parse arguments
 BUILD_TYPE="release"
-INCREMENT="patch"
 SKIP_GIT=false
+DISTRO="arch"
+RELEASE_TYPE=""
+INCREMENT="patch"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -43,6 +45,23 @@ while [[ $# -gt 0 ]]; do
             SKIP_GIT=true
             shift
             ;;
+        --distro)
+            DISTRO="$2"
+            shift 2
+            # Validate distro
+            case "$DISTRO" in
+                "arch"|"debian"|"ubuntu")
+                    ;;
+                *)
+                    echo "Error: Unsupported distro '$DISTRO'. Supported distros: arch, debian, ubuntu"
+                    exit 1
+                    ;;
+            esac
+            ;;
+        --release-type)
+            RELEASE_TYPE="$2"
+            shift 2
+            ;;
         *)
             echo "Unknown option: $1"
             exit 1
@@ -50,11 +69,29 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Ensure script is run from project root
-if [ ! -f "pubspec.yaml" ]; then
-    echo "Error: This script must be run from the project root directory!"
-    exit 1
+# Prompt for release type if not specified
+if [ -z "$RELEASE_TYPE" ]; then
+    echo "Choose release type (major, minor, patch):"
+    read -r RELEASE_TYPE
+    echo
 fi
+
+# Map release type to increment type
+case "$RELEASE_TYPE" in
+    major)
+        INCREMENT="major"
+        ;;
+    minor)
+        INCREMENT="minor"
+        ;;
+    patch)
+        INCREMENT="patch"
+        ;;
+    *)
+        echo "Invalid release type: $RELEASE_TYPE. Valid options: major, minor, patch"
+        exit 1
+        ;;
+esac
 
 # Version increment function
 increment_version() {
@@ -150,6 +187,40 @@ if [ "$SKIP_GIT" = false ]; then
     echo "Creating source code archive..."
     SOURCE_ZIP="${RELEASE_DIR}/${APP_NAME}-${VERSION}-source.zip"
     git archive --format zip --output "$SOURCE_ZIP" HEAD
+fi
+
+# Create PKGBUILD for Arch Linux
+if [ "$DISTRO" = "arch" ]; then
+    PKGBUILD_PATH="${RELEASE_DIR}/${APP_NAME}.PKGBUILD"
+    echo "Creating PKGBUILD for Arch Linux..."
+    
+    cat > "$PKGBUILD_PATH" <<EOF
+# Maintainer: Your Name <your.email@example.com>
+pkgname=${APP_NAME}
+pkgver=${VERSION}
+pkgrel=1
+pkgdesc="Wine Prefix Manager"
+arch=(x86_64)
+url="https://github.com/jon/wine_prefix_manager"
+license=(MIT)
+depends=(wine)
+source=("${APP_NAME}-${VERSION}-linux-x64-release.tar.gz::https://github.com/jon/wine_prefix_manager/releases/latest/download/${APP_NAME}-${VERSION}-linux-x64-release.tar.gz")
+sha256sums=(\$(sha256sum "${RELEASE_DIR}/${APP_NAME}-${VERSION}-linux-x64-release.tar.gz" | awk '{print $1}'))
+
+build() {
+    mkdir -p build
+    tar -xzf "${SOURCE}" -C build
+    cd build
+    # Add any additional build steps if needed
+}
+
+package() {
+    cd build
+    make DESTDIR="\$pkgdir/" install
+}
+EOF
+
+    echo "PKGBUILD created at: $PKGBUILD_PATH"
 fi
 
 echo "Build artifacts created in ${RELEASE_DIR}/ directory:"
