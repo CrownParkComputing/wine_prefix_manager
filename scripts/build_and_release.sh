@@ -88,12 +88,14 @@ increment_version() {
 # Confirm version increment
 if [ "$SKIP_GIT" = false ]; then
     NEW_VERSION=$(increment_version "$VERSION" "$INCREMENT")
-    read -p "Increment version from $VERSION to $NEW_VERSION? (y/n) " -n 1 -r
+    echo "Increment version from $VERSION to $NEW_VERSION? (y/n) "
+    read -n 1 -r REPLY
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         VERSION=$NEW_VERSION
         # Update pubspec.yaml version
         sed -i "s/version: $VERSION/version: $NEW_VERSION/" pubspec.yaml
+        echo "Version updated to $VERSION in pubspec.yaml"
     fi
 fi
 
