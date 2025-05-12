@@ -156,28 +156,34 @@ class _HomePageState extends State<HomePage> with WindowListener {
     // Build game list from prefixes
     final allGames = _buildGameEntries(prefixProvider.prefixes);
 
-    return Scaffold(
-      // Removed AppBar
-      body: GameLibraryPage(
-        games: allGames,
-        // Pass the showGameDetails method from UIActionService
-        onShowDetails: uiActionService.showGameDetails,
-        // Pass the launchGame method defined above
-        onLaunchGame: (prefix, exe) {
-          _launchGame(context, GameEntry(prefix: prefix, exe: exe));
-        },
-        // Pass the stopGame method defined above
-        onStopGame: (game) {
-           _stopGame(context, game);
-        },
-        gameLaunchStates: _gameLaunchStates, // Pass the actual state map
-        selectedGenre: _selectedGenre,
-        onGenreSelected: (genre) {
-          setState(() {
-            _selectedGenre = genre;
-          });
-        },
-        // coverSize: prefixProvider.settings?.coverSize ?? CoverSize.medium, // Get from settings if needed
+    return MultiProvider(
+      providers: [
+        // Make UIActionService available to the GameLibraryPage
+        Provider.value(value: uiActionService),
+      ],
+      child: Scaffold(
+        // Removed AppBar
+        body: GameLibraryPage(
+          games: allGames,
+          // Pass the showGameDetails method from UIActionService
+          onShowDetails: uiActionService.showGameDetails,
+          // Pass the launchGame method defined above
+          onLaunchGame: (prefix, exe) {
+            _launchGame(context, GameEntry(prefix: prefix, exe: exe));
+          },
+          // Pass the stopGame method defined above
+          onStopGame: (game) {
+             _stopGame(context, game);
+          },
+          gameLaunchStates: _gameLaunchStates, // Pass the actual state map
+          selectedGenre: _selectedGenre,
+          onGenreSelected: (genre) {
+            setState(() {
+              _selectedGenre = genre;
+            });
+          },
+          // coverSize: prefixProvider.settings?.coverSize ?? CoverSize.medium, // Get from settings if needed
+        ),
       ),
     );
   }

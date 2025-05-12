@@ -61,6 +61,9 @@ class UIActionService {
   /// Handles picking an executable file, asking if it's a game, fetching IGDB data if needed,
   /// and adding it to a prefix via the provider.
   Future<void> addExecutableToPrefix(BuildContext context, WinePrefix prefix) async {
+    // Make sure we're using the root navigator context for dialogs
+    final rootContext = Navigator.of(context, rootNavigator: true).context;
+    
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
@@ -79,8 +82,8 @@ class UIActionService {
       // Check if executable already exists in this prefix
       if (_prefixProvider.prefixes.firstWhere((p) => p.path == prefix.path).exeEntries.any((e) => e.path == filePath)) {
          _logService.log('Executable "$fileName" already exists in prefix "${prefix.name}".');
-         if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
+         if (rootContext.mounted) {
+            ScaffoldMessenger.of(rootContext).showSnackBar(
                SnackBar(content: Text('Executable "$fileName" already exists in this prefix.')),
             );
          }
@@ -89,7 +92,7 @@ class UIActionService {
 
       // --- Ask if it's a game ---
       final isGame = await showDialog<bool>(
-        context: context,
+        context: rootContext,
         barrierDismissible: false,
         builder: (dialogContext) => AlertDialog(
           title: const Text('Add Executable'),
@@ -117,7 +120,7 @@ class UIActionService {
       if (isGame) {
         // --- Get Game Name for Search ---
         final gameNameToSearch = await showDialog<String>(
-          context: context,
+          context: rootContext,
           builder: (dialogContext) => TextInputDialog(
             title: 'Enter Game Name',
             labelText: 'Game Name for IGDB Search',
@@ -180,8 +183,8 @@ class UIActionService {
           }
           finalExeEntry = tempEntry; // Use the potentially enriched entry
           _logService.log('IGDB Fetch Status: $igdbStatus');
-          if (context.mounted) {
-             ScaffoldMessenger.of(context).showSnackBar(
+          if (rootContext.mounted) {
+             ScaffoldMessenger.of(rootContext).showSnackBar(
                 SnackBar(content: Text('IGDB Fetch: ${igdbStatus.trim()}'), duration: const Duration(seconds: 2)),
              );
           }
@@ -195,16 +198,16 @@ class UIActionService {
       await _prefixProvider.addExecutable(prefix, finalExeEntry);
 
       // Show final status from provider
-      if (context.mounted) {
-         ScaffoldMessenger.of(context).showSnackBar(
+      if (rootContext.mounted) {
+         ScaffoldMessenger.of(rootContext).showSnackBar(
             SnackBar(content: Text(_prefixProvider.status), duration: const Duration(seconds: 2)),
          );
       }
 
     } catch (e) {
        _logService.log('Error adding executable: $e', LogLevel.error);
-       if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
+       if (rootContext.mounted) {
+          ScaffoldMessenger.of(rootContext).showSnackBar(
              SnackBar(content: Text('Error adding executable: $e'), duration: const Duration(seconds: 3)),
           );
        }
