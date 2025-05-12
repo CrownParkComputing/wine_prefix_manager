@@ -15,7 +15,10 @@ GITHUB_REPO="jon/wine_prefix_manager"  # Update with your GitHub repo
 
 # Get current version from pubspec.yaml
 VERSION=$(grep 'version:' pubspec.yaml | awk '{print $2}' | tr -d "'")
-VERSION=${VERSION//+/-}  # Replace + with - for filename compatibility
+# Ensure version is properly formatted by removing any non-semver characters
+VERSION=$(echo "$VERSION" | sed 's/[^0-9.]+//g')
+# Remove any '+' characters to handle pre-release versions correctly
+VERSION=${VERSION//+/}
 
 # Parse arguments
 BUILD_TYPE="release"
