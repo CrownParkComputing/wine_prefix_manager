@@ -131,8 +131,8 @@ if [ "$SKIP_GIT" = false ]; then
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         VERSION=$NEW_VERSION
         # Update pubspec.yaml version
-        sed -i "s/version: $VERSION/version: $NEW_VERSION/" pubspec.yaml
-        echo "Version updated to $VERSION in pubspec.yaml"
+        sed -i "s/^version: .*/version: $NEW_VERSION/" pubspec.yaml
+        echo "Version updated to $NEW_VERSION in pubspec.yaml"
     fi
 fi
 
@@ -250,7 +250,12 @@ if [ "$SKIP_GIT" = false ]; then
 
     # Create GitHub release
     echo "Creating GitHub release..."
-    RELEASE_NOTES=$(cat CHANGELOG.md | awk -v version="$VERSION" '/^## / {p=0} $0 ~ "^## " version {p=1} p')
+    # Try to get release notes from git commit history
+    RELEASE_NOTES=$(git log --format="* %s" $(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo HEAD~10)..HEAD)
+    # If no release notes, use a simple placeholder
+    if [ -z "$RELEASE_NOTES" ]; then
+        RELEASE_NOTES="Release version $VERSION"
+    fi
     
     gh release create "v${VERSION}" \
         "${RELEASE_DIR}/${PACKAGE_NAME}.tar.gz" \
@@ -258,6 +263,28 @@ if [ "$SKIP_GIT" = false ]; then
         "${SOURCE_ZIP}" \
         --title "v${VERSION}" \
         --notes "$RELEASE_NOTES"
+    
+    # Verify and sync versions after release
+    echo "Verifying version consistency..."
+    PUBSPEC_VERSION=$(grep 'version:' pubspec.yaml | awk '{print $2}' | tr -d "'\"")
+    GIT_TAG_VERSION=$(git describe --tags --abbrev=0 | sed 's/^v//')
+
+    if [ "$PUBSPEC_VERSION" != "$GIT_TAG_VERSION" ]; then
+        echo "Version mismatch detected. Syncing pubspec.yaml with git tag..."
+        sed -i "s/^version: .*/version: $GIT_TAG_VERSION/" pubspec.yaml
+        git add pubspec.yaml
+        git commit -m "chore: sync pubspec version with git tag ($GIT_TAG_VERSION)"
+        git push origin main
+        echo "Version synchronized successfully"
+    else
+        echo "Versions are in sync. No changes needed."
+    fi
+
+    echo "Final version check:"
+    FINAL_PUBSPEC_VERSION=$(grep 'version:' pubspec.yaml | awk '{print $2}' | tr -d "'\"")
+    FINAL_GIT_VERSION=$(git describe --tags --abbrev=0 | sed 's/^v//')
+    echo "Git tag: v$FINAL_GIT_VERSION"
+    echo "Pubspec: $FINAL_PUBSPEC_VERSION"
 fi
 
 echo "Build and release complete! 🎉"
