@@ -99,6 +99,7 @@ echo "Building Wine Prefix Manager v${VERSION} (${BUILD_TYPE})..."
 # Clean previous builds
 echo "Cleaning previous builds..."
 flutter clean
+rm -rf "$RELEASE_DIR"
 
 # Get dependencies
 echo "Getting dependencies..."
@@ -133,6 +134,7 @@ find "$BUNDLE_DIR" -maxdepth 1 -mindepth 1 -exec cp -r {} "$PACKAGE_DIR/" \;
 # Create tarball
 echo "Creating tarball..."
 tar -czf "${RELEASE_DIR}/${PACKAGE_NAME}.tar.gz" -C "${RELEASE_DIR}" "${PACKAGE_NAME}"
+
 
 # Create checksum
 echo "Creating checksums..."
