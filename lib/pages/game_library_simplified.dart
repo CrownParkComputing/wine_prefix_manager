@@ -1,4 +1,3 @@
-// filepath: /home/jon/wine_prefix_manager/lib/pages/game_library_page.dart
 import 'package:flutter/material.dart';
 import 'package:collection/collection.dart'; // Import for groupBy
 import '../models/prefix_models.dart';
@@ -16,8 +15,6 @@ class GameLibraryPage extends StatelessWidget {
   final CoverSize coverSize;
   final Map<String, GameLaunchState> gameLaunchStates;
   final Function(GameEntry) onStopGame;
-  final VoidCallback? onRefresh;
-  final bool isRefreshing;
   
   const GameLibraryPage({
     super.key,
@@ -29,8 +26,6 @@ class GameLibraryPage extends StatelessWidget {
     this.coverSize = CoverSize.medium,
     required this.gameLaunchStates,
     required this.onStopGame,
-    this.onRefresh,
-    this.isRefreshing = false,
   });
 
   // Get unique categories from all games
@@ -73,21 +68,7 @@ class GameLibraryPage extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Game Library'),
-        actions: [
-          // Add refresh button
-          if (onRefresh != null) // Only show if onRefresh is provided
-            IconButton(
-              icon: isRefreshing 
-                ? const SizedBox(
-                    width: 24, 
-                    height: 24, 
-                    child: CircularProgressIndicator(strokeWidth: 2)
-                  ) 
-                : const Icon(Icons.refresh),
-              tooltip: 'Refresh Game Library',
-              onPressed: isRefreshing ? null : onRefresh,
-            ),
-        ],
+        // No refresh button
       ),
       body: Column(
         children: [

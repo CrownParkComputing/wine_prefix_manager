@@ -57,8 +57,13 @@ class PrefixProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> loadPrefixes() async {
-    _setLoading(true, "Loading prefixes...");
+  Future<void> loadPrefixes({bool forceReload = false}) async {
+    if (_isLoading && !forceReload) {
+      // Return early if already loading and not a forced reload
+      return;
+    }
+    
+    _setLoading(true, forceReload ? "Refreshing prefixes..." : "Loading prefixes...");
     try {
       if (_settings == null) throw Exception("Settings not loaded before loading prefixes.");
       List<WinePrefix> loadedPrefixes = await _storageService.loadPrefixes(_settings!);

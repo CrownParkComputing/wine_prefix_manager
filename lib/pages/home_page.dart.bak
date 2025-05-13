@@ -315,6 +315,7 @@ class _HomePageState extends State<HomePage> with WindowListener {
                   _selectedGenre = genre;
                 });
               },
+              // Add refresh functionality back
               onRefresh: () => _refreshGames(context),
               isRefreshing: _isRefreshing,
             ),

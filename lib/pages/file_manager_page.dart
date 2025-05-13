@@ -71,7 +71,8 @@ class _FileManagerPageState extends State<FileManagerPage> {
   }
 
   void _initializeDirectories() {
-    final settings = Provider.of<Settings>(context, listen: false);
+    // Don't listen to settings changes in callback
+   final settings = Provider.of<Settings>(context, listen: false);
 
     // Initialize source folder path if a game is selected
     if (selectedGame != null) {

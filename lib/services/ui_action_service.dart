@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
-import 'package:url_launcher/url_launcher.dart'; // Added for explorePrefixFiles
+import 'package:provider/provider.dart'; // Add Provider import
+import 'dart:io' show Process;
 
 // Models
 import '../models/prefix_models.dart';
@@ -10,6 +11,7 @@ import '../models/igdb_models.dart';
 
 // Providers
 import '../providers/prefix_provider.dart';
+import '../providers/settings_provider.dart';
 
 // Services
 import 'log_service.dart';
@@ -247,8 +249,11 @@ class UIActionService {
 
   /// Shows the Game Details Dialog and handles its actions.
   Future<void> showGameDetails(BuildContext scaffoldContext, GameEntry entry) async {
+    // Get the latest settings by directly accessing the field
+    final Settings currentSettings = _settings;
+    
     // Ensure settings are loaded before showing details that might need IGDB
-    if (_settings.igdbClientId.isEmpty || _settings.igdbClientSecret.isEmpty) {
+    if (currentSettings.igdbClientId.isEmpty || currentSettings.igdbClientSecret.isEmpty) {
        _logService.log('IGDB credentials not set. Cannot fetch full details.', LogLevel.warning); // FIX: Use positional level
        // Optionally show the dialog with limited info or prevent opening
     }
@@ -265,7 +270,7 @@ class UIActionService {
       context: scaffoldContext, // Use the correct context
       builder: (dialogContext) => GameDetailsDialog( // This is the GameDetailsDialog context
         game: entry, // Use 'game' parameter name
-        settings: _settings, // Pass settings
+        settings: _settings, // Use instance field settings
         availablePrefixes: availablePrefixes, // Pass available prefixes
         // prefixProvider: _prefixProvider, // Pass provider instance - Removed from GameDetailsDialog
         onLaunchGame: () async { // Adjusted signature to match dialog expectation (VoidCallback)
@@ -506,18 +511,17 @@ class UIActionService {
 
   /// Opens the prefix directory in the system file manager.
   Future<void> explorePrefixFiles(WinePrefix prefix) async {
-    final uri = Uri.directory(prefix.path);
-    _logService.log('Attempting to open prefix directory: ${prefix.path}');
+    final path = prefix.path;
+    _logService.log('Attempting to open prefix directory: $path');
     try {
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri);
-      } else {
-        _logService.log('Could not launch file explorer for URI: $uri', LogLevel.error);
-        // Optionally show error to user
+      // Try to use xdg-open on Linux
+      final result = await Process.run('xdg-open', [path]);
+      
+      if (result.exitCode != 0) {
+        _logService.log('Error opening file explorer: ${result.stderr}', LogLevel.error);
       }
     } catch (e) {
        _logService.log('Error launching file explorer: $e', LogLevel.error);
-       // Optionally show error to user
     }
   }
 

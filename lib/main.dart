@@ -9,6 +9,7 @@ import 'models/prefix_models.dart'; // Import Prefix models for callbacks
 // Providers
 import 'providers/prefix_provider.dart';
 import 'providers/window_control_provider.dart';
+import 'providers/settings_provider.dart';
 import 'theme/theme_provider.dart';
 
 // Services
@@ -70,21 +71,23 @@ void main() async {
         // FIX: Use Provider for WindowControlProvider as it doesn't notify
         Provider(create: (_) => WindowControlProvider()),
         ChangeNotifierProvider.value(value: themeProvider),
+        // Add SettingsProvider for reactive settings updates
+        ChangeNotifierProvider(create: (_) => SettingsProvider(settings)),
+        // Keep providing Settings directly for backward compatibility
+        Provider.value(value: settings),
 
         // Service Providers (Singletons)
-        Provider.value(value: settings), // Provide settings early
         Provider.value(value: logService), // Provide LogService instance
         Provider(create: (_) => PrefixManagementService()),
         Provider(create: (_) => PrefixCreationService()),
         Provider(create: (_) => ProcessService()),
-        Provider(create: (_) => IgdbService()),
-        // UIActionService depends on several other providers/services
+        Provider(create: (_) => IgdbService()),          // UIActionService depends on several other providers/services
         Provider(create: (context) => UIActionService(
           logService: Provider.of<LogService>(context, listen: false),
           igdbService: Provider.of<IgdbService>(context, listen: false),
           processService: Provider.of<ProcessService>(context, listen: false),
           prefixProvider: Provider.of<PrefixProvider>(context, listen: false), // Inject PrefixProvider
-          settings: Provider.of<Settings>(context, listen: false), // Inject Settings
+          settings: Provider.of<SettingsProvider>(context, listen: false).settings, // Get settings from provider
           // Inject PrefixManagementService into UIActionService if needed later
           prefixManagementService: Provider.of<PrefixManagementService>(context, listen: false),
         )),
@@ -111,7 +114,8 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
-    _settings = Provider.of<Settings>(context, listen: false);
+    final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
+    _settings = settingsProvider.settings;
     _logService = Provider.of<LogService>(context, listen: false);
     // _igdbService = Provider.of<IgdbService>(context, listen: false); // No longer needed here
     final prefixProvider = Provider.of<PrefixProvider>(context, listen: false); // Get provider instance
@@ -177,6 +181,16 @@ class _MainScaffoldState extends State<MainScaffold> {
   // late final PrefixProvider _prefixProvider;
   late final UIActionService _uiActionService; // Keep UIActionService
   final Map<String, int> _runningProcesses = {}; // State for running processes
+  
+  // Global key to access navigator
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+  
+  // Method to switch tabs - can be accessed from outside via a callback
+  void navigateToTab(int index) {
+    setState(() {
+      _selectedIndex = index;
+    });
+  }
 
   @override
   void initState() {
@@ -225,10 +239,14 @@ class _MainScaffoldState extends State<MainScaffold> {
     // Pass the UIActionService methods down as needed
     switch (index) {
       case 0:
-        return const HomePage();
+        return HomePage(
+          onNavigateToTab: navigateToTab,
+        );
       case 1:
-        return ManagePrefixesPage(
-           settings: Provider.of<Settings>(context, listen: false),
+        // Get settings from SettingsProvider
+           final settingsProvider = Provider.of<SettingsProvider>(context, listen: true);
+           return ManagePrefixesPage(
+           settings: settingsProvider.settings,
            onAddExecutable: (prefix) => _uiActionService.addExecutableToPrefix(context, prefix),
            onShowCommonComponents: (context, prefix) => _uiActionService.showCommonComponentsDialog(context, prefix),
            onDeletePrefix: (ctx, pfx) => prefixProvider.deletePrefix(pfx),

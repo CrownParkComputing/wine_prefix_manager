@@ -1,15 +1,18 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 // import 'package:flutter/services.dart'; // No longer needed for Steam ID
-import 'package:url_launcher/url_launcher.dart';
+// Removed url_launcher import as we're using Process.run instead
+import 'package:intl/intl.dart'; // For date formatting
+import 'package:provider/provider.dart'; // Import Provider
 import '../models/prefix_models.dart';
 import '../models/settings.dart';
 // import '../providers/prefix_provider.dart'; // No longer needed for dynamic categories
 import '../widgets/common_components_dialog.dart'; // Import for confirmation dialog
+import '../providers/settings_provider.dart'; // Add SettingsProvider import
 
 class GameDetailsDialog extends StatefulWidget {
   final GameEntry game;
-  final Settings settings;
+  Settings settings; // Remove final to make it mutable
   final List<WinePrefix> availablePrefixes; // Keep for prefix change dropdown if needed later
   // final PrefixProvider prefixProvider; // Removed
   final VoidCallback onLaunchGame;
@@ -22,7 +25,8 @@ class GameDetailsDialog extends StatefulWidget {
   final Function(GameEntry, String?) onSaveLaunchOptions; // Callback for launch options
   // final Function(GameEntry, int?) onSaveSteamAppId; // Removed
 
-  const GameDetailsDialog({
+  // Remove const since settings is now mutable
+  GameDetailsDialog({
     Key? key,
     required this.game,
     required this.settings,
@@ -60,6 +64,21 @@ class _GameDetailsDialogState extends State<GameDetailsDialog> with SingleTicker
     _launchOptionsController = TextEditingController(text: widget.game.exe.launchOptions ?? '');
     // _steamAppIdController = TextEditingController(text: widget.game.exe.steamAppId?.toString() ?? ''); // Removed
     // _loadDynamicCategories(); // Removed dynamic category loading
+  }
+  
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // This ensures we're using the latest settings when the dialog shows
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Update selected category to match current game's category
+      _selectedCategory = widget.game.exe.category;
+      
+      // Get fresh settings with latest categories
+      final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
+      widget.settings = settingsProvider.settings;
+      setState(() {}); // Trigger a rebuild to refresh categories
+    });
   }
 
   // Removed _loadDynamicCategories method
@@ -260,6 +279,10 @@ class _GameDetailsDialogState extends State<GameDetailsDialog> with SingleTicker
           //   _buildInfoRow('Steam App ID', widget.game.exe.steamAppId.toString()),
           if (widget.game.exe.launchOptions != null && widget.game.exe.launchOptions!.isNotEmpty)
             _buildInfoRow('Launch Options', widget.game.exe.launchOptions!),
+          // Show play time information
+          _buildInfoRow('Play Time', _formatPlayTime(widget.game.exe.playTimeMinutes ?? 0)),
+          if (widget.game.exe.lastPlayed != null)
+            _buildInfoRow('Last Played', _formatDate(widget.game.exe.lastPlayed!)),
           if (widget.game.exe.igdbId != null)
             _buildInfoRow('IGDB ID', widget.game.exe.igdbId.toString()),
         ],
@@ -268,8 +291,8 @@ class _GameDetailsDialogState extends State<GameDetailsDialog> with SingleTicker
   }
 
   Widget _buildSettingsTab() {
-    // Use categories from settings, adding null for 'Uncategorized'
-    // FIX: Changed gameCategories to categories
+    // Get the latest categories from settings
+    // Add null for 'Uncategorized' and ensure we have the latest categories
     final List<String?> availableCategories = [null, ...widget.settings.categories];
 
     return SingleChildScrollView(
@@ -565,11 +588,60 @@ class _GameDetailsDialogState extends State<GameDetailsDialog> with SingleTicker
   }
 
   Widget _buildHistoryTab() {
-    // Placeholder for history/logs related to this game
-    return const Center(
-      child: Padding(
-        padding: EdgeInsets.all(16.0),
-        child: Text('Game-specific history or logs will be shown here in the future.'),
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Game play time card
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Play Time', style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 16),
+                  
+                  // Total play time
+                  _buildInfoRow('Total Play Time', _formatPlayTime(widget.game.exe.playTimeMinutes ?? 0)),
+                  
+                  // Last played time
+                  if (widget.game.exe.lastPlayed != null)
+                    _buildInfoRow('Last Played', _formatDate(widget.game.exe.lastPlayed!)),
+                  
+                  // No play time detected message
+                  if ((widget.game.exe.playTimeMinutes ?? 0) == 0)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 8.0),
+                      child: Text(
+                        'Play time tracking will begin when you next launch this game.',
+                        style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          
+          const SizedBox(height: 16),
+          
+          // Launch history (placeholder for future implementation)
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Launch History', style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 16),
+                  // Future implementation: List of game launches with dates/times
+                  const Text('Detailed launch history will be available in a future update.'),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -670,18 +742,66 @@ class _GameDetailsDialogState extends State<GameDetailsDialog> with SingleTicker
   }
 
 
-  // Helper to launch video URL
+  // Helper to show video URL
   Future<void> _launchVideoUrl(String url) async {
-    final Uri uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication); // Open externally
-    } else {
-      // Handle error - show snackbar or log
+    try {
+      // On Linux, we'll just show the URL in a snackbar for the user to copy
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not launch $url')),
+          SnackBar(
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Video URL (copy to browser):'),
+                const SizedBox(height: 4),
+                Text(
+                  url,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            duration: const Duration(seconds: 10),
+            action: SnackBarAction(
+              label: 'Dismiss',
+              onPressed: () {
+                ScaffoldMessenger.of(context).hideCurrentSnackBar();
+              },
+            ),
+          ),
+        );
+      }
+      
+      // Try to use xdg-open as a fallback
+      try {
+        await Process.run('xdg-open', [url]);
+      } catch (e) {
+        // Silently fail if xdg-open doesn't work
+        // We've already shown the URL in the snackbar
+      }
+    } catch (e) {
+      // Handle error
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not open video: $e')),
         );
       }
     }
+  }
+
+  // Helper method to format play time
+  String _formatPlayTime(int minutes) {
+    if (minutes < 60) {
+      return '$minutes minutes';
+    } else {
+      final hours = minutes ~/ 60;
+      final remainingMinutes = minutes % 60;
+      return '$hours hour${hours != 1 ? 's' : ''} $remainingMinutes minute${remainingMinutes != 1 ? 's' : ''}';
+    }
+  }
+
+  // Helper method to format date
+  String _formatDate(DateTime date) {
+    return DateFormat('MMM d, y - h:mm a').format(date);
   }
 }

@@ -93,6 +93,8 @@ class ExeEntry {
   final String? category;
   final PrefixType? wineTypeOverride;
   final String? launchOptions;
+  final int? playTimeMinutes; // Total play time in minutes
+  final DateTime? lastPlayed; // Last time the game was played
 
   const ExeEntry({
     required this.path,
@@ -114,6 +116,8 @@ class ExeEntry {
     this.category,
     this.wineTypeOverride,
     this.launchOptions,
+    this.playTimeMinutes = 0,
+    this.lastPlayed,
   });
 
   Map<String, dynamic> toJson() => {
@@ -136,6 +140,8 @@ class ExeEntry {
     'category': category,
     'wineTypeOverride': wineTypeOverride?.toString(),
     'launchOptions': launchOptions,
+    'playTimeMinutes': playTimeMinutes,
+    'lastPlayed': lastPlayed?.toIso8601String(),
   };
 
   factory ExeEntry.fromJson(Map<String, dynamic> json) {
@@ -183,6 +189,10 @@ class ExeEntry {
         category: json['category'],
         wineTypeOverride: overrideType, // Use parsed override type
         launchOptions: json['launchOptions'],
+        playTimeMinutes: json['playTimeMinutes']?.toInt() ?? 0, // Parse playTimeMinutes
+        lastPlayed: json['lastPlayed'] != null
+            ? DateTime.parse(json['lastPlayed'])
+            : null, // Parse lastPlayed as DateTime
      );
   }
 
@@ -193,11 +203,11 @@ class ExeEntry {
     int? steamAppId,
     String? coverUrl,
     String? coverImageId,
-    int? igdbCoverId, // Add to copyWith
+    int? igdbCoverId,
     String? localCoverPath,
     List<String>? screenshotUrls,
     List<String>? screenshotImageIds,
-    List<int>? igdbScreenshotIds, // Add to copyWith
+    List<int>? igdbScreenshotIds,
     List<String>? localScreenshotPaths,
     List<String>? videoIds,
     bool? isGame,
@@ -206,6 +216,8 @@ class ExeEntry {
     String? category,
     PrefixType? wineTypeOverride,
     String? launchOptions,
+    int? playTimeMinutes,
+    DateTime? lastPlayed,
   }) {
     return ExeEntry(
       path: path ?? this.path,
@@ -214,11 +226,11 @@ class ExeEntry {
       steamAppId: steamAppId ?? this.steamAppId,
       coverUrl: coverUrl ?? this.coverUrl,
       coverImageId: coverImageId ?? this.coverImageId,
-      igdbCoverId: igdbCoverId ?? this.igdbCoverId, // Add logic
+      igdbCoverId: igdbCoverId ?? this.igdbCoverId,
       localCoverPath: localCoverPath ?? this.localCoverPath,
       screenshotUrls: screenshotUrls ?? this.screenshotUrls,
       screenshotImageIds: screenshotImageIds ?? this.screenshotImageIds,
-      igdbScreenshotIds: igdbScreenshotIds ?? this.igdbScreenshotIds, // Add logic
+      igdbScreenshotIds: igdbScreenshotIds ?? this.igdbScreenshotIds,
       localScreenshotPaths: localScreenshotPaths ?? this.localScreenshotPaths,
       videoIds: videoIds ?? this.videoIds,
       isGame: isGame ?? this.isGame,
@@ -227,6 +239,8 @@ class ExeEntry {
       category: category ?? this.category,
       wineTypeOverride: wineTypeOverride ?? this.wineTypeOverride,
       launchOptions: launchOptions ?? this.launchOptions,
+      playTimeMinutes: playTimeMinutes ?? this.playTimeMinutes,
+      lastPlayed: lastPlayed ?? this.lastPlayed,
     );
   }
 }

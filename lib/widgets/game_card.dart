@@ -85,6 +85,18 @@ class GameCard extends StatelessWidget {
                     size: 16,
                   ),
                 ),
+              // Display play time if available
+              if ((game.exe.playTimeMinutes ?? 0) > 0) 
+                const SizedBox(width: 8),
+              if ((game.exe.playTimeMinutes ?? 0) > 0)
+                Tooltip(
+                  message: _formatPlayTime(game.exe.playTimeMinutes ?? 0),
+                  child: const Icon(
+                    Icons.timer,
+                    color: Colors.white,
+                    size: 16,
+                  ),
+                ),
             ],
           ),
         ),
@@ -180,5 +192,16 @@ class GameCard extends StatelessWidget {
         ),
       ),
     );
+  }
+  
+  // Helper method to format play time
+  String _formatPlayTime(int minutes) {
+    if (minutes < 60) {
+      return '$minutes min';
+    } else {
+      final hours = minutes ~/ 60;
+      final remainingMinutes = minutes % 60;
+      return '$hours h ${remainingMinutes > 0 ? '$remainingMinutes m' : ''}';
+    }
   }
 }

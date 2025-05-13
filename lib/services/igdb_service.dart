@@ -1,8 +1,11 @@
 import 'dart:convert';
 // import 'package:flutter/foundation.dart'; // Unused import removed
 import 'package:http/http.dart' as http;
+import 'package:flutter/widgets.dart';
+import 'package:provider/provider.dart';
 import '../models/settings.dart';
 import '../models/igdb_models.dart';
+import '../providers/settings_provider.dart';
 
 class IgdbService {
 
@@ -213,5 +216,35 @@ class IgdbService {
       // debugPrint('[IgdbService] Exception fetching game videos: $e');
     }
     return [];
+  }
+
+  // Method to check and validate IGDB credentials
+  Future<bool> validateCredentials(BuildContext context) async {
+    final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
+    final settings = settingsProvider.settings;
+    
+    // Check if credentials are set
+    if (settings.igdbClientId.isEmpty || settings.igdbClientSecret.isEmpty) {
+      return false;
+    }
+    
+    try {
+      final tokenData = await getIgdbToken(settings);
+      if (tokenData != null && tokenData['token'] != null) {
+        // If token is new, update it in settings
+        if (tokenData['isNew'] == true) {
+          await settingsProvider.updateIgdbToken(
+            tokenData['token'], 
+            tokenData['expiry'].difference(DateTime.now()),
+          );
+        }
+        return true;
+      }
+    } catch (e) {
+      // Token retrieval failed
+      return false;
+    }
+    
+    return false;
   }
 }
