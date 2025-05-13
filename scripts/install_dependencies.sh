@@ -79,6 +79,8 @@ case "$DISTRO" in
             ninja-build \
             pkg-config \
             libgtk-3-dev \
+            dpkg-dev \
+            fakeroot \
             liblzma-dev \
             libstdc++-12-dev \
             libx11-dev
@@ -96,7 +98,9 @@ case "$DISTRO" in
             gtk3-devel \
             libstdc++-devel \
             xz-devel \
-            libX11-devel
+            libX11-devel \
+            rpm-build \
+            rpmdevtools
         ;;
     arch|manjaro)
         echo "Installing dependencies for Arch/Manjaro..."
@@ -110,6 +114,7 @@ case "$DISTRO" in
             ninja \
             pkg-config \
             gtk3 \
+            base-devel \
             libxext \
             xz
         ;;

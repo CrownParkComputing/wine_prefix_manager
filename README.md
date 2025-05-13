@@ -224,6 +224,61 @@ Logs are available within the application under the Logs tab. For more detailed 
 ./scripts/debug_build_run.sh
 ```
 
+## Requirements
+
+* Flutter SDK (latest stable version recommended)
+* Linux system with GTK3
+* Wine or Proton (for running Windows executables)
+* For building packages:
+  * Arch Linux: `base-devel`
+  * Debian/Ubuntu: `dpkg-dev`, `fakeroot`
+  * Fedora/RHEL: `rpm-build`, `rpmdevtools`
+
+## Building and Installing
+
+### Using the Menu System
+
+The easiest way to build Wine Prefix Manager is to use the interactive menu system:
+
+```bash
+# Make the menu script executable
+chmod +x scripts/menu.sh
+
+# Run the menu
+./scripts/menu.sh
+```
+
+The menu provides options for:
+* Building packages for specific distributions (Arch, Debian, RPM)
+* Creating a full release with version increment
+* Debug building and running
+* Installing dependencies
+
+### Manual Building
+
+You can also use the build scripts directly:
+
+```bash
+# Install dependencies for your distribution
+./scripts/install_dependencies.sh
+
+# Build a release for Arch Linux
+./scripts/build_and_release.sh --distro arch --skip-git
+
+# Build a release for Debian/Ubuntu
+./scripts/build_and_release.sh --distro debian --skip-git
+
+# Build a release for RPM-based distributions
+./scripts/build_and_release.sh --distro rpm --skip-git
+```
+
+### Installing from Packages
+
+After building, you can find the packages in the `release` directory:
+* Arch Linux: Use the PKGBUILD file to create and install a package
+* Debian/Ubuntu: Install the .deb file with `sudo dpkg -i <package.deb>`
+* RPM: Install the .rpm file with `sudo rpm -i <package.rpm>`
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit issues or pull requests.

@@ -5,6 +5,27 @@
 
 set -e  # Exit on error
 
+# Display usage information
+show_usage() {
+    echo "Usage: $0 [options]"
+    echo "Options:"
+    echo "  --debug                Build debug version"
+    echo "  --release              Build release version (default)"
+    echo "  --increment TYPE       Increment version number (major, minor, patch)"
+    echo "  --release-type TYPE    Set release type (major, minor, patch)"
+    echo "  --skip-git             Skip git operations"
+    echo "  --distro DISTRO        Build package for specific distro"
+    echo "                         Supported: arch, debian, ubuntu, rpm, all"
+    echo "                         'all' will build packages for all distros"
+    echo "  --help                 Display this help message"
+}
+
+# Check for help flag
+if [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
+    show_usage
+    exit 0
+fi
+
 # Configuration
 APP_NAME="wine_prefix_manager"
 RELEASE_DIR="release"
@@ -24,6 +45,7 @@ VERSION=${VERSION//+/}
 BUILD_TYPE="release"
 SKIP_GIT=false
 DISTRO="arch"
+BUILD_ALL_PACKAGES=false
 RELEASE_TYPE=""
 INCREMENT="patch"
 
@@ -50,10 +72,13 @@ while [[ $# -gt 0 ]]; do
             shift 2
             # Validate distro
             case "$DISTRO" in
-                "arch"|"debian"|"ubuntu")
+                "arch"|"debian"|"ubuntu"|"rpm"|"all")
+                    if [ "$DISTRO" = "all" ]; then
+                        BUILD_ALL_PACKAGES=true
+                    fi
                     ;;
                 *)
-                    echo "Error: Unsupported distro '$DISTRO'. Supported distros: arch, debian, ubuntu"
+                    echo "Error: Unsupported distro '$DISTRO'. Supported distros: arch, debian, ubuntu, rpm, all"
                     exit 1
                     ;;
             esac
@@ -157,6 +182,10 @@ else
     BUNDLE_DIR=$RELEASE_BUNDLE_DIR
 fi
 
+# Initialize package creation status variables
+DEB_CREATED=false
+RPM_CREATED=false
+
 # Create release directory
 mkdir -p $RELEASE_DIR
 
@@ -182,15 +211,10 @@ tar -czf "${RELEASE_DIR}/${PACKAGE_NAME}.tar.gz" -C "${RELEASE_DIR}" "${PACKAGE_
 echo "Creating checksums..."
 sha256sum "${RELEASE_DIR}/${PACKAGE_NAME}.tar.gz" > "${RELEASE_DIR}/${PACKAGE_NAME}.tar.gz.sha256"
 
-# Create source code zip
-if [ "$SKIP_GIT" = false ]; then
-    echo "Creating source code archive..."
-    SOURCE_ZIP="${RELEASE_DIR}/${APP_NAME}-${VERSION}-source.zip"
-    git archive --format zip --output "$SOURCE_ZIP" HEAD
-fi
+# Source code archive generation removed - Git already handles version control
 
 # Create PKGBUILD for Arch Linux
-if [ "$DISTRO" = "arch" ]; then
+if [ "$DISTRO" = "arch" ] || [ "$BUILD_ALL_PACKAGES" = true ]; then
     PKGBUILD_PATH="${RELEASE_DIR}/${APP_NAME}.PKGBUILD"
     echo "Creating PKGBUILD for Arch Linux..."
     
@@ -221,6 +245,180 @@ package() {
 EOF
 
     echo "PKGBUILD created at: $PKGBUILD_PATH"
+fi
+
+# Create Debian package
+if [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "ubuntu" ] || [ "$BUILD_ALL_PACKAGES" = true ]; then
+    echo "Creating Debian package..."
+    
+    # Check if necessary tools are installed
+    if ! command -v dpkg-deb &> /dev/null; then
+        echo "Warning: dpkg-deb not found. Skipping Debian package creation."
+        DEB_CREATED=false
+    else
+    
+    # Define Debian package directory structure
+    DEB_NAME="${APP_NAME}_${VERSION}-1_amd64"
+    DEB_DIR="${RELEASE_DIR}/${DEB_NAME}"
+    mkdir -p "${DEB_DIR}/DEBIAN"
+    mkdir -p "${DEB_DIR}/usr/bin"
+    mkdir -p "${DEB_DIR}/usr/lib/${APP_NAME}"
+    mkdir -p "${DEB_DIR}/usr/share/applications"
+    mkdir -p "${DEB_DIR}/usr/share/icons/hicolor/128x128/apps"
+    
+    # Create control file
+    cat > "${DEB_DIR}/DEBIAN/control" <<EOF
+Package: ${APP_NAME}
+Version: ${VERSION}
+Section: utils
+Priority: optional
+Architecture: amd64
+Depends: wine
+Maintainer: Your Name <your.email@example.com>
+Description: Wine Prefix Manager
+ A tool for managing Wine prefixes on Linux.
+EOF
+    
+    # Extract the application files
+    tar -xzf "${RELEASE_DIR}/${PACKAGE_NAME}.tar.gz" -C "${RELEASE_DIR}"
+    
+    # Copy application files to the package directory
+    cp -r "${PACKAGE_DIR}"/* "${DEB_DIR}/usr/lib/${APP_NAME}/"
+    
+    # Create launcher script
+    cat > "${DEB_DIR}/usr/bin/${APP_NAME}" <<EOF
+#!/bin/bash
+exec /usr/lib/${APP_NAME}/${APP_NAME} "\$@"
+EOF
+    chmod +x "${DEB_DIR}/usr/bin/${APP_NAME}"
+    
+    # Create desktop entry
+    cat > "${DEB_DIR}/usr/share/applications/${APP_NAME}.desktop" <<EOF
+[Desktop Entry]
+Name=Wine Prefix Manager
+Comment=Manage Wine prefixes
+Exec=${APP_NAME}
+Icon=${APP_NAME}
+Terminal=false
+Type=Application
+Categories=Utility;
+EOF
+    
+    # Copy icon (assuming it exists in the bundle)
+    if [ -f "${PACKAGE_DIR}/data/flutter_assets/assets/icon.png" ]; then
+        cp "${PACKAGE_DIR}/data/flutter_assets/assets/icon.png" "${DEB_DIR}/usr/share/icons/hicolor/128x128/apps/${APP_NAME}.png"
+    fi
+    
+    # Build the Debian package
+    dpkg-deb --build "${DEB_DIR}" "${RELEASE_DIR}/${DEB_NAME}.deb"
+    
+    # Create checksum
+    sha256sum "${RELEASE_DIR}/${DEB_NAME}.deb" > "${RELEASE_DIR}/${DEB_NAME}.deb.sha256"
+    
+    echo "Debian package created at: ${RELEASE_DIR}/${DEB_NAME}.deb"
+    DEB_CREATED=true
+    fi
+fi
+
+# Create RPM package
+if [ "$DISTRO" = "rpm" ] || [ "$BUILD_ALL_PACKAGES" = true ]; then
+    echo "Creating RPM package..."
+    
+    # Check if necessary tools are installed
+    if ! command -v rpmbuild &> /dev/null; then
+        echo "Warning: rpmbuild not found. Skipping RPM package creation."
+        RPM_CREATED=false
+    else
+    
+    # Create RPM build directories
+    RPM_BUILD_DIR="${RELEASE_DIR}/rpmbuild"
+    mkdir -p "${RPM_BUILD_DIR}/SOURCES"
+    mkdir -p "${RPM_BUILD_DIR}/SPECS"
+    mkdir -p "${RPM_BUILD_DIR}/BUILD"
+    mkdir -p "${RPM_BUILD_DIR}/RPMS"
+    mkdir -p "${RPM_BUILD_DIR}/SRPMS"
+    
+    # Copy the source tarball
+    cp "${RELEASE_DIR}/${PACKAGE_NAME}.tar.gz" "${RPM_BUILD_DIR}/SOURCES/"
+    
+    # Create spec file
+    cat > "${RPM_BUILD_DIR}/SPECS/${APP_NAME}.spec" <<EOF
+Name:           ${APP_NAME}
+Version:        ${VERSION}
+Release:        1%{?dist}
+Summary:        Wine Prefix Manager
+License:        MIT
+URL:            https://github.com/jon/wine_prefix_manager
+Source0:        ${APP_NAME}-${VERSION}-linux-x64-release.tar.gz
+BuildArch:      x86_64
+Requires:       wine
+
+%description
+A tool for managing Wine prefixes on Linux.
+
+%prep
+%setup -q -n ${APP_NAME}-${VERSION}-linux-x64-release
+
+%build
+# Nothing to build
+
+%install
+mkdir -p %{buildroot}/usr/lib/${APP_NAME}
+mkdir -p %{buildroot}/usr/bin
+mkdir -p %{buildroot}/usr/share/applications
+mkdir -p %{buildroot}/usr/share/icons/hicolor/128x128/apps
+
+# Copy application files
+cp -r * %{buildroot}/usr/lib/${APP_NAME}/
+
+# Create launcher script
+cat > %{buildroot}/usr/bin/${APP_NAME} <<EOL
+#!/bin/bash
+exec /usr/lib/${APP_NAME}/${APP_NAME} "\$@"
+EOL
+chmod +x %{buildroot}/usr/bin/${APP_NAME}
+
+# Create desktop entry
+cat > %{buildroot}/usr/share/applications/${APP_NAME}.desktop <<EOL
+[Desktop Entry]
+Name=Wine Prefix Manager
+Comment=Manage Wine prefixes
+Exec=${APP_NAME}
+Icon=${APP_NAME}
+Terminal=false
+Type=Application
+Categories=Utility;
+EOL
+
+# Copy icon (assuming it exists in the bundle)
+if [ -f "data/flutter_assets/assets/icon.png" ]; then
+    cp data/flutter_assets/assets/icon.png %{buildroot}/usr/share/icons/hicolor/128x128/apps/${APP_NAME}.png
+fi
+
+%files
+/usr/lib/${APP_NAME}
+/usr/bin/${APP_NAME}
+/usr/share/applications/${APP_NAME}.desktop
+/usr/share/icons/hicolor/128x128/apps/${APP_NAME}.png
+
+%changelog
+* $(date '+%a %b %d %Y') Your Name <your.email@example.com> - ${VERSION}-1
+- Release ${VERSION}
+EOF
+    
+    # Build the RPM package
+    rpmbuild --define "_topdir ${RPM_BUILD_DIR}" -bb "${RPM_BUILD_DIR}/SPECS/${APP_NAME}.spec"
+    
+    # Move the RPM to the release directory
+    find "${RPM_BUILD_DIR}/RPMS" -name "*.rpm" -exec cp {} "${RELEASE_DIR}/" \;
+    RPM_FILE=$(find "${RELEASE_DIR}" -name "*.rpm" -printf "%f\n")
+    
+    # Create checksum
+    sha256sum "${RELEASE_DIR}/${RPM_FILE}" > "${RELEASE_DIR}/${RPM_FILE}.sha256"
+    
+    echo "RPM package created at: ${RELEASE_DIR}/${RPM_FILE}"
+    RPM_CREATED=true
+    fi
 fi
 
 echo "Build artifacts created in ${RELEASE_DIR}/ directory:"
@@ -257,10 +455,36 @@ if [ "$SKIP_GIT" = false ]; then
         RELEASE_NOTES="Release version $VERSION"
     fi
     
+    # Build the list of files to upload
+    UPLOAD_FILES=("${RELEASE_DIR}/${PACKAGE_NAME}.tar.gz" 
+                  "${RELEASE_DIR}/${PACKAGE_NAME}.tar.gz.sha256")
+    
+    # Add Debian package if it was created
+    if [ "$DEB_CREATED" = true ]; then
+        DEB_FILE=$(find "${RELEASE_DIR}" -name "*.deb" -printf "%p\n")
+        DEB_CHECKSUM=$(find "${RELEASE_DIR}" -name "*.deb.sha256" -printf "%p\n")
+        if [ -n "$DEB_FILE" ]; then
+            UPLOAD_FILES+=("$DEB_FILE" "$DEB_CHECKSUM")
+        fi
+    fi
+    
+    # Add RPM package if it was created
+    if [ "$RPM_CREATED" = true ]; then
+        RPM_FILE=$(find "${RELEASE_DIR}" -name "*.rpm" -printf "%p\n")
+        RPM_CHECKSUM=$(find "${RELEASE_DIR}" -name "*.rpm.sha256" -printf "%p\n")
+        if [ -n "$RPM_FILE" ]; then
+            UPLOAD_FILES+=("$RPM_FILE" "$RPM_CHECKSUM")
+        fi
+    fi
+    
+    # Add PKGBUILD if it exists
+    if [ -f "${RELEASE_DIR}/${APP_NAME}.PKGBUILD" ]; then
+        UPLOAD_FILES+=("${RELEASE_DIR}/${APP_NAME}.PKGBUILD")
+    fi
+    
+    # Create the release with all available files
     gh release create "v${VERSION}" \
-        "${RELEASE_DIR}/${PACKAGE_NAME}.tar.gz" \
-        "${RELEASE_DIR}/${PACKAGE_NAME}.tar.gz.sha256" \
-        "${SOURCE_ZIP}" \
+        ${UPLOAD_FILES[@]} \
         --title "v${VERSION}" \
         --notes "$RELEASE_NOTES"
     
