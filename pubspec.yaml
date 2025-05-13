@@ -1,7 +1,7 @@
 name: wine_prefix_manager
 description: A wine prefix manager for Linux gaming
 publish_to: 'none'
-version: 1.8.6
+version: 1.8.7
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
