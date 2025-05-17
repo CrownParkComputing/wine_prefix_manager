@@ -198,7 +198,7 @@ class PrefixProvider with ChangeNotifier {
         _updateStatus('Failed to delete prefix directory for "${prefixToDelete.name}". Prefix not removed from list.');
       }
     } catch (e) {
-      _updateStatus('Error deleting prefix "${prefixToDelete.name}": $e');
+      _updateStatus('Error deleting prefix: $e');
       // debugPrint('Error deleting prefix: $e');
     } finally {
       _setLoading(false);
@@ -526,5 +526,23 @@ class PrefixProvider with ChangeNotifier {
     }
     
     return allGames;
+  }
+
+  /// Updates the prefix with new values
+  Future<void> updatePrefix(WinePrefix updatedPrefix) async {
+    try {
+      final index = _prefixes.indexWhere((p) => p.path == updatedPrefix.path);
+      if (index != -1) {
+        _prefixes[index] = updatedPrefix;
+        _updateStatus('Prefix "${updatedPrefix.name}" updated successfully.');
+        await savePrefixes();
+        notifyListeners();
+      } else {
+        _updateStatus('Prefix not found for updating.');
+      }
+    } catch (e) {
+      _updateStatus('Error updating prefix: $e');
+      // debugPrint('Error updating prefix: $e');
+    }
   }
 }

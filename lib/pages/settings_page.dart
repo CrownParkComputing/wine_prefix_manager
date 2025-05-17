@@ -35,6 +35,7 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
   late TextEditingController _twitchOAuthUrlController;
   late TextEditingController _igdbApiBaseUrlController;
   late TextEditingController _igdbImageBaseUrlController;
+  late TextEditingController _kronekProtonApiUrlController; // Add controller for Kronek Proton URL
 
   bool _isLoading = true;
   CoverSize _selectedCoverSize = CoverSize.medium;
@@ -43,9 +44,14 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+    // Initialize controllers with empty strings
     _prefixDirController = TextEditingController();
     _igdbClientIdController = TextEditingController();
     _igdbClientSecretController = TextEditingController();
+    _gameLibraryPathController = TextEditingController();
+    _backupPathController = TextEditingController();
+    // URL settings controllers
     _dxvkApiUrlController = TextEditingController();
     _vkd3dApiUrlController = TextEditingController();
     _wineBuildsApiUrlController = TextEditingController();
@@ -53,19 +59,21 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
     _twitchOAuthUrlController = TextEditingController();
     _igdbApiBaseUrlController = TextEditingController();
     _igdbImageBaseUrlController = TextEditingController();
-    _backupPathController = TextEditingController(); // Initialize the backup path controller
-    _gameLibraryPathController = TextEditingController();
+    _kronekProtonApiUrlController = TextEditingController(); // Initialize Kronek Proton URL controller
     
-    // Initialize tab controller with 4 tabs
-    _tabController = TabController(length: 4, vsync: this);
-    
+    // Load settings
     _loadSettings();
   }
 
   @override
   void dispose() {
+    // Dispose controllers
     _prefixDirController.dispose();
     _igdbClientIdController.dispose();
+    _igdbClientSecretController.dispose();
+    _gameLibraryPathController.dispose();
+    _backupPathController.dispose();
+    // URL settings controllers
     _dxvkApiUrlController.dispose();
     _vkd3dApiUrlController.dispose();
     _wineBuildsApiUrlController.dispose();
@@ -73,10 +81,9 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
     _twitchOAuthUrlController.dispose();
     _igdbApiBaseUrlController.dispose();
     _igdbImageBaseUrlController.dispose();
-    _backupPathController.dispose(); // Dispose the backup path controller
-    _igdbClientSecretController.dispose();
-    _gameLibraryPathController.dispose();
-    _tabController.dispose(); // Dispose tab controller
+    _kronekProtonApiUrlController.dispose(); // Dispose Kronek Proton URL controller
+    // Tab controller
+    _tabController.dispose();
     super.dispose();
   }
 
@@ -110,6 +117,7 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
       _twitchOAuthUrlController.text = settings.twitchOAuthUrl;
       _igdbApiBaseUrlController.text = settings.igdbApiBaseUrl;
       _igdbImageBaseUrlController.text = settings.igdbImageBaseUrl;
+      _kronekProtonApiUrlController.text = settings.kronekProtonApiUrl;
       _isLoading = false;
     });
   }
@@ -169,6 +177,9 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
         igdbImageBaseUrl: _igdbImageBaseUrlController.text.trim().isEmpty
             ? defaultSettings.igdbImageBaseUrl
             : _igdbImageBaseUrlController.text.trim(),
+        kronekProtonApiUrl: _kronekProtonApiUrlController.text.trim().isEmpty
+            ? defaultSettings.kronekProtonApiUrl
+            : _kronekProtonApiUrlController.text.trim(),
       );
 
       try {
@@ -270,28 +281,29 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
   }
 
   void _resetApiUrls() {
-    final defaultSettings = Settings(
-      prefixDirectory: '', igdbClientId: '', igdbClientSecret: '', categories: [],
-      dxvkApiUrl: 'https://api.github.com/repos/doitsujin/dxvk/releases/latest',
-      vkd3dApiUrl: 'https://api.github.com/repos/HansKristian-Work/vkd3d-proton/releases/latest',
-      wineBuildsApiUrl: 'https://api.github.com/repos/Kron4ek/Wine-Builds/releases/tags/10.4',
-      protonGeApiUrl: 'https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases',
-      twitchOAuthUrl: 'https://id.twitch.tv/oauth2/token',
-      igdbApiBaseUrl: 'https://api.igdb.com/v4',
-      igdbImageBaseUrl: 'https://images.igdb.com/igdb/image/upload',
-    );
     setState(() {
+      final defaultSettings = Settings(
+        prefixDirectory: '', igdbClientId: '', igdbClientSecret: '', categories: [],
+        // Use defaults from Settings constructor
+        dxvkApiUrl: 'https://api.github.com/repos/doitsujin/dxvk/releases/latest',
+        vkd3dApiUrl: 'https://api.github.com/repos/HansKristian-Work/vkd3d-proton/releases/latest',
+        wineBuildsApiUrl: 'https://api.github.com/repos/Kron4ek/Wine-Builds/releases/tags/10.4',
+        protonGeApiUrl: 'https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases',
+        kronekProtonApiUrl: 'https://api.github.com/repos/Kron4ek/Wine-Builds/releases/tags/proton-10.0-1',
+        twitchOAuthUrl: 'https://id.twitch.tv/oauth2/token',
+        igdbApiBaseUrl: 'https://api.igdb.com/v4',
+        igdbImageBaseUrl: 'https://images.igdb.com/igdb/image/upload',
+      );
+
       _dxvkApiUrlController.text = defaultSettings.dxvkApiUrl;
       _vkd3dApiUrlController.text = defaultSettings.vkd3dApiUrl;
       _wineBuildsApiUrlController.text = defaultSettings.wineBuildsApiUrl;
       _protonGeApiUrlController.text = defaultSettings.protonGeApiUrl;
+      _kronekProtonApiUrlController.text = defaultSettings.kronekProtonApiUrl;
       _twitchOAuthUrlController.text = defaultSettings.twitchOAuthUrl;
       _igdbApiBaseUrlController.text = defaultSettings.igdbApiBaseUrl;
       _igdbImageBaseUrlController.text = defaultSettings.igdbImageBaseUrl;
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('API URLs reset to defaults. Save settings to apply.')),
-    );
   }
 
   Widget _buildCategoryManagement() {
@@ -437,8 +449,6 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
               tabs: const [
                 Tab(icon: Icon(Icons.settings), text: 'General'),
                 Tab(icon: Icon(Icons.folder), text: 'Directories'),
-                Tab(icon: Icon(Icons.category), text: 'Categories'),
-                Tab(icon: Icon(Icons.api), text: 'API Settings'),
               ],
             ),
       ),
@@ -627,94 +637,7 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
                           ),
                         ),
                         
-                        // Save button
-                        ElevatedButton(
-                          onPressed: _saveSettings,
-                          style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            minimumSize: const Size(double.infinity, 50),
-                          ),
-                          child: const Text('Save Settings'),
-                        ),
-                      ],
-                    ),
-                  ),
-                  
-                  // CATEGORIES TAB
-                  SingleChildScrollView(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      children: [
-                        _buildCategoryManagement(),
-                        
-                        // Save button
-                        ElevatedButton(
-                          onPressed: _saveSettings,
-                          style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            minimumSize: const Size(double.infinity, 50),
-                          ),
-                          child: const Text('Save Settings'),
-                        ),
-                      ],
-                    ),
-                  ),
-                  
-                  // API SETTINGS TAB
-                  SingleChildScrollView(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      children: [
-                        // IGDB API Settings Card
-                        Card(
-                          margin: const EdgeInsets.only(bottom: 16),
-                          child: Padding(
-                            padding: const EdgeInsets.all(16.0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'IGDB API Settings',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-                                TextFormField(
-                                  controller: _igdbClientIdController,
-                                  decoration: const InputDecoration(
-                                    labelText: 'IGDB Client ID',
-                                    hintText: 'Enter your Twitch/IGDB Client ID',
-                                  ),
-                                  validator: (value) {
-                                    if (value == null || value.isEmpty) {
-                                      return 'Please enter your IGDB Client ID';
-                                    }
-                                    return null;
-                                  },
-                                ),
-                                const SizedBox(height: 16),
-                                TextFormField(
-                                  controller: _igdbClientSecretController,
-                                  decoration: const InputDecoration(
-                                    labelText: 'IGDB Client Secret',
-                                    hintText: 'Enter your Twitch/IGDB Client Secret',
-                                  ),
-                                  obscureText: true,
-                                  validator: (value) {
-                                    if (value == null || value.isEmpty) {
-                                      return 'Please enter your IGDB Client Secret';
-                                    }
-                                    return null;
-                                  },
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        
-                        // API URLs Card
+                        // API URLs Card - Moved from being a separate tab child to part of the DIRECTORIES tab
                         Card(
                           margin: const EdgeInsets.only(bottom: 16),
                           child: Padding(
@@ -743,6 +666,7 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
                                 _buildUrlTextField(_vkd3dApiUrlController, 'VKD3D-Proton API URL'),
                                 _buildUrlTextField(_wineBuildsApiUrlController, 'Wine Builds API URL'),
                                 _buildUrlTextField(_protonGeApiUrlController, 'Proton-GE API URL'),
+                                _buildUrlTextField(_kronekProtonApiUrlController, 'Kronek Proton API URL'),
                                 _buildUrlTextField(_twitchOAuthUrlController, 'Twitch OAuth URL'),
                                 _buildUrlTextField(_igdbApiBaseUrlController, 'IGDB API Base URL'),
                                 _buildUrlTextField(_igdbImageBaseUrlController, 'IGDB Image Base URL'),
@@ -776,7 +700,7 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
         controller: controller,
         decoration: InputDecoration(
           labelText: label,
-          hintText: 'Leave blank for default',
+          hintText: 'Enter $label',
           border: const OutlineInputBorder(),
         ),
       ),

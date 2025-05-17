@@ -102,8 +102,8 @@ class ProcessService {
 
       // --- Determine paths, command, and specific env vars based on prefix type ---
 
-      if (prefix.type == PrefixType.gaming) {
-        // Gaming prefixes use the system's wine installation
+      if (prefix.type == PrefixType.custom) {
+        // Custom prefixes use the system's wine installation
         command = 'wine'; // Assume 'wine' is in PATH
         wineExecutablePath = 'wine'; // For potential checks, though existence check might fail if not absolute
         wineBinDir = ''; // Rely on system PATH
@@ -127,10 +127,53 @@ class ProcessService {
          }
 
         // Proton structure typically uses 'files/bin', 'files/lib', 'files/lib64'
-        wineBinDir = path.join(resolvedPath, 'files', 'bin');
-        wineLibDir = path.join(resolvedPath, 'files', 'lib');
-        wineLib64Dir = path.join(resolvedPath, 'files', 'lib64');
-        wineExecutablePath = path.join(wineBinDir, 'wine');
+        // But we need to check different structures for Proton-GE vs other Proton versions
+        
+        // Check for common directory structures
+        bool hasFilesDir = await Directory(path.join(resolvedPath, 'files')).exists();
+        bool hasDistDir = await Directory(path.join(resolvedPath, 'dist')).exists();
+        
+        // Set paths based on detected structure
+        if (hasFilesDir) {
+          // Proton-GE structure
+          wineBinDir = path.join(resolvedPath, 'files', 'bin');
+          wineLibDir = path.join(resolvedPath, 'files', 'lib');
+          wineLib64Dir = path.join(resolvedPath, 'files', 'lib64');
+        } else if (hasDistDir) {
+          // Some other Proton structures
+          wineBinDir = path.join(resolvedPath, 'dist', 'bin');
+          wineLibDir = path.join(resolvedPath, 'dist', 'lib');
+          wineLib64Dir = path.join(resolvedPath, 'dist', 'lib64');
+        } else {
+          // Fallback to check directly in the build directory
+          wineBinDir = path.join(resolvedPath, 'bin');
+          wineLibDir = path.join(resolvedPath, 'lib');
+          wineLib64Dir = path.join(resolvedPath, 'lib64');
+        }
+        
+        // Check all possible wine executable locations
+        List<String> possibleWinePaths = [
+          path.join(wineBinDir, 'wine'),
+          path.join(resolvedPath, 'files', 'bin', 'wine'),
+          path.join(resolvedPath, 'dist', 'bin', 'wine'),
+          path.join(resolvedPath, 'bin', 'wine')
+        ];
+        
+        wineExecutablePath = '';
+        for (var winePath in possibleWinePaths) {
+          if (await File(winePath).exists()) {
+            wineExecutablePath = winePath;
+            break;
+          }
+        }
+        
+        if (wineExecutablePath.isEmpty) {
+          onProcessExit(exe.path, -1, ['ERROR: Could not find wine executable in Proton build: $resolvedPath']);
+          return null;
+        }
+        
+        // Once we have the wine path, derive the bin directory
+        wineBinDir = path.dirname(wineExecutablePath);
 
         // Set Proton specific environment variables
         baseEnv['STEAM_COMPAT_CLIENT_INSTALL_PATH'] = Platform.environment['HOME'] ?? '.'; // Use HOME or fallback
@@ -161,14 +204,50 @@ class ProcessService {
           try { await Process.run('chmod', ['+x', command]); } catch (e) { /* Warning: Could not set executable permission for internal wine */ }
         } else {
           // For regular executables with Proton, use the 'proton' script
-          command = path.join(resolvedPath, 'proton'); // Path to the 'proton' script
-           if (!await File(command).exists()) {
-              // ERROR: Proton script not found
-              onProcessExit(exe.path, -1, ['ERROR: Proton script not found: $command']);
+          // Check multiple possible locations for the proton script
+          List<String> possibleProtonPaths = [
+            path.join(resolvedPath, 'proton'),          // Direct 'proton' script
+            path.join(resolvedPath, 'proton_dist', 'bin', 'proton'),  // Some Proton builds
+            path.join(resolvedPath, 'files', 'bin', 'proton'),        // Another possible structure
+            path.join(resolvedPath, 'dist', 'bin', 'proton')          // Another structure
+          ];
+          
+          command = "";
+          for (var protonPath in possibleProtonPaths) {
+            if (await File(protonPath).exists()) {
+              command = protonPath;
+              try { 
+                await Process.run('chmod', ['+x', command]); 
+              } catch (e) { 
+                /* Warning: Could not set executable permission for proton script */ 
+              }
+              break;
+            }
+          }
+          
+          if (command.isEmpty) {
+            // If we can't find the proton script, fall back to using wine directly
+            if (await File(wineExecutablePath).exists()) {
+              command = wineExecutablePath;
+              baseArguments = [exe.path];
+              try { 
+                await Process.run('chmod', ['+x', command]); 
+              } catch (e) { 
+                /* Warning: Could not set executable permission for wine */ 
+              }
+              onProcessExit(exe.path, 0, ['WARNING: Proton script not found, falling back to wine directly']);
+            } else {
+              // ERROR: Neither Proton script nor wine executable found
+              onProcessExit(exe.path, -1, [
+                'ERROR: Neither Proton script nor wine executable found in: $resolvedPath',
+                'Checked paths: ${possibleProtonPaths.join(", ")}',
+                'Also checked wine at: $wineExecutablePath'
+              ]);
               return null;
-           }
-          try { await Process.run('chmod', ['+x', command]); } catch (e) { /* Warning: Could not set executable permission for proton script */ }
-          baseArguments = ['run', exe.path]; // Base args for Proton EXE
+            }
+          } else {
+            baseArguments = ['run', exe.path]; // Base args for Proton EXE
+          }
         }
 
       } else {
@@ -262,18 +341,27 @@ class ProcessService {
       }
       // --- End Parsing Launch Options ---
 
-      // Combine environments: Platform -> baseEnv -> launchEnv
+      // Combine environments: Platform -> baseEnv -> prefixEnv -> launchEnv
       // Set PATH and LD_LIBRARY_PATH, potentially modifying based on prefix type
       final fullEnv = {
           ...Platform.environment,
           ...baseEnv,
           'GST_PLUGIN_SYSTEM_PATH_1_0': '', // Often needed
           'WINEDLLOVERRIDES': 'winemenubuilder.exe=d', // Prevent menu building
-          ...launchEnv // Launch options override base/platform env
+          ...prefix.environmentVariables, // Include prefix-level environment variables
+          ...launchEnv // Launch options override base/platform/prefix env
       };
 
-      // Only prepend build paths for non-gaming prefixes
-      if (prefix.type != PrefixType.gaming) {
+      // Add DirectX compatibility environment variables by default for Proton and Wine
+      // These help with DirectX 12 support
+      if (prefix.type == PrefixType.proton) {
+        // Default DX12 support for Proton if not overridden
+        if (!fullEnv.containsKey('WINEESYNC')) fullEnv['WINEESYNC'] = '1';
+        if (!fullEnv.containsKey('WINEFSYNC')) fullEnv['WINEFSYNC'] = '1';
+      }
+
+      // Only prepend build paths for non-custom prefixes
+      if (prefix.type != PrefixType.custom) {
         fullEnv['PATH'] = '$wineBinDir:${Platform.environment['PATH'] ?? ''}';
         fullEnv['LD_LIBRARY_PATH'] = '$wineLib64Dir:$wineLibDir:${Platform.environment['LD_LIBRARY_PATH'] ?? ''}';
       }

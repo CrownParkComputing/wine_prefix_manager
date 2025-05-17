@@ -3,6 +3,7 @@ import 'prefix_models.dart';
 
 abstract class BaseBuild {
   final String name;
+  final String? displayName; // Added for UI display
   final String? downloadUrl; // Made optional
   final String version;
   final PrefixType type;
@@ -10,16 +11,21 @@ abstract class BaseBuild {
 
   BaseBuild({
     required this.name,
+    this.displayName, // Optional display name
     this.downloadUrl, // Optional
     required this.version,
     required this.type,
     this.installPath, // Optional
   });
+  
+  // Getter to return display name or name if display name is null
+  String get getDisplayName => displayName ?? name;
 }
 
 class WineBuild extends BaseBuild {
   WineBuild({
     required super.name,
+    super.displayName,
     required String downloadUrl, // Wine builds always have a download URL from API
     required super.version,
   }) : super(type: PrefixType.wine, downloadUrl: downloadUrl); // Pass URL to base
@@ -36,6 +42,7 @@ class WineBuild extends BaseBuild {
 class ProtonBuild extends BaseBuild {
   ProtonBuild({
     required super.name,
+    super.displayName,
     super.downloadUrl, // Can be null for installed Steam Proton
     required super.version,
     required PrefixType type, // Keep type for consistency, but it will be Proton for installed
@@ -74,7 +81,8 @@ class ProtonBuild extends BaseBuild {
      //     : PrefixType.proton;
 
      return ProtonBuild(
-        name: "$dirName (Installed)", // Indicate it's installed
+        name: dirName,
+        displayName: "$dirName (Installed)", // Indicate it's installed in display name
         version: version.isNotEmpty ? version : dirName, // Use dirName if version parsing fails
         type: PrefixType.proton, // Always assign Proton type for installed builds
         installPath: path, // Set the install path

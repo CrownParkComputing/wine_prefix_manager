@@ -195,6 +195,46 @@ class BuildService {
        // Error fetching Wine builds
     }
 
+    // --- Fetch Kronek Proton builds ---
+    try {
+      // Use the kronekProtonApiUrl setting instead of hardcoded URL
+      final kronekResponse = await http.get(Uri.parse(settings.kronekProtonApiUrl));
+      
+      if (kronekResponse.statusCode == 200) {
+        final kronekData = json.decode(kronekResponse.body);
+        final List<dynamic> assets = kronekData.containsKey('assets') 
+            ? kronekData['assets'] 
+            : [];
+        
+        List<ProtonBuild> kronekBuilds = [];
+        for (var asset in assets) {
+          try {
+            if (asset is Map<String, dynamic> && 
+                asset['name']?.toString().contains('wine-proton') == true &&
+                asset['name']?.toString().endsWith('.tar.xz') == true) {
+              // Create a Kronek Proton build with a more user-friendly name
+              final assetName = asset['name']?.toString() ?? '';
+              final displayName = assetName.replaceAll('wine-proton-', 'Kronek Proton ').replaceAll('.tar.xz', '');
+              
+              kronekBuilds.add(ProtonBuild(
+                name: assetName, // Use original asset name for file operations
+                displayName: displayName, // Use the display name for UI
+                downloadUrl: asset['browser_download_url'],
+                version: kronekData['tag_name'] ?? 'unknown',
+                type: PrefixType.proton,
+              ));
+            }
+          } catch (e) {
+            // Error parsing Kronek Proton asset
+          }
+        }
+        builds.addAll(kronekBuilds);
+        // Fetched Kronek Proton builds
+      }
+    } catch (e) {
+      // Error fetching Kronek Proton builds
+    }
+
     // --- Fetch Proton-GE builds ---
     try {
       final protonResponse = await http.get(Uri.parse(settings.protonGeApiUrl));
@@ -204,7 +244,7 @@ class BuildService {
         releases
             .whereType<Map<String, dynamic>>()
             .where((release) => release['tag_name'] != null)
-            .take(10) // Limit fetched Proton-GE builds
+            .take(2) // Limit fetched Proton-GE builds to only the latest 2
             .forEach((release) {
               try {
                 // Pass PrefixType.proton, ProtonBuild might override based on content/name
@@ -275,6 +315,43 @@ class BuildService {
       // Fallback for non-matching version strings
       return b.version.compareTo(a.version);
     });
+
+    // Filter to keep only the two latest Proton builds
+    // First, separate builds by type
+    final Map<PrefixType, List<BaseBuild>> buildsByType = {};
+    for (final build in builds) {
+      buildsByType.putIfAbsent(build.type, () => []).add(build);
+    }
+    
+    // Then filter Proton builds to keep only the latest two versions from each source
+    if (buildsByType.containsKey(PrefixType.proton)) {
+      // Separate by source (GE vs Kronek)
+      List<BaseBuild> geProtonBuilds = [];
+      List<BaseBuild> kronekProtonBuilds = [];
+      List<BaseBuild> otherProtonBuilds = []; // For Steam Proton or other sources
+      
+      for (final build in buildsByType[PrefixType.proton]!) {
+        if (build.name.contains('GE-Proton')) {
+          geProtonBuilds.add(build);
+        } else if (build.name.contains('Kronek Proton')) {
+          kronekProtonBuilds.add(build);
+        } else {
+          otherProtonBuilds.add(build);
+        }
+      }
+      
+      // Keep the latest two from each source
+      final List<BaseBuild> filteredProtonBuilds = [
+        ...geProtonBuilds.take(2),
+        ...kronekProtonBuilds.take(2),
+        ...otherProtonBuilds, // Keep all installed Steam Proton builds
+      ];
+      
+      buildsByType[PrefixType.proton] = filteredProtonBuilds;
+    }
+    
+    // Rebuild the flattened list
+    builds = buildsByType.values.expand((builds) => builds).toList();
 
     return builds;
   }

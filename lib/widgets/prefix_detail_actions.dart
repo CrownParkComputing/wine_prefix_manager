@@ -20,6 +20,8 @@ class PrefixDetailActions extends StatelessWidget {
   final PrefixActionCallback onExploreHostFiles; // Renamed callback for clarity
   final PrefixContextActionCallback onDeletePrefix; // Needs context
   final PrefixContextActionCallback onRenamePrefix; // Added callback for rename
+  final PrefixContextActionCallback onApplyControllerFix; // Added callback for controller fix
+  final PrefixContextActionCallback onEditEnvVariables; // Added callback for environment variables
 
   const PrefixDetailActions({
     Key? key,
@@ -34,6 +36,8 @@ class PrefixDetailActions extends StatelessWidget {
     required this.onExploreHostFiles, // Renamed callback
     required this.onDeletePrefix,
     required this.onRenamePrefix, // Added rename callback
+    required this.onApplyControllerFix, // Added controller fix callback
+    required this.onEditEnvVariables, // Added env variables callback
   }) : super(key: key);
 
   @override
@@ -96,6 +100,25 @@ class PrefixDetailActions extends StatelessWidget {
             Icons.folder_open_outlined, // Changed icon
             'Explore Prefix (Wine Explorer)', // Updated tooltip
             () => onExploreHostFiles(prefix), // Callback name updated for clarity
+          ),
+          _buildIconButton(
+            Icons.sports_esports_outlined, // Controller/gamepad icon
+            'Apply Controller Fix',
+            () { // Show confirmation before applying
+              showConfirmationDialog(
+                context: context,
+                title: 'Apply Controller Fix?',
+                content: Text('Apply registry changes to improve controller support in "${prefix.name}"?'
+                    '\n\nThis will add settings to enable SDL and disable Hidraw for better controller compatibility.'),
+                confirmButtonText: 'Apply',
+                onConfirm: () => onApplyControllerFix(context, prefix),
+              );
+            },
+          ),
+          _buildIconButton(
+            Icons.tune_outlined, // Environment variables icon
+            'Environment Variables',
+            () => onEditEnvVariables(context, prefix),
           ),
           _buildIconButton(
             Icons.delete_forever_outlined, // Changed icon

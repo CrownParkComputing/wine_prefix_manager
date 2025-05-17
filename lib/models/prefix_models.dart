@@ -2,7 +2,7 @@ enum PrefixType {
   wine,
   proton,
   // protonExperimental, // Removed
-  gaming, // Added Gaming type
+  custom, // Renamed from gaming to custom
 }
 
 class WinePrefix {
@@ -11,6 +11,7 @@ class WinePrefix {
   final String wineBuildPath;
   final PrefixType type;
   final List<ExeEntry> exeEntries;
+  final Map<String, String> environmentVariables; // Environment variables for the prefix
 
   final List<GameEntry>? gameEntries; // Change to final since the constructor is const
 
@@ -21,6 +22,7 @@ class WinePrefix {
     required this.type,
     required this.exeEntries,
     this.gameEntries,
+    this.environmentVariables = const {}, // Default to empty map
   });
 
   Map<String, dynamic> toJson() => {
@@ -29,6 +31,7 @@ class WinePrefix {
     'wineBuildPath': wineBuildPath,
     'type': type.toString(), // Stores as "PrefixType.proton", "PrefixType.wine", etc.
     'exeEntries': exeEntries.map((e) => e.toJson()).toList(),
+    'environmentVariables': environmentVariables, // Add environment variables to JSON
   };
 
   factory WinePrefix.fromJson(Map<String, dynamic> json) {
@@ -38,10 +41,23 @@ class WinePrefix {
       type = PrefixType.proton;
     // } else if (typeString == 'PrefixType.protonExperimental') { // Removed handling
     //   type = PrefixType.protonExperimental;
-    } else if (typeString == 'PrefixType.gaming') { // Handle Gaming type
-      type = PrefixType.gaming;
+    } else if (typeString == 'PrefixType.gaming') { // Handle legacy Gaming type
+      type = PrefixType.custom; // Convert to custom
+    } else if (typeString == 'PrefixType.custom') { // Handle custom type
+      type = PrefixType.custom;
     } else {
       type = PrefixType.wine; // Default to wine
+    }
+
+    // Parse environment variables if present
+    Map<String, String> envVars = {};
+    final rawEnvVars = json['environmentVariables'];
+    if (rawEnvVars != null && rawEnvVars is Map) {
+      rawEnvVars.forEach((key, value) {
+        if (key is String && value is String) {
+          envVars[key] = value;
+        }
+      });
     }
 
     return WinePrefix(
@@ -52,6 +68,7 @@ class WinePrefix {
       exeEntries: (json['exeEntries'] as List)
           .map((e) => ExeEntry.fromJson(e))
           .toList(),
+      environmentVariables: envVars, // Add environment variables
     );
   }
 
@@ -61,6 +78,7 @@ class WinePrefix {
     String? wineBuildPath,
     PrefixType? type,
     List<ExeEntry>? exeEntries,
+    Map<String, String>? environmentVariables,
   }) {
     return WinePrefix(
       name: name ?? this.name,
@@ -68,6 +86,7 @@ class WinePrefix {
       wineBuildPath: wineBuildPath ?? this.wineBuildPath,
       type: type ?? this.type,
       exeEntries: exeEntries ?? this.exeEntries,
+      environmentVariables: environmentVariables ?? this.environmentVariables,
     );
   }
 }
@@ -155,7 +174,7 @@ class ExeEntry {
         } else if (overrideTypeString == 'PrefixType.wine') {
            overrideType = PrefixType.wine;
         } else if (overrideTypeString == 'PrefixType.gaming') { // Handle Gaming type
-           overrideType = PrefixType.gaming;
+           overrideType = PrefixType.custom;
         }
      }
 

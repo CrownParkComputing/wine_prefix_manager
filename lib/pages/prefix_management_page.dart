@@ -38,6 +38,9 @@ class PrefixManagementPage extends StatefulWidget {
   final Function(BuildContext, WinePrefix, ExeEntry) onDeleteExecutable; // Keep Function for now
   final PrefixContextActionCallback onRunWinecfg; // Re-add
   final OnRenamePrefixAction onRenamePrefix; // Add rename callback parameter
+  final PrefixContextActionCallback onApplyControllerFix; // Add controller fix callback
+  final PrefixContextActionCallback onEditEnvVariables; // Add environment variables callback
+  final PrefixType prefixTypeFilter; // Add prefix type filter parameter
 
   const PrefixManagementPage({
     Key? key,
@@ -56,6 +59,9 @@ class PrefixManagementPage extends StatefulWidget {
     required this.onRunInstaller,
     required this.onExploreHostFiles,
     required this.onRunWinecfg,
+    required this.onApplyControllerFix, // Add controller fix parameter
+    required this.onEditEnvVariables, // Add environment variables parameter
+    required this.prefixTypeFilter, // Make prefix type filter required
   }) : super(key: key);
 
   @override
@@ -86,19 +92,22 @@ class _PrefixManagementPageState extends State<PrefixManagementPage> {
   @override
   Widget build(BuildContext context) {
     final prefixProvider = context.watch<PrefixProvider>();
-    final prefixes = prefixProvider.prefixes;
+    // Filter the prefixes by type
+    final prefixes = prefixProvider.prefixes
+        .where((prefix) => prefix.type == widget.prefixTypeFilter)
+        .toList();
 
     return Scaffold(
       body: prefixes.isEmpty
-          ? const Center(
+          ? Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.folder_off_outlined, size: 64, color: Colors.grey),
-                  SizedBox(height: 16),
-                  Text('No prefixes found.', style: TextStyle(fontSize: 18)),
-                  SizedBox(height: 8),
-                  Text('Create a new prefix using the "Create" tab.', style: TextStyle(color: Colors.grey)),
+                  const Icon(Icons.folder_off_outlined, size: 64, color: Colors.grey),
+                  const SizedBox(height: 16),
+                  Text('No ${widget.prefixTypeFilter.name} prefixes found.', style: const TextStyle(fontSize: 18)),
+                  const SizedBox(height: 8),
+                  const Text('Create a new prefix using the "Create" tab.', style: TextStyle(color: Colors.grey)),
                 ],
               ),
             )
@@ -138,6 +147,8 @@ class _PrefixManagementPageState extends State<PrefixManagementPage> {
                         onRunWinetricksGui: widget.onRunWinetricksGui,
                         onRunInstaller: widget.onRunInstaller,
                         onExploreHostFiles: widget.onExploreHostFiles,
+                        onApplyControllerFix: widget.onApplyControllerFix, // Pass controller fix callback
+                        onEditEnvVariables: widget.onEditEnvVariables, // Pass environment variables callback
                       ),
                       if (prefix.exeEntries.isNotEmpty) ...[
                         const Divider(height: 1, indent: 16, endIndent: 16),

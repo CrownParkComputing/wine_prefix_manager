@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import '../models/prefix_models.dart';
 import '../models/settings.dart';
 import '../pages/prefix_management_page.dart'; // Import the refactored page
-import '../widgets/prefix_creation_form.dart'; // Import the new form widget
+import '../widgets/prefix_creation_form.dart'; // Import the original form widget
+import '../widgets/prefix_creation_form_for_type.dart'; // Import the type-specific form widget
 
 // Define callback types needed by child widgets, to be passed from main.dart
 typedef OnExeAction = Future<void> Function(WinePrefix prefix, ExeEntry exe);
@@ -31,6 +32,8 @@ class ManagePrefixesPage extends StatefulWidget {
   final Function(BuildContext, WinePrefix, ExeEntry) onDeleteExecutable; // Keep delete actions for now
   final OnPrefixContextAction onRunWinecfg; // Re-add
   final OnRenamePrefixAction onRenamePrefix; // Add rename callback
+  final OnPrefixContextAction onApplyControllerFix; // Add controller fix callback
+  final OnPrefixContextAction onEditEnvVariables; // Add environment variables callback
 
   // Constructor updated to include necessary callbacks again
   const ManagePrefixesPage({
@@ -50,19 +53,21 @@ class ManagePrefixesPage extends StatefulWidget {
     required this.onExploreHostFiles,
     required this.onRunWinecfg,
     required this.onRenamePrefix, // Add rename callback
+    required this.onApplyControllerFix, // Add controller fix callback
+    required this.onEditEnvVariables, // Add environment variables callback
   }) : super(key: key);
 
   @override
   State<ManagePrefixesPage> createState() => _ManagePrefixesPageState();
 }
 
-class _ManagePrefixesPageState extends State<ManagePrefixesPage> with SingleTickerProviderStateMixin {
+class _ManagePrefixesPageState extends State<ManagePrefixesPage> with TickerProviderStateMixin {
   late TabController _tabController;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
   }
 
   @override
@@ -75,11 +80,13 @@ class _ManagePrefixesPageState extends State<ManagePrefixesPage> with SingleTick
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        title: const Text('Manage Prefixes'),
         bottom: TabBar(
           controller: _tabController,
           tabs: const [
-            Tab(icon: Icon(Icons.list_alt), text: 'Manage Prefixes'),
-            Tab(icon: Icon(Icons.add_circle_outline), text: 'Create New Prefix'),
+            Tab(icon: Icon(Icons.sports_esports), text: 'Custom'),
+            Tab(icon: Icon(Icons.wine_bar), text: 'Wine'),
+            Tab(icon: Icon(Icons.games), text: 'Proton'),
           ],
         ),
         automaticallyImplyLeading: false,
@@ -88,28 +95,64 @@ class _ManagePrefixesPageState extends State<ManagePrefixesPage> with SingleTick
       body: TabBarView(
         controller: _tabController,
         children: [
-          // "Manage" Tab
+          // Custom Tab
           PrefixManagementPage(
-            // Pass down all necessary callbacks
             settings: widget.settings,
             onAddExecutable: widget.onAddExecutable,
-            onShowCommonComponents: widget.onShowCommonComponents, // Pass updated signature
+            onShowCommonComponents: widget.onShowCommonComponents,
             onDeletePrefix: widget.onDeletePrefix,
             onDeleteExecutable: widget.onDeleteExecutable,
-            onRenamePrefix: widget.onRenamePrefix, // Pass rename callback
-            // Pass down re-added callbacks
+            onRenamePrefix: widget.onRenamePrefix,
             onRunExe: widget.onRunExe,
             onKillProcess: widget.onKillProcess,
             runningProcesses: widget.runningProcesses,
             onRunWinetricksGui: widget.onRunWinetricksGui,
-            // onShowWinetricksVerbs: widget.onShowWinetricksVerbs, // Removed
             onRunInstaller: widget.onRunInstaller,
             onExploreHostFiles: widget.onExploreHostFiles,
             onRunWinecfg: widget.onRunWinecfg,
+            onApplyControllerFix: widget.onApplyControllerFix,
+            onEditEnvVariables: widget.onEditEnvVariables,
+            prefixTypeFilter: PrefixType.custom,
           ),
-          // "Create" Tab
-          PrefixCreationForm(
+          
+          // Wine Tab
+          PrefixManagementPage(
             settings: widget.settings,
+            onAddExecutable: widget.onAddExecutable,
+            onShowCommonComponents: widget.onShowCommonComponents,
+            onDeletePrefix: widget.onDeletePrefix,
+            onDeleteExecutable: widget.onDeleteExecutable,
+            onRenamePrefix: widget.onRenamePrefix,
+            onRunExe: widget.onRunExe,
+            onKillProcess: widget.onKillProcess,
+            runningProcesses: widget.runningProcesses,
+            onRunWinetricksGui: widget.onRunWinetricksGui,
+            onRunInstaller: widget.onRunInstaller,
+            onExploreHostFiles: widget.onExploreHostFiles,
+            onRunWinecfg: widget.onRunWinecfg,
+            onApplyControllerFix: widget.onApplyControllerFix,
+            onEditEnvVariables: widget.onEditEnvVariables,
+            prefixTypeFilter: PrefixType.wine,
+          ),
+          
+          // Proton Tab
+          PrefixManagementPage(
+            settings: widget.settings,
+            onAddExecutable: widget.onAddExecutable,
+            onShowCommonComponents: widget.onShowCommonComponents,
+            onDeletePrefix: widget.onDeletePrefix,
+            onDeleteExecutable: widget.onDeleteExecutable,
+            onRenamePrefix: widget.onRenamePrefix,
+            onRunExe: widget.onRunExe,
+            onKillProcess: widget.onKillProcess,
+            runningProcesses: widget.runningProcesses,
+            onRunWinetricksGui: widget.onRunWinetricksGui,
+            onRunInstaller: widget.onRunInstaller,
+            onExploreHostFiles: widget.onExploreHostFiles,
+            onRunWinecfg: widget.onRunWinecfg,
+            onApplyControllerFix: widget.onApplyControllerFix,
+            onEditEnvVariables: widget.onEditEnvVariables,
+            prefixTypeFilter: PrefixType.proton,
           ),
         ],
       ),

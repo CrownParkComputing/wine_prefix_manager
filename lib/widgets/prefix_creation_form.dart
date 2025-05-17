@@ -10,21 +10,27 @@ import '../models/prefix_models.dart'; // Import PrefixType
 
 class PrefixCreationForm extends StatefulWidget {
   final Settings? settings;
+  final PrefixType? initialPrefixType; // Added parameter for initial tab selection
 
-  const PrefixCreationForm({Key? key, required this.settings}) : super(key: key);
+  const PrefixCreationForm({
+    Key? key, 
+    required this.settings,
+    this.initialPrefixType, // Optional parameter
+  }) : super(key: key);
 
   @override
   State<PrefixCreationForm> createState() => _PrefixCreationFormState();
 }
 
-class _PrefixCreationFormState extends State<PrefixCreationForm> {
+class _PrefixCreationFormState extends State<PrefixCreationForm> with TickerProviderStateMixin {
   List<BaseBuild> _builds = [];
   BaseBuild? _selectedBuild;
-  PrefixType _selectedPrefixType = PrefixType.wine;
   bool _isLoading = false; // Loading state for this form
   String _prefixName = '';
-  String _status = ''; // Status messages for this form
+  String _status = 'Ready'; // Status messages for this form
   final TextEditingController _prefixNameController = TextEditingController();
+  TabController? _prefixTabController;
+  PrefixType _selectedPrefixType = PrefixType.custom; // Added for selected prefix type
 
   // Service instances needed for this form
   final BuildService _buildService = BuildService();
@@ -34,6 +40,16 @@ class _PrefixCreationFormState extends State<PrefixCreationForm> {
   @override
   void initState() {
     super.initState();
+    
+    // Only create the TabController if we're not inside CreatePrefixPage
+    if (widget.initialPrefixType == null) {
+      _prefixTabController = TabController(length: 3, vsync: this);
+      _prefixTabController!.addListener(_updateSelectedType);
+    } else {
+      // If we're in CreatePrefixPage, set the selected type directly
+      _selectedPrefixType = widget.initialPrefixType!;
+    }
+    
     _initialize();
   }
 
@@ -48,6 +64,10 @@ class _PrefixCreationFormState extends State<PrefixCreationForm> {
   @override
   void dispose() {
     _prefixNameController.dispose();
+    // Only dispose the TabController if it was created
+    if (_prefixTabController != null) {
+      _prefixTabController!.dispose();
+    }
     super.dispose();
   }
 
@@ -92,13 +112,13 @@ class _PrefixCreationFormState extends State<PrefixCreationForm> {
     }
   }
 
-  Future<void> _downloadAndCreatePrefix() async {
+  Future<void> _downloadAndCreatePrefix(PrefixType prefixType) async {
     if (widget.settings == null) {
        _updateStatus('Settings not loaded.', isError: true);
        return;
     }
-    // Requires a build only if not Gaming type
-    if (_selectedPrefixType != PrefixType.gaming && _selectedBuild == null) {
+    // Requires a build only if not Custom type
+    if (prefixType != PrefixType.custom && _selectedBuild == null) {
       _updateStatus('Please select a build.', isError: true);
       return;
     }
@@ -124,16 +144,14 @@ class _PrefixCreationFormState extends State<PrefixCreationForm> {
     });
     _logService.log('Starting prefix creation for "$_prefixName"...');
 
-
     try {
-      // Pass the explicitly selected prefix type (_selectedPrefixType)
-      // The service will use this type when creating the WinePrefix object.
+      // Pass the explicitly selected prefix type
       final newPrefix = await _prefixCreationService.downloadAndCreatePrefix(
-        // For Gaming type, selectedBuild might be null, handle this in the service
-        selectedBuild: _selectedBuild, // Pass the selected build (can be null for Gaming)
+        // For Custom type, selectedBuild might be null, handle this in the service
+        selectedBuild: _selectedBuild, // Pass the selected build (can be null for Custom)
         prefixName: _prefixName,
         settings: widget.settings!,
-        prefixType: _selectedPrefixType, // Pass the type selected in the UI
+        prefixType: prefixType, // Pass the tab's prefix type
         onStatusUpdate: (status) {
           // Update local status, don't log here as service might log too
           if (mounted) setState(() { _status = status; });
@@ -176,63 +194,64 @@ class _PrefixCreationFormState extends State<PrefixCreationForm> {
         return 'Wine';
       case PrefixType.proton:
         return 'Proton';
-      // case PrefixType.protonExperimental: // Removed case
-      //   return 'Proton Exp.';
-      case PrefixType.gaming:
-        return 'Gaming';
-    }
-  }
-
-  // Helper to get icon for PrefixType
-  IconData _getPrefixTypeIcon(PrefixType type) {
-    switch (type) {
-      case PrefixType.wine:
-        return Icons.wine_bar;
-      case PrefixType.proton:
-        return Icons.games; // Standard Proton icon
-      // case PrefixType.protonExperimental: // Removed case
-      //   return Icons.science;
-      case PrefixType.gaming:
-        return Icons.sports_esports; // Gaming icon
+      case PrefixType.custom:
+        return 'Custom';
     }
   }
 
   @override
   Widget build(BuildContext context) {
-     final prefixProvider = context.watch<PrefixProvider>(); // Needed for name check
+    final prefixProvider = context.watch<PrefixProvider>(); // Needed for name check
 
-     bool checkPrefixExists(String name) {
-       return prefixProvider.prefixes.any((p) => p.name == name);
-     }
+    bool checkPrefixExists(String name) {
+      return prefixProvider.prefixes.any((p) => p.name == name);
+    }
 
-     // --- Filter builds based on selected type ---
-     // Now directly filter based on the selected UI type
-     // Only filter if not Gaming type
-     final filteredBuilds = _selectedPrefixType == PrefixType.gaming
-         ? <BaseBuild>[] // No builds needed for Gaming type
-         : _builds.where((build) => build.type == _selectedPrefixType).toList();
-
-     // Ensure selected build is valid for the current type filter
-     // Check against the actual selected type, not the filtered type
-     if (_selectedBuild != null && _selectedBuild!.type != _selectedPrefixType) {
-        // Use a post-frame callback to safely reset _selectedBuild after the build phase
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            setState(() {
-              _selectedBuild = null;
-            });
-          }
-        });
-     }
-     // --- End Filter builds ---
-
+    // If initialPrefixType is specified, return only the specific tab content
+    if (widget.initialPrefixType != null) {
+      switch (widget.initialPrefixType!) {
+        case PrefixType.wine:
+          return _buildWinePrefixTab(checkPrefixExists);
+        case PrefixType.proton:
+          return _buildProtonPrefixTab(checkPrefixExists);
+        default:
+          return _buildCustomPrefixTab(checkPrefixExists);
+      }
+    } else {
+      // When used standalone (not in CreatePrefixPage), show our own tabs
+      return DefaultTabController(
+        length: 3,
+        child: Scaffold(
+          appBar: AppBar(
+            title: const Text('Create New Prefix'),
+            bottom: const TabBar(
+              tabs: [
+                Tab(icon: Icon(Icons.sports_esports), text: 'Custom'),
+                Tab(icon: Icon(Icons.wine_bar), text: 'Wine'),
+                Tab(icon: Icon(Icons.games), text: 'Proton'),
+              ],
+            ),
+          ),
+          body: TabBarView(
+            children: [
+              _buildCustomPrefixTab(checkPrefixExists),
+              _buildWinePrefixTab(checkPrefixExists),
+              _buildProtonPrefixTab(checkPrefixExists),
+            ],
+          ),
+        ),
+      );
+    }
+  }
+  
+  Widget _buildCustomPrefixTab(bool Function(String) checkPrefixExists) {
     return SingleChildScrollView(
       child: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // --- Select Prefix Type ---
+            // Prefix Name Card
             Card(
               elevation: 3, margin: const EdgeInsets.only(bottom: 24),
               child: Padding(
@@ -240,23 +259,20 @@ class _PrefixCreationFormState extends State<PrefixCreationForm> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Select Prefix Type', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    const Text('Custom Prefix Name', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 16),
-                    SegmentedButton<PrefixType>(
-                      // Filter out the removed type before mapping
-                      segments: PrefixType.values
-                          // .where((type) => type != PrefixType.protonExperimental) // No longer needed as enum value is removed
-                          .map((type) => ButtonSegment<PrefixType>(
-                        value: type,
-                        label: Text(_getPrefixTypeName(type)),
-                        icon: Icon(_getPrefixTypeIcon(type)),
-                      )).toList(),
-                      selected: {_selectedPrefixType},
-                      onSelectionChanged: (Set<PrefixType> newSelection) {
-                        setState(() {
-                          _selectedPrefixType = newSelection.first;
-                          // _selectedBuild = null; // Resetting here can cause issues during build phase
-                        });
+                    TextField(
+                      controller: _prefixNameController,
+                      decoration: InputDecoration(
+                        hintText: 'Enter a name for the prefix',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        prefixIcon: const Icon(Icons.create_new_folder),
+                        errorText: _prefixName.isNotEmpty && checkPrefixExists(_prefixName)
+                            ? 'Prefix name already exists'
+                            : null,
+                      ),
+                      onChanged: (value) {
+                        setState(() { _prefixName = value.trim(); });
                       },
                     ),
                   ],
@@ -264,34 +280,86 @@ class _PrefixCreationFormState extends State<PrefixCreationForm> {
               ),
             ),
 
-            // --- Select Build ---
+            // Description Card
             Card(
-              // Hide build selection if Gaming type is selected
-              child: _selectedPrefixType == PrefixType.gaming ? const SizedBox.shrink() : Padding(
+              elevation: 3, margin: const EdgeInsets.only(bottom: 24),
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('About Custom Prefixes', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Custom prefixes use your system-installed Wine and include essential components like DXVK and VKD3D-Proton for better gaming performance.',
+                      style: TextStyle(fontSize: 14),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // Create Button
+            SizedBox(
+              width: double.infinity, height: 50,
+              child: ElevatedButton.icon(
+                onPressed: (_isLoading || _prefixName.isEmpty || checkPrefixExists(_prefixName)) 
+                  ? null
+                  : () => _downloadAndCreatePrefix(PrefixType.custom),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Theme.of(context).colorScheme.primary,
+                  foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                ),
+                icon: _isLoading ? SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Theme.of(context).colorScheme.onPrimary)) : const Icon(Icons.add_circle),
+                label: Text(_isLoading ? 'Creating...' : 'Create Custom Prefix', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              ),
+            ),
+
+            // Status message
+            _buildStatusMessage(),
+          ],
+        ),
+      ),
+    );
+  }
+  
+  Widget _buildWinePrefixTab(bool Function(String) checkPrefixExists) {
+    // Filter builds for Wine
+    final wineBuilds = _builds.where((build) => build.type == PrefixType.wine).toList();
+    
+    return SingleChildScrollView(
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Build Selection Card
+            Card(
+              elevation: 3, margin: const EdgeInsets.only(bottom: 24),
+              child: Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
-                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                       children: [
-                         // Dynamically update title based on selected type
-                         Text('Select ${_getPrefixTypeName(_selectedPrefixType)} Build', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                         IconButton(
-                           icon: const Icon(Icons.refresh),
-                           tooltip: 'Refresh Builds',
-                           onPressed: _isLoading ? null : _fetchBuilds,
-                         ),
-                       ],
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Select Wine Build', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                        IconButton(
+                          icon: const Icon(Icons.refresh),
+                          tooltip: 'Refresh Builds',
+                          onPressed: _isLoading ? null : _fetchBuilds,
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 16),
                     _isLoading && _builds.isEmpty
                       ? const Center(child: CircularProgressIndicator())
-                      : filteredBuilds.isEmpty
+                      : wineBuilds.isEmpty
                         ? Center(
                             child: Column(
                               children: [
-                                Text('No builds available for ${_getPrefixTypeName(_selectedPrefixType)}.'),
+                                const Text('No Wine builds available.'),
                                 const SizedBox(height: 8),
                                 ElevatedButton.icon(
                                   onPressed: _fetchBuilds,
@@ -308,25 +376,23 @@ class _PrefixCreationFormState extends State<PrefixCreationForm> {
                             ),
                             child: DropdownButtonHideUnderline(
                               child: DropdownButton<BaseBuild>(
-                                value: _selectedBuild,
+                                value: _selectedBuild?.type == PrefixType.wine ? _selectedBuild : null,
                                 onChanged: (BaseBuild? newValue) {
-                                  // Prevent selecting installed builds for creation
                                   if (newValue != null && newValue.installPath != null) {
-                                     _updateStatus('Cannot create prefix from installed build yet.', isError: true);
-                                     return; // Don't update selection
+                                    _updateStatus('Cannot create prefix from installed build yet.', isError: true);
+                                    return;
                                   }
                                   setState(() { _selectedBuild = newValue; });
                                 },
-                                hint: Text('   Select a ${_getPrefixTypeName(_selectedPrefixType)} build'),
+                                hint: const Text('   Select a Wine build'),
                                 isExpanded: true,
                                 padding: const EdgeInsets.symmetric(horizontal: 16),
-                                items: filteredBuilds
+                                items: wineBuilds
                                     .map((build) {
                                        final bool isInstalled = build.installPath != null;
-                                       final String displayName = isInstalled ? "${build.name} (Installed)" : build.name;
+                                       final String displayName = isInstalled ? "${build.getDisplayName} (Installed)" : build.getDisplayName;
                                        return DropdownMenuItem<BaseBuild>(
                                           value: build,
-                                          // Disable installed builds for now
                                           enabled: !isInstalled,
                                           child: Text(
                                              displayName,
@@ -345,7 +411,7 @@ class _PrefixCreationFormState extends State<PrefixCreationForm> {
               ),
             ),
 
-            // --- Prefix Name ---
+            // Prefix Name Card
             Card(
               elevation: 3, margin: const EdgeInsets.only(bottom: 24),
               child: Padding(
@@ -353,7 +419,7 @@ class _PrefixCreationFormState extends State<PrefixCreationForm> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Prefix Name', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    const Text('Wine Prefix Name', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 16),
                     TextField(
                       controller: _prefixNameController,
@@ -366,7 +432,6 @@ class _PrefixCreationFormState extends State<PrefixCreationForm> {
                             : null,
                       ),
                       onChanged: (value) {
-                        // Use setState to update _prefixName and trigger rebuild for errorText check
                         setState(() { _prefixName = value.trim(); });
                       },
                     ),
@@ -375,70 +440,252 @@ class _PrefixCreationFormState extends State<PrefixCreationForm> {
               ),
             ),
 
-            const SizedBox(height: 8),
-
-            // --- Create Button ---
+            // Create Button
             SizedBox(
               width: double.infinity, height: 50,
               child: ElevatedButton.icon(
-                // Disable button if selected build is installed
-                // Adjust condition for Gaming type (doesn't need _selectedBuild)
-                onPressed: (_isLoading ||
-                          (_selectedPrefixType != PrefixType.gaming && (_selectedBuild == null || _selectedBuild!.installPath != null)) || // Check build only if not Gaming
-                          _prefixName.isEmpty || checkPrefixExists(_prefixName)) ? null
-                  : _downloadAndCreatePrefix,
+                onPressed: (_isLoading || _selectedBuild?.type != PrefixType.wine || _prefixName.isEmpty || checkPrefixExists(_prefixName)) 
+                  ? null
+                  : () => _downloadAndCreatePrefix(PrefixType.wine),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Theme.of(context).colorScheme.primary,
                   foregroundColor: Theme.of(context).colorScheme.onPrimary,
                 ),
                 icon: _isLoading ? SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Theme.of(context).colorScheme.onPrimary)) : const Icon(Icons.add_circle),
-                label: Text(_isLoading ? 'Creating...' : 'Create Prefix', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                label: Text(_isLoading ? 'Creating...' : 'Create Wine Prefix', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               ),
             ),
 
-            // --- Status Display Area ---
-            if (_status.isNotEmpty)
-               Padding(
-                 padding: const EdgeInsets.only(top: 24),
-                 child: Card(
-                   color: _status.contains('Error') || _status.contains('Failed') || _status.contains('already exists') || _status.contains('not yet supported')
-                     ? Theme.of(context).colorScheme.errorContainer
-                     : Theme.of(context).colorScheme.primaryContainer,
-                   child: Padding(
-                     padding: const EdgeInsets.all(12),
-                     child: Row(
-                       children: [
-                         if (_isLoading && !_status.toLowerCase().contains('starting'))
-                             Padding(
-                               padding: const EdgeInsets.only(right: 12.0),
-                               child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Theme.of(context).colorScheme.primary)),
-                             )
-                         else
-                             Icon(
-                               _status.contains('Error') || _status.contains('Failed') || _status.contains('already exists') || _status.contains('not yet supported') ? Icons.error : Icons.info,
-                               color: _status.contains('Error') || _status.contains('Failed') || _status.contains('already exists') || _status.contains('not yet supported')
-                                 ? Theme.of(context).colorScheme.error
-                                 : Theme.of(context).colorScheme.primary,
-                             ),
-                         const SizedBox(width: 12),
-                         Expanded(
-                           child: Text(
-                             _status,
-                             style: TextStyle(
-                               color: _status.contains('Error') || _status.contains('Failed') || _status.contains('already exists') || _status.contains('not yet supported')
-                                 ? Theme.of(context).colorScheme.onErrorContainer
-                                 : Theme.of(context).colorScheme.onPrimaryContainer,
-                             ),
-                           ),
-                         ),
-                       ],
-                     ),
-                   ),
-                 ),
-               ),
+            // Status message
+            _buildStatusMessage(),
           ],
         ),
       ),
     );
+  }
+  
+  Widget _buildProtonPrefixTab(bool Function(String) checkPrefixExists) {
+    // Filter builds for Proton
+    final protonBuilds = _builds.where((build) => build.type == PrefixType.proton).toList();
+    
+    return SingleChildScrollView(
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Build Selection Card
+            Card(
+              elevation: 3, margin: const EdgeInsets.only(bottom: 24),
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Select Proton Build', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                        IconButton(
+                          icon: const Icon(Icons.refresh),
+                          tooltip: 'Refresh Builds',
+                          onPressed: _isLoading ? null : _fetchBuilds,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    // Add info message for Proton builds
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12.0),
+                      child: Text(
+                        'Both GE-Proton and Kronek Proton builds are available for selection.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Theme.of(context).colorScheme.secondary,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ),
+                    _isLoading && _builds.isEmpty
+                      ? const Center(child: CircularProgressIndicator())
+                      : protonBuilds.isEmpty
+                        ? Center(
+                            child: Column(
+                              children: [
+                                const Text('No Proton builds available.'),
+                                const SizedBox(height: 8),
+                                ElevatedButton.icon(
+                                  onPressed: _fetchBuilds,
+                                  icon: const Icon(Icons.refresh),
+                                  label: const Text('Refresh Builds'),
+                                ),
+                              ],
+                            ),
+                          )
+                        : Container(
+                            decoration: BoxDecoration(
+                              border: Border.all(color: Theme.of(context).colorScheme.outline),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<BaseBuild>(
+                                value: _selectedBuild?.type == PrefixType.proton ? _selectedBuild : null,
+                                onChanged: (BaseBuild? newValue) {
+                                  if (newValue != null && newValue.installPath != null) {
+                                    _updateStatus('Cannot create prefix from installed build yet.', isError: true);
+                                    return;
+                                  }
+                                  setState(() { _selectedBuild = newValue; });
+                                },
+                                hint: const Text('   Select a Proton build'),
+                                isExpanded: true,
+                                padding: const EdgeInsets.symmetric(horizontal: 16),
+                                items: protonBuilds
+                                    .map((build) {
+                                       final bool isInstalled = build.installPath != null;
+                                       String displayName = isInstalled ? "${build.getDisplayName} (Installed)" : build.getDisplayName;
+                                       
+                                       // Add source label icons
+                                       Widget? leadingIcon;
+                                       if (build.name.contains('GE-Proton')) {
+                                         leadingIcon = const Icon(Icons.extension, size: 16, color: Colors.green);
+                                       } else if (build.name.contains('wine-proton')) {
+                                         // No need to modify the display name since we're using getDisplayName now
+                                         leadingIcon = const Icon(Icons.wine_bar, size: 16, color: Colors.deepPurple);
+                                       }
+                                       
+                                       return DropdownMenuItem<BaseBuild>(
+                                          value: build,
+                                          enabled: !isInstalled,
+                                          child: Row(
+                                            children: [
+                                              if (leadingIcon != null) ...[
+                                                leadingIcon,
+                                                const SizedBox(width: 8),
+                                              ],
+                                              Expanded(
+                                                child: Text(
+                                                  displayName,
+                                                  style: TextStyle(
+                                                    color: isInstalled ? Theme.of(context).disabledColor : null,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                    })
+                                    .toList(),
+                              ),
+                            ),
+                          ),
+                  ],
+                ),
+              ),
+            ),
+
+            // Prefix Name Card
+            Card(
+              elevation: 3, margin: const EdgeInsets.only(bottom: 24),
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Proton Prefix Name', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _prefixNameController,
+                      decoration: InputDecoration(
+                        hintText: 'Enter a name for the prefix',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        prefixIcon: const Icon(Icons.create_new_folder),
+                        errorText: _prefixName.isNotEmpty && checkPrefixExists(_prefixName)
+                            ? 'Prefix name already exists'
+                            : null,
+                      ),
+                      onChanged: (value) {
+                        setState(() { _prefixName = value.trim(); });
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // Create Button
+            SizedBox(
+              width: double.infinity, height: 50,
+              child: ElevatedButton.icon(
+                onPressed: (_isLoading || _selectedBuild?.type != PrefixType.proton || _prefixName.isEmpty || checkPrefixExists(_prefixName)) 
+                  ? null
+                  : () => _downloadAndCreatePrefix(PrefixType.proton),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Theme.of(context).colorScheme.primary,
+                  foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                ),
+                icon: _isLoading ? SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Theme.of(context).colorScheme.onPrimary)) : const Icon(Icons.add_circle),
+                label: Text(_isLoading ? 'Creating...' : 'Create Proton Prefix', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              ),
+            ),
+
+            // Status message
+            _buildStatusMessage(),
+          ],
+        ),
+      ),
+    );
+  }
+  
+  Widget _buildStatusMessage() {
+    if (_status.isEmpty) return const SizedBox.shrink();
+    
+    return Padding(
+      padding: const EdgeInsets.only(top: 24),
+      child: Card(
+        color: _status.contains('Error') || _status.contains('Failed') || _status.contains('already exists') || _status.contains('not yet supported')
+          ? Theme.of(context).colorScheme.errorContainer
+          : Theme.of(context).colorScheme.primaryContainer,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              if (_isLoading && !_status.toLowerCase().contains('starting'))
+                  Padding(
+                    padding: const EdgeInsets.only(right: 12.0),
+                    child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Theme.of(context).colorScheme.primary)),
+                  )
+              else
+                  Icon(
+                    _status.contains('Error') || _status.contains('Failed') || _status.contains('already exists') || _status.contains('not yet supported') ? Icons.error : Icons.info,
+                    color: _status.contains('Error') || _status.contains('Failed') || _status.contains('already exists') || _status.contains('not yet supported')
+                      ? Theme.of(context).colorScheme.error
+                      : Theme.of(context).colorScheme.primary,
+                  ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  _status,
+                  style: TextStyle(
+                    color: _status.contains('Error') || _status.contains('Failed') || _status.contains('already exists') || _status.contains('not yet supported')
+                      ? Theme.of(context).colorScheme.onErrorContainer
+                      : Theme.of(context).colorScheme.onPrimaryContainer,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _updateSelectedType() {
+    // Only update if _prefixTabController is not null
+    if (_prefixTabController != null) {
+      setState(() {
+        _selectedPrefixType = PrefixType.values[_prefixTabController!.index];
+      });
+    }
   }
 }

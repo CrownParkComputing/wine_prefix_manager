@@ -24,10 +24,12 @@ import 'services/ui_action_service.dart'; // Import UIActionService
 // import 'widgets/custom_title_bar.dart'; // Removed import
 import 'pages/home_page.dart';
 import 'pages/manage_prefixes_page.dart';
+import 'pages/create_prefix_page.dart'; // Add import for CreatePrefixPage
 import 'pages/settings_page.dart';
 import 'pages/logs_page.dart';
 import 'pages/file_manager_page.dart';
 import 'widgets/rename_prefix_dialog.dart'; // Import RenamePrefixDialog
+import 'widgets/env_variables_dialog.dart'; // Add import for environment variables dialog
 
 // Constants
 // const String appTitle = 'Wine Prefix Manager'; // Removed
@@ -127,6 +129,8 @@ class _MyAppState extends State<MyApp> {
         prefixProvider.updateSettings(_settings); // Pass settings to PrefixProvider
         // Load prefixes after settings are available
         prefixProvider.loadPrefixes();
+        // Scan for any new prefixes that might not be in the saved state
+        prefixProvider.scanForPrefixes();
       }
     });
 
@@ -159,6 +163,10 @@ class _MyAppState extends State<MyApp> {
           theme: themeProvider.themeData, // Use dynamic theme data
           themeMode: themeProvider.isDarkMode ? ThemeMode.dark : ThemeMode.light, // Set mode based on provider state
           debugShowCheckedModeBanner: false,
+          // Add named routes
+          routes: {
+            '/create_prefix': (context) => const CreatePrefixPage(),
+          },
         );
       },
     );
@@ -230,117 +238,141 @@ class _MainScaffoldState extends State<MainScaffold> {
   }
 
   Widget _buildPage(int index) {
-    // Get Providers here to use in callbacks
     final prefixProvider = Provider.of<PrefixProvider>(context, listen: false);
     final processService = Provider.of<ProcessService>(context, listen: false);
     final prefixManagementService = Provider.of<PrefixManagementService>(context, listen: false);
-    final logService = Provider.of<LogService>(context, listen: false); // Get LogService
-
-    // Pass the UIActionService methods down as needed
+    final logService = Provider.of<LogService>(context, listen: false);
+    
     switch (index) {
       case 0:
         return HomePage(
           onNavigateToTab: navigateToTab,
         );
       case 1:
-        // Get settings from SettingsProvider
-           final settingsProvider = Provider.of<SettingsProvider>(context, listen: true);
-           return ManagePrefixesPage(
-           settings: settingsProvider.settings,
-           onAddExecutable: (prefix) => _uiActionService.addExecutableToPrefix(context, prefix),
-           onShowCommonComponents: (context, prefix) => _uiActionService.showCommonComponentsDialog(context, prefix),
-           onDeletePrefix: (ctx, pfx) => prefixProvider.deletePrefix(pfx),
-           onDeleteExecutable: (ctx, pfx, exe) => prefixProvider.deleteExecutable(pfx, exe),
-           onRenamePrefix: (ctx, pfx, newName) async {
-              try {
-                 await prefixProvider.renamePrefix(pfx, newName);
-                 if (mounted) {
-                    ScaffoldMessenger.of(ctx).showSnackBar(
-                       SnackBar(content: Text('Prefix renamed to "$newName"')),
-                    );
-                 }
-              } catch (e) {
-                 if (mounted) {
-                    ScaffoldMessenger.of(ctx).showSnackBar(
-                       SnackBar(content: Text('Error renaming prefix: $e'), backgroundColor: Theme.of(ctx).colorScheme.error),
-                    );
-                 }
-              }
-           },
-           onRunExe: (pfx, exe) async {
-             try {
-               await processService.runExecutable(
-                 pfx,
-                 exe,
-                 onProcessStart: _onProcessStart,
-                 onProcessExit: _onProcessExit,
-               );
-             } catch (e) {
-               logService.log('Error running executable ${exe.name}: $e', LogLevel.error);
-               ScaffoldMessenger.of(context).showSnackBar(
-                 SnackBar(content: Text('Error running ${exe.name}: $e')),
-               );
-             }
-           },
-           onKillProcess: (pfx, exe) async {
-             final pid = _runningProcesses[exe.path];
-             if (pid != null) {
-               final success = await processService.killProcess(pid);
-               if (success) {
-                 logService.log('Kill signal sent to ${exe.name} (PID: $pid)');
-               } else {
-                 logService.log('Failed to send kill signal to ${exe.name} (PID: $pid)', LogLevel.error);
-                 ScaffoldMessenger.of(context).showSnackBar(
-                   SnackBar(content: Text('Failed to kill process for ${exe.name}')),
-                 );
-               }
-             } else {
-                logService.log('Process for ${exe.name} not found in running list.', LogLevel.warning);
-             }
-           },
-           runningProcesses: _runningProcesses,
-           onRunWinetricksGui: (pfx) async {
-              try {
-                await prefixManagementService.runWinetricksGui(pfx);
-              } catch (e) {
-                logService.log('Error running Winetricks GUI for ${pfx.name}: $e', LogLevel.error);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Error running Winetricks GUI: $e')),
+        final settingsProvider = Provider.of<SettingsProvider>(context, listen: true);
+        return ManagePrefixesPage(
+          settings: settingsProvider.settings,
+          onAddExecutable: (prefix) => _uiActionService.addExecutableToPrefix(context, prefix),
+          onShowCommonComponents: (context, prefix) => _uiActionService.showCommonComponentsDialog(context, prefix),
+          onDeletePrefix: (ctx, pfx) => prefixProvider.deletePrefix(pfx),
+          onDeleteExecutable: (ctx, pfx, exe) => prefixProvider.deleteExecutable(pfx, exe),
+          onRenamePrefix: (ctx, pfx, newName) async {
+            try {
+              await prefixProvider.renamePrefix(pfx, newName);
+              if (mounted) {
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  SnackBar(content: Text('Prefix renamed to "$newName"')),
                 );
               }
-           },
-           onRunInstaller: (pfx) async {
-              await _uiActionService.runInstallerInPrefix(context, pfx);
-           },
-           onExploreHostFiles: (pfx) async {
-              try {
-                await prefixManagementService.runWineExplorer(pfx);
-              } catch (e) {
-                 logService.log('Error running Wine Explorer for ${pfx.name}: $e', LogLevel.error);
-                 ScaffoldMessenger.of(context).showSnackBar(
-                   SnackBar(content: Text('Error running Wine Explorer: $e')),
-                 );
+            } catch (e) {
+              if (mounted) {
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  SnackBar(content: Text('Error renaming prefix: $e'), backgroundColor: Theme.of(ctx).colorScheme.error),
+                );
               }
-           },
-           onRunWinecfg: (ctx, pfx) async {
-             try {
-               await prefixManagementService.runWinecfg(pfx);
-             } catch (e) {
-               logService.log('Error running winecfg for ${pfx.name}: $e', LogLevel.error);
-               ScaffoldMessenger.of(context).showSnackBar(
-                 SnackBar(content: Text('Error running winecfg: $e')),
-               );
-             }
-           },
+            }
+          },
+          onApplyControllerFix: (ctx, pfx) async {
+            try {
+              await prefixManagementService.applyControllerFix(pfx);
+              if (mounted) {
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  SnackBar(content: Text('Controller fixes applied to "${pfx.name}"')),
+                );
+              }
+            } catch (e) {
+              if (mounted) {
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  SnackBar(content: Text('Error applying controller fixes: $e'), backgroundColor: Theme.of(ctx).colorScheme.error),
+                );
+              }
+            }
+          },
+          onRunExe: (pfx, exe) async {
+            try {
+              await processService.runExecutable(
+                pfx,
+                exe,
+                onProcessStart: _onProcessStart,
+                onProcessExit: _onProcessExit,
+              );
+            } catch (e) {
+              logService.log('Error running executable ${exe.name}: $e', LogLevel.error);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Error running ${exe.name}: $e')),
+              );
+            }
+          },
+          onKillProcess: (pfx, exe) async {
+            final pid = _runningProcesses[exe.path];
+            if (pid != null) {
+              final success = await processService.killProcess(pid);
+              if (success) {
+                logService.log('Kill signal sent to ${exe.name} (PID: $pid)');
+              } else {
+                logService.log('Failed to send kill signal to ${exe.name} (PID: $pid)', LogLevel.error);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Failed to kill process for ${exe.name}')),
+                );
+              }
+            } else {
+               logService.log('Process for ${exe.name} not found in running list.', LogLevel.warning);
+            }
+          },
+          runningProcesses: _runningProcesses,
+          onRunWinetricksGui: (pfx) async {
+            try {
+              await prefixManagementService.runWinetricksGui(pfx);
+            } catch (e) {
+              logService.log('Error running Winetricks GUI for ${pfx.name}: $e', LogLevel.error);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Error running Winetricks GUI: $e')),
+              );
+            }
+          },
+          onRunInstaller: (pfx) async {
+            await _uiActionService.runInstallerInPrefix(context, pfx);
+          },
+          onExploreHostFiles: (pfx) async {
+            try {
+              await prefixManagementService.runWineExplorer(pfx);
+            } catch (e) {
+              logService.log('Error running Wine Explorer for ${pfx.name}: $e', LogLevel.error);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Error running Wine Explorer: $e')),
+              );
+            }
+          },
+          onRunWinecfg: (ctx, pfx) async {
+            try {
+              await prefixManagementService.runWinecfg(pfx);
+            } catch (e) {
+              logService.log('Error running winecfg for ${pfx.name}: $e', LogLevel.error);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Error running winecfg: $e')),
+              );
+            }
+          },
+          onEditEnvVariables: (ctx, pfx) async {
+            await showDialog(
+              context: ctx,
+              builder: (dialogContext) => EnvVariablesDialog(
+                prefix: pfx,
+              ),
+            );
+          },
         );
       case 2:
-        return const SettingsPage();
+        // Add CreatePrefixPage as a new navigation destination
+        return const CreatePrefixPage();
       case 3:
-        return const LogsPage();
+        return SettingsPage();
       case 4:
+        return LogsPage();
+      case 5:
         return _buildFileManagerPage(context);
       default:
-        return const Center(child: Text('Unknown Page'));
+        return const Center(child: Text('Page not found'));
     }
   }
 
@@ -360,27 +392,24 @@ class _MainScaffoldState extends State<MainScaffold> {
     final isDarkMode = theme.brightness == Brightness.dark;
     final selectedColor = isDarkMode ? theme.colorScheme.primary : theme.colorScheme.onPrimary;
     final unselectedColor = isDarkMode ? theme.colorScheme.onSurface.withOpacity(0.7) : theme.colorScheme.onSurface.withOpacity(0.6);
-    final railBackgroundColor = theme.colorScheme.surface; // Use surface color
+    final railBackgroundColor = theme.colorScheme.surface;
 
-    // Use a GlobalKey for the Scaffold to access ScaffoldMessenger
     final GlobalKey<ScaffoldState> scaffoldKey = GlobalKey<ScaffoldState>();
 
     return Scaffold(
-      key: scaffoldKey, // Assign the key
-      backgroundColor: theme.colorScheme.background, // Ensure scaffold background matches theme
+      key: scaffoldKey,
+      backgroundColor: theme.colorScheme.background,
       body: Column(
         children: [
-          // CustomTitleBar removed
-          // const CustomTitleBar(isConnected: true),
           Expanded(
             child: Row(
               children: <Widget>[
                 NavigationRail(
                   selectedIndex: _selectedIndex,
                   onDestinationSelected: _onItemTapped,
-                  labelType: NavigationRailLabelType.selected, // Show labels only when selected
-                  backgroundColor: railBackgroundColor, // Use surface color
-                  indicatorColor: theme.colorScheme.primaryContainer.withOpacity(0.3), // Subtle indicator
+                  labelType: NavigationRailLabelType.selected,
+                  backgroundColor: railBackgroundColor,
+                  indicatorColor: theme.colorScheme.primaryContainer.withOpacity(0.3),
                   selectedIconTheme: IconThemeData(color: selectedColor),
                   unselectedIconTheme: IconThemeData(color: unselectedColor),
                   selectedLabelTextStyle: TextStyle(color: selectedColor, fontWeight: FontWeight.bold),
@@ -395,6 +424,11 @@ class _MainScaffoldState extends State<MainScaffold> {
                       icon: Icon(Icons.folder_outlined),
                       selectedIcon: Icon(Icons.folder),
                       label: Text('Manage'),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.add_circle_outline),
+                      selectedIcon: Icon(Icons.add_circle),
+                      label: Text('Create'),
                     ),
                     NavigationRailDestination(
                       icon: Icon(Icons.settings_outlined),
@@ -414,11 +448,9 @@ class _MainScaffoldState extends State<MainScaffold> {
                   ],
                 ),
                 const VerticalDivider(thickness: 1, width: 1),
-                // This is the main content area
                 Expanded(
-                  // Pass scaffold context to pages that might need it (e.g., for dialogs)
                   child: Builder(
-                     builder: (context) => _buildPage(_selectedIndex),
+                    builder: (context) => _buildPage(_selectedIndex),
                   ),
                 ),
               ],
