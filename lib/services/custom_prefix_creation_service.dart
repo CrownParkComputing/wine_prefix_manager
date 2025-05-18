@@ -34,7 +34,7 @@ class CustomPrefixCreationService {
       final configFile = File(path.join(prefixPath, '.prefix_config'));
       await configFile.writeAsString(jsonEncode({
         'buildPath': 'system', // Indicate system wine
-        'type': PrefixType.custom.toString()
+        'type': PrefixType.wine.toString()
       }));
       _logService.log('Custom prefix config saved.');
 
@@ -48,7 +48,7 @@ class CustomPrefixCreationService {
         name: prefixName,
         path: prefixPath,
         wineBuildPath: 'system', // Indicate system wine was used
-        type: PrefixType.custom,
+        type: PrefixType.wine,
         exeEntries: [],
       );
     } catch (e, stackTrace) {
@@ -75,10 +75,8 @@ class CustomPrefixCreationService {
         // Log if the specified directory didn't exist and we fell back
         _logService.log("Warning: Specified prefix directory '${settings.prefixDirectory}' does not exist or is invalid. Falling back to '$baseDir'.", LogLevel.warning);
       }
-    }
-    
-    // Create the type-specific subfolder
-    final typeDir = path.join(baseDir, 'custom');
+    }      // Create the type-specific subfolder
+    final typeDir = path.join(baseDir, 'wine');
     Directory(typeDir).createSync(recursive: true);
     
     return path.join(typeDir, prefixName);
@@ -124,7 +122,7 @@ class CustomPrefixCreationService {
       // 4. Install DXVK
       onStatusUpdate('Installing DXVK...');
       try {
-        final tempPrefix = WinePrefix(name: path.basename(prefixPath), path: prefixPath, wineBuildPath: 'system', type: PrefixType.custom, exeEntries: []);
+        final tempPrefix = WinePrefix(name: path.basename(prefixPath), path: prefixPath, wineBuildPath: 'system', type: PrefixType.wine, exeEntries: []);
         await _componentInstaller.installDxvk(tempPrefix, settings, progressCallback: onStatusUpdate);
         _logService.log('DXVK installation attempted.');
       } catch (e) {
@@ -135,7 +133,7 @@ class CustomPrefixCreationService {
       // 5. Install VKD3D-Proton
       onStatusUpdate('Installing VKD3D-Proton...');
       try {
-        final tempPrefix = WinePrefix(name: path.basename(prefixPath), path: prefixPath, wineBuildPath: 'system', type: PrefixType.custom, exeEntries: []);
+        final tempPrefix = WinePrefix(name: path.basename(prefixPath), path: prefixPath, wineBuildPath: 'system', type: PrefixType.wine, exeEntries: []);
         await _componentInstaller.installVkd3d(tempPrefix, settings, progressCallback: onStatusUpdate);
         _logService.log('VKD3D-Proton installation attempted.');
       } catch (e) {

@@ -46,6 +46,20 @@ jobs:
 
       - name: Install Flutter dependencies
         run: flutter pub get
+        
+      - name: Analyze project
+        run: |
+          # Run analyze and capture the output
+          flutter analyze > analyze_output.txt 2>&1 || true
+          
+          # Check for critical errors but ignore file_picker plugin warnings
+          if grep -q "error" analyze_output.txt && grep -v file_picker analyze_output.txt | grep -q "error"; then
+            echo "Critical errors found in code that must be fixed before releasing:"
+            grep "error" analyze_output.txt | grep -v file_picker || true
+            exit 1
+          else
+            echo "No critical errors found, proceeding with build"
+          fi
 
       - name: Build Linux application
         run: flutter build linux --release
