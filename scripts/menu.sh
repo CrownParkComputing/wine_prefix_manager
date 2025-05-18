@@ -28,18 +28,19 @@ while true; do
     echo "  4. Build All Packages"
     echo
     echo "Release Options:"
-    echo "  5. Full Release (Build + Version Increment + GitHub)"
+    echo "  5. Full Release (Build + Version Increment + GitHub + Local Install)"
+    echo "  6. GitHub Actions Release (Create Tag Only)"
     echo
     echo "Development Options:"
-    echo "  6. Debug Build and Run"
-    echo "  7. Clean Build Directories"
-    echo "  8. Install Dependencies"
-    echo "  9. Install Locally"
+    echo "  7. Debug Build and Run"
+    echo "  8. Clean Build Directories"
+    echo "  9. Install Dependencies"
+    echo "  10. Install Locally"
     echo
     echo "System:"
-    echo "  10. Exit"
+    echo "  11. Exit"
     echo
-    read -p "Enter your choice [1-10]: " choice
+    read -p "Enter your choice [1-11]: " choice
     
     case $choice in
         1)  # Build for Arch Linux
@@ -112,15 +113,226 @@ while true; do
             esac
             
             clear
-            echo "This will increment the $release_type version and push to GitHub."
+            echo "This will:"
+            echo "1. Increment the $release_type version"
+            echo "2. Build local packages"
+            echo "3. Push to GitHub"
+            echo "4. Create a GitHub tag to trigger GitHub Actions workflows"
+            echo "5. Install the new release locally"
             read -p "Are you sure you want to continue? [y/N]: " confirm
             
             if [[ $confirm =~ ^[Yy]$ ]]; then
+                # Step 1 & 2 & 3: Run the build_and_release script
+                echo "Building packages and incrementing version..."
                 ./scripts/build_and_release.sh --distro all --release-type $release_type
+                if [ $? -ne 0 ]; then
+                    echo "Build and release failed!"
+                    read -p "Press Enter to continue..."
+                    continue
+                fi
+                
+                # Get the new version from pubspec.yaml after incrementing
+                NEW_VERSION=$(grep 'version:' pubspec.yaml | awk '{print $2}' | tr -d "'")
+                echo "New version: $NEW_VERSION"
+                
+                # Step 4: Create and push tag for GitHub Actions
+                echo "Creating and pushing tag v$NEW_VERSION to trigger GitHub Actions workflows..."
+                git tag -a "v$NEW_VERSION" -m "Release v$NEW_VERSION"
+                git push origin "v$NEW_VERSION"
+                
+                if [ $? -ne 0 ]; then
+                    echo "Failed to push tag v$NEW_VERSION!"
+                    read -p "Press Enter to continue..."
+                    continue
+                fi
+                
+                echo "GitHub Actions workflows have been triggered."
+                echo "You can check the progress at: https://github.com/jon/wine_prefix_manager/actions"
+                
+                # Step 5: Install locally
+                echo "Installing new release locally..."
+                echo "Select installation method:"
+                echo "1. Install for current user only (~/bin or ~/.local/bin)"
+                echo "2. Install system-wide (requires sudo)"
+                echo "3. Skip local installation"
+                
+                read -p "Enter your choice [1-3]: " install_choice
+                
+                case $install_choice in
+                    1)
+                        clear
+                        echo "Building release version for local installation..."
+                        # No need to rebuild if we've already built it
+                        # flutter build linux --release
+                        
+                        # Define paths
+                        APP_NAME="wine_prefix_manager"
+                        BUILD_DIR="build/linux/x64/release/bundle"
+                        LOCAL_BIN="$HOME/.local/bin"
+                        LOCAL_APP_DIR="$HOME/.local/share/applications"
+                        LOCAL_ICON_DIR="$HOME/.local/share/icons/hicolor/128x128/apps"
+                        INSTALL_DIR="$HOME/.local/lib/$APP_NAME"
+                        
+                        # Create directories if they don't exist
+                        mkdir -p "$LOCAL_BIN"
+                        mkdir -p "$LOCAL_APP_DIR"
+                        mkdir -p "$LOCAL_ICON_DIR"
+                        mkdir -p "$INSTALL_DIR"
+                        
+                        # Copy application files
+                        echo "Copying application files..."
+                        find "$BUILD_DIR" -maxdepth 1 -mindepth 1 -exec cp -r {} "$INSTALL_DIR/" \;
+                        
+                        # Create launcher script
+                        echo "Creating launcher script..."
+                        cat > "$LOCAL_BIN/$APP_NAME" <<EOF
+#!/bin/bash
+exec "$INSTALL_DIR/$APP_NAME" "\$@"
+EOF
+                        chmod +x "$LOCAL_BIN/$APP_NAME"
+                        
+                        # Create desktop entry
+                        echo "Creating desktop entry..."
+                        cat > "$LOCAL_APP_DIR/$APP_NAME.desktop" <<EOF
+[Desktop Entry]
+Name=Wine Prefix Manager
+Comment=Manage Wine prefixes
+Exec=$APP_NAME
+Icon=$APP_NAME
+Terminal=false
+Type=Application
+Categories=Utility;
+EOF
+                        
+                        # Copy icon
+                        if [ -f "$BUILD_DIR/data/flutter_assets/assets/icon.png" ]; then
+                            cp "$BUILD_DIR/data/flutter_assets/assets/icon.png" "$LOCAL_ICON_DIR/$APP_NAME.png"
+                        fi
+                        
+                        echo "Installation completed successfully!"
+                        echo "You can run the application by typing '$APP_NAME' in the terminal"
+                        echo "or by finding it in your application menu."
+                        ;;
+                    2)
+                        clear
+                        echo "Installing system-wide (requires sudo)..."
+                        
+                        # Define paths
+                        APP_NAME="wine_prefix_manager"
+                        BUILD_DIR="build/linux/x64/release/bundle"
+                        
+                        # Create temporary installation script
+                        TMP_SCRIPT=$(mktemp)
+                        cat > "$TMP_SCRIPT" <<EOF
+#!/bin/bash
+set -e
+
+# Create directories
+mkdir -p /usr/local/lib/$APP_NAME
+mkdir -p /usr/local/bin
+mkdir -p /usr/share/applications
+mkdir -p /usr/share/icons/hicolor/128x128/apps
+
+# Copy application files
+find "$(pwd)/$BUILD_DIR" -maxdepth 1 -mindepth 1 -exec cp -r {} /usr/local/lib/$APP_NAME/ \;
+
+# Create launcher script
+cat > /usr/local/bin/$APP_NAME <<EOL
+#!/bin/bash
+exec /usr/local/lib/$APP_NAME/$APP_NAME "\$@"
+EOL
+chmod +x /usr/local/bin/$APP_NAME
+
+# Create desktop entry
+cat > /usr/share/applications/$APP_NAME.desktop <<EOL
+[Desktop Entry]
+Name=Wine Prefix Manager
+Comment=Manage Wine prefixes
+Exec=$APP_NAME
+Icon=$APP_NAME
+Terminal=false
+Type=Application
+Categories=Utility;
+EOL
+
+# Copy icon
+if [ -f "$(pwd)/$BUILD_DIR/data/flutter_assets/assets/icon.png" ]; then
+    cp "$(pwd)/$BUILD_DIR/data/flutter_assets/assets/icon.png" /usr/share/icons/hicolor/128x128/apps/$APP_NAME.png
+fi
+
+echo "System-wide installation completed successfully!"
+EOF
+                        
+                        chmod +x "$TMP_SCRIPT"
+                        
+                        # Run the script with sudo
+                        sudo "$TMP_SCRIPT"
+                        
+                        # Remove the temporary script
+                        rm "$TMP_SCRIPT"
+                        ;;
+                    3)
+                        echo "Skipping local installation."
+                        ;;
+                    *)
+                        echo "Invalid choice! Skipping local installation."
+                        ;;
+                esac
+                
+                echo "Full release process completed successfully!"
+            else
+                echo "Release cancelled."
+            fi
+            
+            read -p "Press Enter to continue..."
+            ;;
+            
+        6)  # GitHub Actions Release
+            clear
+            echo "GitHub Actions Release"
+            echo "This will create a git tag to trigger GitHub Actions workflows."
+            
+            # Get the current version from pubspec.yaml
+            CURRENT_VERSION=$(grep 'version:' pubspec.yaml | awk '{print $2}' | tr -d "'")
+            
+            echo "Current version in pubspec.yaml: $CURRENT_VERSION"
+            echo
+            echo "Select release type:"
+            echo "1. Use current version ($CURRENT_VERSION)"
+            echo "2. Specify a custom version"
+            
+            read -p "Enter your choice [1-2]: " tag_choice
+            
+            case $tag_choice in
+                1)
+                    VERSION_TAG="v$CURRENT_VERSION"
+                    ;;
+                2)
+                    read -p "Enter custom version (without 'v' prefix): " custom_version
+                    VERSION_TAG="v$custom_version"
+                    ;;
+                *)
+                    echo "Invalid choice!"
+                    read -p "Press Enter to continue..."
+                    continue
+                    ;;
+            esac
+            
+            echo
+            echo "This will create tag $VERSION_TAG and push it to trigger GitHub Actions workflows."
+            read -p "Are you sure you want to continue? [y/N]: " confirm
+            
+            if [[ $confirm =~ ^[Yy]$ ]]; then
+                echo "Creating and pushing tag $VERSION_TAG..."
+                git tag -a "$VERSION_TAG" -m "Release $VERSION_TAG"
+                git push origin "$VERSION_TAG"
+                
                 if [ $? -eq 0 ]; then
-                    echo "Release completed successfully!"
+                    echo "Tag $VERSION_TAG pushed successfully!"
+                    echo "GitHub Actions workflows have been triggered."
+                    echo "You can check the progress at: https://github.com/jon/wine_prefix_manager/actions"
                 else
-                    echo "Release failed!"
+                    echo "Failed to push tag $VERSION_TAG!"
                 fi
             else
                 echo "Release cancelled."
@@ -129,7 +341,7 @@ while true; do
             read -p "Press Enter to continue..."
             ;;
             
-        6)  # Debug Build and Run
+        7)  # Debug Build and Run
             clear
             echo "Debug Build and Run Options:"
             echo "1. Build and Run"
