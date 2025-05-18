@@ -102,7 +102,7 @@ class ProcessService {
 
       // --- Determine paths, command, and specific env vars based on prefix type ---
 
-      if (prefix.type == PrefixType.custom) {
+      if (prefix.type == PrefixType.wine) {
         // Custom prefixes use the system's wine installation
         command = 'wine'; // Assume 'wine' is in PATH
         wineExecutablePath = 'wine'; // For potential checks, though existence check might fail if not absolute
@@ -361,7 +361,7 @@ class ProcessService {
       }
 
       // Only prepend build paths for non-custom prefixes
-      if (prefix.type != PrefixType.custom) {
+      if (prefix.type == PrefixType.proton) {
         fullEnv['PATH'] = '$wineBinDir:${Platform.environment['PATH'] ?? ''}';
         fullEnv['LD_LIBRARY_PATH'] = '$wineLib64Dir:$wineLibDir:${Platform.environment['LD_LIBRARY_PATH'] ?? ''}';
       }

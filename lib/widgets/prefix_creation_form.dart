@@ -30,7 +30,7 @@ class _PrefixCreationFormState extends State<PrefixCreationForm> with TickerProv
   String _status = 'Ready'; // Status messages for this form
   final TextEditingController _prefixNameController = TextEditingController();
   TabController? _prefixTabController;
-  PrefixType _selectedPrefixType = PrefixType.custom; // Added for selected prefix type
+  PrefixType _selectedPrefixType = PrefixType.wine; // Changed from custom to wine
 
   // Service instances needed for this form
   final BuildService _buildService = BuildService();
@@ -43,7 +43,7 @@ class _PrefixCreationFormState extends State<PrefixCreationForm> with TickerProv
     
     // Only create the TabController if we're not inside CreatePrefixPage
     if (widget.initialPrefixType == null) {
-      _prefixTabController = TabController(length: 3, vsync: this);
+      _prefixTabController = TabController(length: 2, vsync: this);
       _prefixTabController!.addListener(_updateSelectedType);
     } else {
       // If we're in CreatePrefixPage, set the selected type directly
@@ -117,11 +117,13 @@ class _PrefixCreationFormState extends State<PrefixCreationForm> with TickerProv
        _updateStatus('Settings not loaded.', isError: true);
        return;
     }
-    // Requires a build only if not Custom type
-    if (prefixType != PrefixType.custom && _selectedBuild == null) {
+    
+    // Require a build for all prefix types
+    if (_selectedBuild == null) {
       _updateStatus('Please select a build.', isError: true);
       return;
     }
+    
     // Prevent creation using installed builds
     if (_selectedBuild != null && _selectedBuild!.installPath != null) {
        _updateStatus('Creating prefixes from installed Steam Proton builds is not yet supported.', isError: true);
@@ -147,8 +149,7 @@ class _PrefixCreationFormState extends State<PrefixCreationForm> with TickerProv
     try {
       // Pass the explicitly selected prefix type
       final newPrefix = await _prefixCreationService.downloadAndCreatePrefix(
-        // For Custom type, selectedBuild might be null, handle this in the service
-        selectedBuild: _selectedBuild, // Pass the selected build (can be null for Custom)
+        selectedBuild: _selectedBuild,
         prefixName: _prefixName,
         settings: widget.settings!,
         prefixType: prefixType, // Pass the tab's prefix type
@@ -194,8 +195,6 @@ class _PrefixCreationFormState extends State<PrefixCreationForm> with TickerProv
         return 'Wine';
       case PrefixType.proton:
         return 'Proton';
-      case PrefixType.custom:
-        return 'Custom';
     }
   }
 
@@ -214,19 +213,16 @@ class _PrefixCreationFormState extends State<PrefixCreationForm> with TickerProv
           return _buildWinePrefixTab(checkPrefixExists);
         case PrefixType.proton:
           return _buildProtonPrefixTab(checkPrefixExists);
-        default:
-          return _buildCustomPrefixTab(checkPrefixExists);
       }
     } else {
       // When used standalone (not in CreatePrefixPage), show our own tabs
       return DefaultTabController(
-        length: 3,
+        length: 2,
         child: Scaffold(
           appBar: AppBar(
             title: const Text('Create New Prefix'),
             bottom: const TabBar(
               tabs: [
-                Tab(icon: Icon(Icons.sports_esports), text: 'Custom'),
                 Tab(icon: Icon(Icons.wine_bar), text: 'Wine'),
                 Tab(icon: Icon(Icons.games), text: 'Proton'),
               ],
@@ -234,7 +230,6 @@ class _PrefixCreationFormState extends State<PrefixCreationForm> with TickerProv
           ),
           body: TabBarView(
             children: [
-              _buildCustomPrefixTab(checkPrefixExists),
               _buildWinePrefixTab(checkPrefixExists),
               _buildProtonPrefixTab(checkPrefixExists),
             ],
@@ -242,85 +237,6 @@ class _PrefixCreationFormState extends State<PrefixCreationForm> with TickerProv
         ),
       );
     }
-  }
-  
-  Widget _buildCustomPrefixTab(bool Function(String) checkPrefixExists) {
-    return SingleChildScrollView(
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Prefix Name Card
-            Card(
-              elevation: 3, margin: const EdgeInsets.only(bottom: 24),
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Custom Prefix Name', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: _prefixNameController,
-                      decoration: InputDecoration(
-                        hintText: 'Enter a name for the prefix',
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                        prefixIcon: const Icon(Icons.create_new_folder),
-                        errorText: _prefixName.isNotEmpty && checkPrefixExists(_prefixName)
-                            ? 'Prefix name already exists'
-                            : null,
-                      ),
-                      onChanged: (value) {
-                        setState(() { _prefixName = value.trim(); });
-                      },
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            // Description Card
-            Card(
-              elevation: 3, margin: const EdgeInsets.only(bottom: 24),
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('About Custom Prefixes', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Custom prefixes use your system-installed Wine and include essential components like DXVK and VKD3D-Proton for better gaming performance.',
-                      style: TextStyle(fontSize: 14),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            // Create Button
-            SizedBox(
-              width: double.infinity, height: 50,
-              child: ElevatedButton.icon(
-                onPressed: (_isLoading || _prefixName.isEmpty || checkPrefixExists(_prefixName)) 
-                  ? null
-                  : () => _downloadAndCreatePrefix(PrefixType.custom),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Theme.of(context).colorScheme.primary,
-                  foregroundColor: Theme.of(context).colorScheme.onPrimary,
-                ),
-                icon: _isLoading ? SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Theme.of(context).colorScheme.onPrimary)) : const Icon(Icons.add_circle),
-                label: Text(_isLoading ? 'Creating...' : 'Create Custom Prefix', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              ),
-            ),
-
-            // Status message
-            _buildStatusMessage(),
-          ],
-        ),
-      ),
-    );
   }
   
   Widget _buildWinePrefixTab(bool Function(String) checkPrefixExists) {
@@ -684,7 +600,8 @@ class _PrefixCreationFormState extends State<PrefixCreationForm> with TickerProv
     // Only update if _prefixTabController is not null
     if (_prefixTabController != null) {
       setState(() {
-        _selectedPrefixType = PrefixType.values[_prefixTabController!.index];
+        // Tab 0 is Wine, Tab 1 is Proton
+        _selectedPrefixType = _prefixTabController!.index == 0 ? PrefixType.wine : PrefixType.proton;
       });
     }
   }

@@ -7,6 +7,7 @@ import '../models/settings.dart';
 import '../models/wine_build.dart';
 import '../models/prefix_models.dart';
 import 'log_service.dart';
+import 'wine_component_installer.dart';
 
 typedef StatusCallback = void Function(String status);
 typedef ProgressCallback = void Function(double progress);
@@ -15,6 +16,7 @@ class WinePrefixCreationService {
   final Dio _dio = Dio();
   final Shell _shell = Shell(verbose: false);
   final LogService _logService = LogService();
+  final WineComponentInstaller _componentInstaller = WineComponentInstaller();
 
   Future<WinePrefix?> createWinePrefix({
     required BaseBuild? selectedBuild,
@@ -136,7 +138,7 @@ class WinePrefixCreationService {
 
       // 5. Initialize Prefix
       onStatusUpdate('Initializing prefix (this might take a moment)...');
-      await _initializeWinePrefix(prefixPath, extractedDir, onStatusUpdate);
+      await _initializeWinePrefix(prefixPath, extractedDir, settings, onStatusUpdate);
       _logService.log('Wine prefix initialized.');
 
       onStatusUpdate('Wine prefix "$prefixName" created successfully!');
@@ -189,7 +191,7 @@ class WinePrefixCreationService {
     return path.join(typeDir, prefixName);
   }
 
-  Future<void> _initializeWinePrefix(String prefixPath, String buildPath, StatusCallback onStatusUpdate) async {
+  Future<void> _initializeWinePrefix(String prefixPath, String buildPath, Settings settings, StatusCallback onStatusUpdate) async {
     final baseEnv = {
       'WINEPREFIX': prefixPath,
       'PATH': '$buildPath/bin:${Platform.environment['PATH']}',
@@ -224,6 +226,85 @@ class WinePrefixCreationService {
     _logService.log('Running wineboot -u...');
     await setupShell.run('"$wineExecutablePath" wineboot -u');
 
-    _logService.log('Wine prefix initialization command finished.');
+    // Set Windows version to win10
+    onStatusUpdate('Setting Windows version to win10...');
+    _logService.log('Running winecfg /v win10...');
+    await setupShell.run('"$wineExecutablePath" winecfg /v win10');
+    _logService.log('Windows version set to win10.');
+
+    // Install core dependencies
+    final dependencies = [
+      'corefonts',
+      'd3dx9', 'd3dcompiler_43', 'd3dcompiler_47', 
+      'msls31', 'mono', 'gecko'
+    ];
+
+    onStatusUpdate('Installing core dependencies...');
+    for (final dep in dependencies) {
+      onStatusUpdate('Installing $dep...');
+      _logService.log('Installing winetricks $dep...');
+      try {
+        final result = await _shell.run(
+          'WINEPREFIX="$prefixPath" WINE="$wineExecutablePath" winetricks -q $dep',
+        );
+        _logService.log('$dep installation finished. ${result.outText}');
+      } catch (e) {
+        _logService.log('Warning: Failed to install $dep: $e', LogLevel.warning);
+        onStatusUpdate('Warning: Failed to install $dep: $e');
+      }
+    }
+    
+    // Create a temporary WinePrefix object for component installation
+    final tempPrefix = WinePrefix(
+      name: path.basename(prefixPath), 
+      path: prefixPath, 
+      wineBuildPath: buildPath, 
+      type: PrefixType.wine, 
+      exeEntries: []
+    );
+
+    // Install DXVK
+    onStatusUpdate('Installing DXVK...');
+    try {
+      await _componentInstaller.installDxvk(tempPrefix, settings, progressCallback: onStatusUpdate);
+      _logService.log('DXVK installation completed.');
+    } catch (e) {
+      _logService.log('Warning: Failed to install DXVK: $e', LogLevel.warning);
+      onStatusUpdate('Warning: Failed to install DXVK: $e');
+    }
+    
+    // Install VKD3D-Proton
+    onStatusUpdate('Installing VKD3D-Proton...');
+    try {
+      await _componentInstaller.installVkd3d(tempPrefix, settings, progressCallback: onStatusUpdate);
+      _logService.log('VKD3D-Proton installation completed.');
+    } catch (e) {
+      _logService.log('Warning: Failed to install VKD3D-Proton: $e', LogLevel.warning);
+      onStatusUpdate('Warning: Failed to install VKD3D-Proton: $e');
+    }
+    
+    // Run winetricks verbs to ensure proper configuration
+    final winetricksVerbs = ['dxvk', 'vkd3d', 'dxvk_nvapi'];
+    for (final verb in winetricksVerbs) {
+      onStatusUpdate('Configuring $verb via winetricks...');
+      _logService.log('Running winetricks $verb...');
+      try {
+        await _componentInstaller.installComponent(
+          prefixPath: prefixPath,
+          component: verb,
+          wineExecutablePath: wineExecutablePath,
+          onStatusUpdate: (status) {
+            onStatusUpdate('Configuring $verb: $status');
+            _logService.log('Winetricks ($verb): $status');
+          },
+        );
+        _logService.log('Winetricks configuration for $verb completed.');
+      } catch (e) {
+        _logService.log('Warning: Failed to configure $verb via winetricks: $e', LogLevel.warning);
+        onStatusUpdate('Warning: Failed to configure $verb: $e');
+      }
+    }
+
+    _logService.log('Wine prefix initialization completed with DXVK and VKD3D-Proton installed.');
   }
 } 

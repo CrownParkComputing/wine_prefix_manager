@@ -5,7 +5,6 @@ import '../models/settings.dart';
 import '../models/wine_build.dart';
 import '../models/prefix_models.dart';
 import 'log_service.dart';
-import 'custom_prefix_creation_service.dart';
 import 'wine_prefix_creation_service.dart';
 import 'proton_prefix_creation_service.dart';
 
@@ -19,7 +18,6 @@ class PrefixCreationService {
   final LogService _logService = LogService();
   
   // Specialized services
-  final CustomPrefixCreationService _customService = CustomPrefixCreationService();
   final WinePrefixCreationService _wineService = WinePrefixCreationService();
   final ProtonPrefixCreationService _protonService = ProtonPrefixCreationService();
 
@@ -37,14 +35,6 @@ class PrefixCreationService {
     
     // Delegate to the appropriate specialized service based on prefix type
     switch (prefixType) {
-      case PrefixType.custom:
-        return _customService.createCustomPrefix(
-          prefixName: prefixName,
-          settings: settings,
-          onStatusUpdate: onStatusUpdate,
-          onProgressUpdate: onProgressUpdate,
-        );
-        
       case PrefixType.wine:
         return _wineService.createWinePrefix(
           selectedBuild: selectedBuild,

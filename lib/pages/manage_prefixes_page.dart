@@ -24,7 +24,6 @@ class ManagePrefixesPage extends StatefulWidget {
   final OnExeAction onKillProcess;
   final Map<String, int> runningProcesses; // Needed by ExecutableListTile via PrefixManagementPage
   final OnPrefixAction onRunWinetricksGui;
-  // final OnPrefixContextAction onShowWinetricksVerbs; // Removed
   final OnShowDialogAction onShowCommonComponents; // Updated signature
   final OnPrefixAction onRunInstaller;
   final OnPrefixAction onExploreHostFiles;
@@ -48,7 +47,6 @@ class ManagePrefixesPage extends StatefulWidget {
     required this.onKillProcess,
     required this.runningProcesses,
     required this.onRunWinetricksGui,
-    // required this.onShowWinetricksVerbs, // Removed
     required this.onRunInstaller,
     required this.onExploreHostFiles,
     required this.onRunWinecfg,
@@ -61,100 +59,100 @@ class ManagePrefixesPage extends StatefulWidget {
   State<ManagePrefixesPage> createState() => _ManagePrefixesPageState();
 }
 
-class _ManagePrefixesPageState extends State<ManagePrefixesPage> with TickerProviderStateMixin {
-  late TabController _tabController;
-
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 3, vsync: this);
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
-
+class _ManagePrefixesPageState extends State<ManagePrefixesPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Manage Prefixes'),
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: const [
-            Tab(icon: Icon(Icons.sports_esports), text: 'Custom'),
-            Tab(icon: Icon(Icons.wine_bar), text: 'Wine'),
-            Tab(icon: Icon(Icons.games), text: 'Proton'),
-          ],
-        ),
         automaticallyImplyLeading: false,
         elevation: 0,
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          // Custom Tab
-          PrefixManagementPage(
-            settings: widget.settings,
-            onAddExecutable: widget.onAddExecutable,
-            onShowCommonComponents: widget.onShowCommonComponents,
-            onDeletePrefix: widget.onDeletePrefix,
-            onDeleteExecutable: widget.onDeleteExecutable,
-            onRenamePrefix: widget.onRenamePrefix,
-            onRunExe: widget.onRunExe,
-            onKillProcess: widget.onKillProcess,
-            runningProcesses: widget.runningProcesses,
-            onRunWinetricksGui: widget.onRunWinetricksGui,
-            onRunInstaller: widget.onRunInstaller,
-            onExploreHostFiles: widget.onExploreHostFiles,
-            onRunWinecfg: widget.onRunWinecfg,
-            onApplyControllerFix: widget.onApplyControllerFix,
-            onEditEnvVariables: widget.onEditEnvVariables,
-            prefixTypeFilter: PrefixType.custom,
-          ),
-          
-          // Wine Tab
-          PrefixManagementPage(
-            settings: widget.settings,
-            onAddExecutable: widget.onAddExecutable,
-            onShowCommonComponents: widget.onShowCommonComponents,
-            onDeletePrefix: widget.onDeletePrefix,
-            onDeleteExecutable: widget.onDeleteExecutable,
-            onRenamePrefix: widget.onRenamePrefix,
-            onRunExe: widget.onRunExe,
-            onKillProcess: widget.onKillProcess,
-            runningProcesses: widget.runningProcesses,
-            onRunWinetricksGui: widget.onRunWinetricksGui,
-            onRunInstaller: widget.onRunInstaller,
-            onExploreHostFiles: widget.onExploreHostFiles,
-            onRunWinecfg: widget.onRunWinecfg,
-            onApplyControllerFix: widget.onApplyControllerFix,
-            onEditEnvVariables: widget.onEditEnvVariables,
-            prefixTypeFilter: PrefixType.wine,
-          ),
-          
-          // Proton Tab
-          PrefixManagementPage(
-            settings: widget.settings,
-            onAddExecutable: widget.onAddExecutable,
-            onShowCommonComponents: widget.onShowCommonComponents,
-            onDeletePrefix: widget.onDeletePrefix,
-            onDeleteExecutable: widget.onDeleteExecutable,
-            onRenamePrefix: widget.onRenamePrefix,
-            onRunExe: widget.onRunExe,
-            onKillProcess: widget.onKillProcess,
-            runningProcesses: widget.runningProcesses,
-            onRunWinetricksGui: widget.onRunWinetricksGui,
-            onRunInstaller: widget.onRunInstaller,
-            onExploreHostFiles: widget.onExploreHostFiles,
-            onRunWinecfg: widget.onRunWinecfg,
-            onApplyControllerFix: widget.onApplyControllerFix,
-            onEditEnvVariables: widget.onEditEnvVariables,
-            prefixTypeFilter: PrefixType.proton,
-          ),
-        ],
+      body: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Wine Section Header
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(8.0),
+              margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              color: Theme.of(context).colorScheme.surfaceVariant,
+              child: Row(
+                children: [
+                  const Icon(Icons.wine_bar),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Wine Prefixes',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                ],
+              ),
+            ),
+            // Wine Prefixes
+            SizedBox(
+              height: 300, // Fixed height for the wine section
+              child: PrefixManagementPage(
+                settings: widget.settings,
+                onAddExecutable: widget.onAddExecutable,
+                onShowCommonComponents: widget.onShowCommonComponents,
+                onDeletePrefix: widget.onDeletePrefix,
+                onDeleteExecutable: widget.onDeleteExecutable,
+                onRenamePrefix: widget.onRenamePrefix,
+                onRunExe: widget.onRunExe,
+                onKillProcess: widget.onKillProcess,
+                runningProcesses: widget.runningProcesses,
+                onRunWinetricksGui: widget.onRunWinetricksGui,
+                onRunInstaller: widget.onRunInstaller,
+                onExploreHostFiles: widget.onExploreHostFiles,
+                onRunWinecfg: widget.onRunWinecfg,
+                onApplyControllerFix: widget.onApplyControllerFix,
+                onEditEnvVariables: widget.onEditEnvVariables,
+                prefixTypeFilter: PrefixType.wine,
+              ),
+            ),
+            
+            // Proton Section Header
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(8.0),
+              margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              color: Theme.of(context).colorScheme.surfaceVariant,
+              child: Row(
+                children: [
+                  const Icon(Icons.games),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Proton Prefixes',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                ],
+              ),
+            ),
+            // Proton Prefixes
+            SizedBox(
+              height: 300, // Fixed height for the proton section
+              child: PrefixManagementPage(
+                settings: widget.settings,
+                onAddExecutable: widget.onAddExecutable,
+                onShowCommonComponents: widget.onShowCommonComponents,
+                onDeletePrefix: widget.onDeletePrefix,
+                onDeleteExecutable: widget.onDeleteExecutable,
+                onRenamePrefix: widget.onRenamePrefix,
+                onRunExe: widget.onRunExe,
+                onKillProcess: widget.onKillProcess,
+                runningProcesses: widget.runningProcesses,
+                onRunWinetricksGui: widget.onRunWinetricksGui,
+                onRunInstaller: widget.onRunInstaller,
+                onExploreHostFiles: widget.onExploreHostFiles,
+                onRunWinecfg: widget.onRunWinecfg,
+                onApplyControllerFix: widget.onApplyControllerFix,
+                onEditEnvVariables: widget.onEditEnvVariables,
+                prefixTypeFilter: PrefixType.proton,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

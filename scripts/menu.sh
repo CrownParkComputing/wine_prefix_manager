@@ -34,11 +34,12 @@ while true; do
     echo "  6. Debug Build and Run"
     echo "  7. Clean Build Directories"
     echo "  8. Install Dependencies"
+    echo "  9. Install Locally"
     echo
     echo "System:"
-    echo "  9. Exit"
+    echo "  10. Exit"
     echo
-    read -p "Enter your choice [1-9]: " choice
+    read -p "Enter your choice [1-10]: " choice
     
     case $choice in
         1)  # Build for Arch Linux
@@ -221,7 +222,147 @@ while true; do
             read -p "Press Enter to continue..."
             ;;
             
-        9)  # Exit
+        9)  # Install Locally
+            clear
+            echo "Installing Wine Prefix Manager locally..."
+            echo "This will build and install the application to your local system."
+            echo
+            echo "Select installation method:"
+            echo "1. Install for current user only (~/bin or ~/.local/bin)"
+            echo "2. Install system-wide (requires sudo)"
+            echo "3. Return to Main Menu"
+            
+            read -p "Enter your choice [1-3]: " install_choice
+            
+            case $install_choice in
+                1)
+                    clear
+                    echo "Building release version..."
+                    flutter build linux --release
+                    
+                    # Define paths
+                    APP_NAME="wine_prefix_manager"
+                    BUILD_DIR="build/linux/x64/release/bundle"
+                    LOCAL_BIN="$HOME/.local/bin"
+                    LOCAL_APP_DIR="$HOME/.local/share/applications"
+                    LOCAL_ICON_DIR="$HOME/.local/share/icons/hicolor/128x128/apps"
+                    INSTALL_DIR="$HOME/.local/lib/$APP_NAME"
+                    
+                    # Create directories if they don't exist
+                    mkdir -p "$LOCAL_BIN"
+                    mkdir -p "$LOCAL_APP_DIR"
+                    mkdir -p "$LOCAL_ICON_DIR"
+                    mkdir -p "$INSTALL_DIR"
+                    
+                    # Copy application files
+                    echo "Copying application files..."
+                    find "$BUILD_DIR" -maxdepth 1 -mindepth 1 -exec cp -r {} "$INSTALL_DIR/" \;
+                    
+                    # Create launcher script
+                    echo "Creating launcher script..."
+                    cat > "$LOCAL_BIN/$APP_NAME" <<EOF
+#!/bin/bash
+exec "$INSTALL_DIR/$APP_NAME" "\$@"
+EOF
+                    chmod +x "$LOCAL_BIN/$APP_NAME"
+                    
+                    # Create desktop entry
+                    echo "Creating desktop entry..."
+                    cat > "$LOCAL_APP_DIR/$APP_NAME.desktop" <<EOF
+[Desktop Entry]
+Name=Wine Prefix Manager
+Comment=Manage Wine prefixes
+Exec=$APP_NAME
+Icon=$APP_NAME
+Terminal=false
+Type=Application
+Categories=Utility;
+EOF
+                    
+                    # Copy icon
+                    if [ -f "$BUILD_DIR/data/flutter_assets/assets/icon.png" ]; then
+                        cp "$BUILD_DIR/data/flutter_assets/assets/icon.png" "$LOCAL_ICON_DIR/$APP_NAME.png"
+                    fi
+                    
+                    echo "Installation completed successfully!"
+                    echo "You may need to add $LOCAL_BIN to your PATH if it's not already there."
+                    echo "You can run the application by typing '$APP_NAME' in the terminal"
+                    echo "or by finding it in your application menu."
+                    ;;
+                2)
+                    clear
+                    echo "Building release version..."
+                    flutter build linux --release
+                    
+                    # Define paths
+                    APP_NAME="wine_prefix_manager"
+                    BUILD_DIR="build/linux/x64/release/bundle"
+                    INSTALL_DIR="/usr/local/lib/$APP_NAME"
+                    
+                    echo "Installing system-wide (requires sudo)..."
+                    
+                    # Create temporary installation script
+                    TMP_SCRIPT=$(mktemp)
+                    cat > "$TMP_SCRIPT" <<EOF
+#!/bin/bash
+set -e
+
+# Create directories
+mkdir -p /usr/local/lib/$APP_NAME
+mkdir -p /usr/local/bin
+mkdir -p /usr/share/applications
+mkdir -p /usr/share/icons/hicolor/128x128/apps
+
+# Copy application files
+find "$(pwd)/$BUILD_DIR" -maxdepth 1 -mindepth 1 -exec cp -r {} /usr/local/lib/$APP_NAME/ \;
+
+# Create launcher script
+cat > /usr/local/bin/$APP_NAME <<EOL
+#!/bin/bash
+exec /usr/local/lib/$APP_NAME/$APP_NAME "\$@"
+EOL
+chmod +x /usr/local/bin/$APP_NAME
+
+# Create desktop entry
+cat > /usr/share/applications/$APP_NAME.desktop <<EOL
+[Desktop Entry]
+Name=Wine Prefix Manager
+Comment=Manage Wine prefixes
+Exec=$APP_NAME
+Icon=$APP_NAME
+Terminal=false
+Type=Application
+Categories=Utility;
+EOL
+
+# Copy icon
+if [ -f "$(pwd)/$BUILD_DIR/data/flutter_assets/assets/icon.png" ]; then
+    cp "$(pwd)/$BUILD_DIR/data/flutter_assets/assets/icon.png" /usr/share/icons/hicolor/128x128/apps/$APP_NAME.png
+fi
+
+echo "System-wide installation completed successfully!"
+EOF
+                    
+                    chmod +x "$TMP_SCRIPT"
+                    
+                    # Run the script with sudo
+                    sudo "$TMP_SCRIPT"
+                    
+                    # Remove the temporary script
+                    rm "$TMP_SCRIPT"
+                    ;;
+                3)
+                    continue
+                    ;;
+                *)
+                    echo "Invalid choice!"
+                    ;;
+            esac
+            
+            read -p "Press Enter to continue..."
+            ;;
+            
+        10)  # Exit
             clear
             echo "Thank you for using Wine Prefix Manager Build System!"
             exit 0

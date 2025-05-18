@@ -97,95 +97,93 @@ class _PrefixManagementPageState extends State<PrefixManagementPage> {
         .where((prefix) => prefix.type == widget.prefixTypeFilter)
         .toList();
 
-    return Scaffold(
-      body: prefixes.isEmpty
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.folder_off_outlined, size: 64, color: Colors.grey),
-                  const SizedBox(height: 16),
-                  Text('No ${widget.prefixTypeFilter.name} prefixes found.', style: const TextStyle(fontSize: 18)),
-                  const SizedBox(height: 8),
-                  const Text('Create a new prefix using the "Create" tab.', style: TextStyle(color: Colors.grey)),
-                ],
-              ),
-            )
-          : ListView.builder(
-              itemCount: prefixes.length,
-              itemBuilder: (context, index) {
-                final prefix = prefixes[index];
-                return Card(
-                  margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  elevation: 2,
-                  clipBehavior: Clip.antiAlias,
-                  child: ExpansionTile(
-                    title: PrefixListTile(prefix: prefix),
-                    childrenPadding: EdgeInsets.zero,
-                    tilePadding: const EdgeInsets.symmetric(horizontal: 16.0),
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                        child: Column(
-                           crossAxisAlignment: CrossAxisAlignment.start,
-                           children: [
-                              const Divider(height: 1),
-                              const SizedBox(height: 8),
-                              Text('Build: ${prefix.wineBuildPath}', style: Theme.of(context).textTheme.bodySmall),
-                              const SizedBox(height: 8),
-                           ]
-                        ),
-                      ),
-                      PrefixDetailActions( // Pass the rename callback down
-                        prefix: prefix,
-                        settings: widget.settings,
-                        onAddExecutable: widget.onAddExecutable,
-                        onShowCommonComponents: widget.onShowCommonComponents,
-                        onDeletePrefix: widget.onDeletePrefix,
-                        onRenamePrefix: (ctx, pfx) => _showRenameDialog(ctx, pfx), // Use helper to show dialog
-                        onRunWinecfg: widget.onRunWinecfg,
-                        onRunWinetricksGui: widget.onRunWinetricksGui,
-                        onRunInstaller: widget.onRunInstaller,
-                        onExploreHostFiles: widget.onExploreHostFiles,
-                        onApplyControllerFix: widget.onApplyControllerFix, // Pass controller fix callback
-                        onEditEnvVariables: widget.onEditEnvVariables, // Pass environment variables callback
-                      ),
-                      if (prefix.exeEntries.isNotEmpty) ...[
-                        const Divider(height: 1, indent: 16, endIndent: 16),
-                        Padding(
-                          padding: const EdgeInsets.only(left: 16.0, right: 16.0, top: 16.0, bottom: 8.0),
-                          child: Text('Executables:', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-                        ),
-                        ListView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: prefix.exeEntries.length,
-                          itemBuilder: (context, exeIndex) {
-                            final exe = prefix.exeEntries[exeIndex];
-                            // Pass runningProcesses map down to check status
-                            final isRunning = widget.runningProcesses.containsKey(exe.path);
-                            return ExecutableListTile(
-                              prefix: prefix,
-                              exe: exe,
-                              isRunning: isRunning, // Use actual running status
-                              // Pass required callbacks
-                              onRunExe: widget.onRunExe,
-                              onKillProcess: widget.onKillProcess,
-                              onDeleteExe: widget.onDeleteExecutable, // Pass context implicitly
-                            );
-                          },
-                        ),
-                         const SizedBox(height: 8),
-                      ] else
-                        const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
-                          child: Text('No executables added to this prefix yet.'),
-                        ),
-                    ],
-                  ),
-                );
-              },
+    return prefixes.isEmpty
+        ? Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.folder_off_outlined, size: 64, color: Colors.grey),
+                const SizedBox(height: 16),
+                Text('No ${widget.prefixTypeFilter.name} prefixes found.', style: const TextStyle(fontSize: 18)),
+                const SizedBox(height: 8),
+                const Text('Create a new prefix using the "Create" tab.', style: TextStyle(color: Colors.grey)),
+              ],
             ),
-    );
+          )
+        : ListView.builder(
+            itemCount: prefixes.length,
+            itemBuilder: (context, index) {
+              final prefix = prefixes[index];
+              return Card(
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                elevation: 2,
+                clipBehavior: Clip.antiAlias,
+                child: ExpansionTile(
+                  title: PrefixListTile(prefix: prefix),
+                  childrenPadding: EdgeInsets.zero,
+                  tilePadding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      child: Column(
+                         crossAxisAlignment: CrossAxisAlignment.start,
+                         children: [
+                            const Divider(height: 1),
+                            const SizedBox(height: 8),
+                            Text('Build: ${prefix.wineBuildPath}', style: Theme.of(context).textTheme.bodySmall),
+                            const SizedBox(height: 8),
+                         ]
+                      ),
+                    ),
+                    PrefixDetailActions( // Pass the rename callback down
+                      prefix: prefix,
+                      settings: widget.settings,
+                      onAddExecutable: widget.onAddExecutable,
+                      onShowCommonComponents: widget.onShowCommonComponents,
+                      onDeletePrefix: widget.onDeletePrefix,
+                      onRenamePrefix: (ctx, pfx) => _showRenameDialog(ctx, pfx), // Use helper to show dialog
+                      onRunWinecfg: widget.onRunWinecfg,
+                      onRunWinetricksGui: widget.onRunWinetricksGui,
+                      onRunInstaller: widget.onRunInstaller,
+                      onExploreHostFiles: widget.onExploreHostFiles,
+                      onApplyControllerFix: widget.onApplyControllerFix, // Pass controller fix callback
+                      onEditEnvVariables: widget.onEditEnvVariables, // Pass environment variables callback
+                    ),
+                    if (prefix.exeEntries.isNotEmpty) ...[
+                      const Divider(height: 1, indent: 16, endIndent: 16),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 16.0, right: 16.0, top: 16.0, bottom: 8.0),
+                        child: Text('Executables:', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                      ),
+                      ListView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: prefix.exeEntries.length,
+                        itemBuilder: (context, exeIndex) {
+                          final exe = prefix.exeEntries[exeIndex];
+                          // Pass runningProcesses map down to check status
+                          final isRunning = widget.runningProcesses.containsKey(exe.path);
+                          return ExecutableListTile(
+                            prefix: prefix,
+                            exe: exe,
+                            isRunning: isRunning, // Use actual running status
+                            // Pass required callbacks
+                            onRunExe: widget.onRunExe,
+                            onKillProcess: widget.onKillProcess,
+                            onDeleteExe: widget.onDeleteExecutable, // Pass context implicitly
+                          );
+                        },
+                      ),
+                       const SizedBox(height: 8),
+                    ] else
+                      const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
+                        child: Text('No executables added to this prefix yet.'),
+                      ),
+                  ],
+                ),
+              );
+            },
+          );
   }
 }

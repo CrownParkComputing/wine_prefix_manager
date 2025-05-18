@@ -1,8 +1,6 @@
 enum PrefixType {
   wine,
   proton,
-  // protonExperimental, // Removed
-  custom, // Renamed from gaming to custom
 }
 
 class WinePrefix {
@@ -39,12 +37,9 @@ class WinePrefix {
     final typeString = json['type'] as String?;
     if (typeString == 'PrefixType.proton') {
       type = PrefixType.proton;
-    // } else if (typeString == 'PrefixType.protonExperimental') { // Removed handling
-    //   type = PrefixType.protonExperimental;
-    } else if (typeString == 'PrefixType.gaming') { // Handle legacy Gaming type
-      type = PrefixType.custom; // Convert to custom
-    } else if (typeString == 'PrefixType.custom') { // Handle custom type
-      type = PrefixType.custom;
+    } else if (typeString == 'PrefixType.gaming' || typeString == 'PrefixType.custom') { 
+      // Convert both "gaming" and "custom" to wine for backward compatibility
+      type = PrefixType.wine;
     } else {
       type = PrefixType.wine; // Default to wine
     }
@@ -174,7 +169,7 @@ class ExeEntry {
         } else if (overrideTypeString == 'PrefixType.wine') {
            overrideType = PrefixType.wine;
         } else if (overrideTypeString == 'PrefixType.gaming') { // Handle Gaming type
-           overrideType = PrefixType.custom;
+           overrideType = PrefixType.wine;
         }
      }
 

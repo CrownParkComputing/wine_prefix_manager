@@ -7,6 +7,7 @@ import '../models/settings.dart';
 import '../models/wine_build.dart';
 import '../models/prefix_models.dart';
 import 'log_service.dart';
+import 'wine_component_installer.dart';
 
 typedef StatusCallback = void Function(String status);
 typedef ProgressCallback = void Function(double progress);
@@ -18,6 +19,7 @@ class ProtonPrefixCreationService {
   final Dio _dio = Dio();
   final Shell _shell = Shell(verbose: false);
   final LogService _logService = LogService();
+  final WineComponentInstaller _componentInstaller = WineComponentInstaller();
 
   // Add a field to track the selected build for directory organization
   BaseBuild? _lastSelectedBuild;
@@ -237,7 +239,7 @@ class ProtonPrefixCreationService {
 
       // 5. Initialize Prefix
       onStatusUpdate('Initializing prefix (this might take a moment)...');
-      await _initializeProtonPrefix(prefixPath, extractedDir, onStatusUpdate);
+      await _initializeProtonPrefix(prefixPath, extractedDir, settings, onStatusUpdate);
       _logService.log('Proton prefix initialized.');
 
       onStatusUpdate('Proton prefix "$prefixName" created successfully!');
@@ -303,8 +305,18 @@ class ProtonPrefixCreationService {
     return path.join(typeDir, prefixName);
   }
 
-  Future<void> _initializeProtonPrefix(String prefixPath, String buildPath, StatusCallback onStatusUpdate) async {
+  Future<void> _initializeProtonPrefix(String prefixPath, String buildPath, Settings settings, StatusCallback onStatusUpdate) async {
     _logService.log('Initializing Proton prefix using build from $buildPath');
+    
+    // Determine if this is a Kronek Proton build
+    bool isKronekProton = _lastSelectedBuild?.name.contains('Kronek') == true || 
+                          _lastSelectedBuild?.name.contains('wine-proton') == true ||
+                          buildPath.contains('wine-proton');
+    
+    bool isGEProton = _lastSelectedBuild?.name.contains('GE-Proton') == true ||
+                      buildPath.contains('GE-Proton');
+    
+    _logService.log('Build type detected: ${isKronekProton ? "Kronek Proton" : isGEProton ? "GE-Proton" : "Unknown Proton"}');
     
     // Check if proton executable exists
     String protonExecutablePath = path.join(buildPath, 'proton');
@@ -374,7 +386,75 @@ class ProtonPrefixCreationService {
     onStatusUpdate('Running wineboot...');
     _logService.log('Running wineboot -u...');
     await setupShell.run('"$wineExecutablePath" wineboot -u');
+    
+    // Set Windows version to win10
+    onStatusUpdate('Setting Windows version to win10...');
+    _logService.log('Running winecfg /v win10...');
+    await setupShell.run('"$wineExecutablePath" winecfg /v win10');
+    _logService.log('Windows version set to win10.');
 
-    _logService.log('Proton prefix initialization command finished.');
+    // Only install DXVK and VKD3D for Kronek Proton builds
+    // GE-Proton builds already have these components installed
+    if (isKronekProton) {
+      onStatusUpdate('Detected Kronek Proton build. Installing DXVK and VKD3D...');
+      
+      // Create a temporary WinePrefix object for component installation
+      final tempPrefix = WinePrefix(
+        name: path.basename(prefixPath), 
+        path: prefixPath, 
+        wineBuildPath: buildPath, 
+        type: PrefixType.proton, 
+        exeEntries: []
+      );
+
+      // Install DXVK
+      onStatusUpdate('Installing DXVK for Kronek Proton...');
+      try {
+        await _componentInstaller.installDxvk(tempPrefix, settings, progressCallback: onStatusUpdate);
+        _logService.log('DXVK installation completed.');
+      } catch (e) {
+        _logService.log('Warning: Failed to install DXVK: $e', LogLevel.warning);
+        onStatusUpdate('Warning: Failed to install DXVK: $e');
+      }
+      
+      // Install VKD3D-Proton
+      onStatusUpdate('Installing VKD3D-Proton for Kronek Proton...');
+      try {
+        await _componentInstaller.installVkd3d(tempPrefix, settings, progressCallback: onStatusUpdate);
+        _logService.log('VKD3D-Proton installation completed.');
+      } catch (e) {
+        _logService.log('Warning: Failed to install VKD3D-Proton: $e', LogLevel.warning);
+        onStatusUpdate('Warning: Failed to install VKD3D-Proton: $e');
+      }
+      
+      // Run winetricks verbs to ensure proper configuration
+      final winetricksVerbs = ['dxvk', 'vkd3d', 'dxvk_nvapi'];
+      for (final verb in winetricksVerbs) {
+        onStatusUpdate('Configuring $verb via winetricks...');
+        _logService.log('Running winetricks $verb...');
+        try {
+          await _componentInstaller.installComponent(
+            prefixPath: prefixPath,
+            component: verb,
+            wineExecutablePath: wineExecutablePath,
+            onStatusUpdate: (status) {
+              onStatusUpdate('Configuring $verb: $status');
+              _logService.log('Winetricks ($verb): $status');
+            },
+          );
+          _logService.log('Winetricks configuration for $verb completed.');
+        } catch (e) {
+          _logService.log('Warning: Failed to configure $verb via winetricks: $e', LogLevel.warning);
+          onStatusUpdate('Warning: Failed to configure $verb: $e');
+        }
+      }
+      
+      _logService.log('Kronek Proton prefix initialization completed with DXVK and VKD3D-Proton installed.');
+    } else {
+      onStatusUpdate('Detected GE-Proton build. Skipping DXVK and VKD3D installation (already included).');
+      _logService.log('Skipping DXVK and VKD3D-Proton installation for GE-Proton (already included).');
+    }
+
+    _logService.log('Proton prefix initialization completed.');
   }
 } 

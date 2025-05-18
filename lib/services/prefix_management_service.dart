@@ -127,7 +127,7 @@ class PrefixManagementService {
                   if (typeString == 'PrefixType.proton') {
                     type = PrefixType.proton;
                   } else if (typeString == 'PrefixType.custom' || typeString == 'PrefixType.gaming') {
-                    type = PrefixType.custom;
+                    type = PrefixType.wine;
                   } else {
                     type = PrefixType.wine; // Default to wine for unknown or "PrefixType.wine"
                   }
@@ -143,7 +143,7 @@ class PrefixManagementService {
                 if (typeSubdir.contains('proton') || prefixName.toLowerCase().contains('proton')) {
                   type = PrefixType.proton;
                 } else if (typeSubdir == 'custom') {
-                  type = PrefixType.custom;
+                  type = PrefixType.wine;
                 } else if (typeSubdir == 'wine') {
                   type = PrefixType.wine;
                 } else {
@@ -341,7 +341,7 @@ class PrefixManagementService {
           throw Exception('Wine executable not found at $winePath');
         }
       }
-    } else if (prefix.type == PrefixType.custom) {
+    } else if (prefix.type == PrefixType.wine) {
       // For custom prefixes, use system wine
       winePath = wineBinaryName;
       wineServerPath = wineServerBinaryName;
