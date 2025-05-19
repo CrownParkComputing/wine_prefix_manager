@@ -1,5 +1,5 @@
 Name:           wine_prefix_manager
-Version:        1.11.0
+Version:        1.12.0
 Release:        1%{?dist}
 Summary:        Wine Prefix Manager for Linux gaming
 License:        MIT
@@ -38,5 +38,5 @@ cp %{_sourcedir}/../../../assets/icons/winehero.jpg %{buildroot}/usr/share/icons
 %{_datadir}/icons/hicolor/512x512/apps/%{name}.jpg
 
 %changelog
-* Mon May 19 2025 Builder <builder@example.com> - 1.11.0-1
+* Mon May 19 2025 Builder <builder@example.com> - 1.12.0-1
 - Automatic build

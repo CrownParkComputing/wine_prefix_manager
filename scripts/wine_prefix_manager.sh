@@ -649,8 +649,34 @@ github_release() {
     git tag -a "v${version}" -m "Release v${version} (${release_type})"
     
     echo "Pushing to origin..."
-    git push origin master
-    git push origin "v${version}"
+    # Get the current branch name
+    CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+    
+    # Push branch with error handling
+    echo "Pushing branch $CURRENT_BRANCH..."
+    if ! git push origin "$CURRENT_BRANCH" 2>/dev/null; then
+        echo -e "${YELLOW}Warning: Failed to push branch. Check your remote configuration.${RESET}"
+        echo -e "Running 'git remote -v' to check remote configuration:"
+        git remote -v
+        read -p "Would you like to set/update the remote origin URL? (y/n): " SETUP_REMOTE
+        if [[ $SETUP_REMOTE =~ ^[Yy]$ ]]; then
+            read -p "Enter GitHub repository URL (e.g., https://github.com/username/repo.git): " REPO_URL
+            git remote remove origin 2>/dev/null
+            git remote add origin "$REPO_URL"
+            echo -e "${GREEN}Remote origin updated. Trying to push again...${RESET}"
+            git push -u origin "$CURRENT_BRANCH" || echo -e "${YELLOW}Push still failed. Please check permissions and URL.${RESET}"
+        fi
+    else
+        echo -e "${GREEN}Branch pushed successfully.${RESET}"
+    fi
+    
+    # Push tag with error handling
+    echo "Pushing tag v${version}..."
+    if ! git push origin "v${version}" 2>/dev/null; then
+        echo -e "${YELLOW}Warning: Failed to push tag. You can push it manually later.${RESET}"
+    else
+        echo -e "${GREEN}Tag pushed successfully.${RESET}"
+    fi
     
     echo -e "${GREEN}GitHub release v${version} created successfully!${RESET}"
     echo "You can now create the release on GitHub with the built packages."
