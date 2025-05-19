@@ -1,0 +1,10 @@
+Package: wine_prefix_manager
+Version: 2.0.0
+Section: utils
+Priority: optional
+Architecture: amd64
+Depends: wine, zenity
+Maintainer: Jon <jon@example.com>
+Description: Wine Prefix Manager for Linux gaming
+ A Flutter application to create and manage Wine prefixes for running
+ Windows games and applications on Linux.
