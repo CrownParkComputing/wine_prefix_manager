@@ -631,6 +631,25 @@ github_release() {
         return 1
     fi
     
+    # Check if gh (GitHub CLI) is installed
+    if ! command -v gh &> /dev/null; then
+        echo -e "${YELLOW}Warning: GitHub CLI is not installed. Will create tag only, not a full release.${RESET}"
+        echo -e "${YELLOW}To create releases with assets, install GitHub CLI: https://cli.github.com/${RESET}"
+        USE_GH_CLI=false
+    else
+        USE_GH_CLI=true
+        # Check if logged in to GitHub
+        if ! gh auth status &>/dev/null; then
+            echo -e "${YELLOW}You need to log in to GitHub CLI first.${RESET}"
+            echo -e "${BLUE}Running 'gh auth login'...${RESET}"
+            gh auth login
+            if [ $? -ne 0 ]; then
+                echo -e "${RED}Failed to log in to GitHub CLI. Will create tag only, not a full release.${RESET}"
+                USE_GH_CLI=false
+            fi
+        fi
+    fi
+    
     # Check if we're in a git repository
     if ! git rev-parse --is-inside-work-tree &> /dev/null; then
         echo -e "${RED}Error: Not in a git repository. Please run this script from a git repository.${RESET}"
@@ -674,12 +693,117 @@ github_release() {
     echo "Pushing tag v${version}..."
     if ! git push origin "v${version}" 2>/dev/null; then
         echo -e "${YELLOW}Warning: Failed to push tag. You can push it manually later.${RESET}"
+        TAG_PUSHED=false
     else
         echo -e "${GREEN}Tag pushed successfully.${RESET}"
+        TAG_PUSHED=true
     fi
     
-    echo -e "${GREEN}GitHub release v${version} created successfully!${RESET}"
-    echo "You can now create the release on GitHub with the built packages."
+    # Create GitHub release with assets if GitHub CLI is available
+    if [ "$USE_GH_CLI" = true ] && [ "$TAG_PUSHED" = true ]; then
+        echo -e "${BLUE}Creating GitHub release with assets...${RESET}"
+        
+        # Prepare release notes
+        NOTES_FILE=$(mktemp)
+        echo "# Wine Prefix Manager v${version}" > "$NOTES_FILE"
+        echo "" >> "$NOTES_FILE"
+        echo "## What's New" >> "$NOTES_FILE"
+        case "$release_type" in
+            major)
+                echo "Major release with significant changes and new features." >> "$NOTES_FILE"
+                ;;
+            minor)
+                echo "Minor release with new features and improvements." >> "$NOTES_FILE"
+                ;;
+            patch)
+                echo "Patch release with bug fixes and minor improvements." >> "$NOTES_FILE"
+                ;;
+        esac
+        echo "" >> "$NOTES_FILE"
+        echo "## Installation" >> "$NOTES_FILE"
+        echo "Choose one of the following packages:" >> "$NOTES_FILE"
+        echo "- AppImage: Self-contained executable, works on most Linux distributions" >> "$NOTES_FILE"
+        echo "- DEB: For Debian/Ubuntu-based distributions" >> "$NOTES_FILE"
+        echo "- RPM: For Fedora/RHEL-based distributions" >> "$NOTES_FILE"
+        echo "- Arch: For Arch Linux and derivatives" >> "$NOTES_FILE"
+        
+        # Create release
+        echo -e "${BLUE}Publishing release to GitHub...${RESET}"
+        
+        # Collect assets for upload
+        ASSETS=()
+        
+        # Check if AppImage exists and add to assets
+        APPIMAGE_PATH="$RELEASE_DIR/${APP_NAME}-${version}-x86_64.AppImage"
+        if [ -f "$APPIMAGE_PATH" ]; then
+            ASSETS+=("$APPIMAGE_PATH")
+            # Also add checksum if it exists
+            if [ -f "${APPIMAGE_PATH}.sha256" ]; then
+                ASSETS+=("${APPIMAGE_PATH}.sha256")
+            fi
+        fi
+        
+        # Check if DEB package exists and add to assets
+        DEB_PATH="$RELEASE_DIR/${APP_NAME}_${version}_amd64.deb"
+        if [ -f "$DEB_PATH" ]; then
+            ASSETS+=("$DEB_PATH")
+        fi
+        
+        # Check if RPM package exists and add to assets
+        RPM_PATH=$(find "$RELEASE_DIR" -name "${APP_NAME}-${version}*.rpm" -type f | head -n 1)
+        if [ -n "$RPM_PATH" ]; then
+            ASSETS+=("$RPM_PATH")
+        fi
+        
+        # Check if Arch package exists and add to assets
+        ARCH_PATH=$(find "$RELEASE_DIR" -name "${APP_NAME}-${version}*.pkg.tar.zst" -type f | head -n 1)
+        if [ -n "$ARCH_PATH" ]; then
+            ASSETS+=("$ARCH_PATH")
+        fi
+        
+        # Create GitHub release with all assets
+        if [ ${#ASSETS[@]} -gt 0 ]; then
+            ASSETS_STR=""
+            for asset in "${ASSETS[@]}"; do
+                ASSETS_STR="$ASSETS_STR --attach $asset"
+            done
+            
+            # Create the release
+            echo -e "${BLUE}Assets to upload: ${#ASSETS[@]} files${RESET}"
+            eval "gh release create v${version} $ASSETS_STR --title \"Wine Prefix Manager v${version}\" --notes-file \"$NOTES_FILE\""
+            if [ $? -eq 0 ]; then
+                echo -e "${GREEN}GitHub release created successfully with ${#ASSETS[@]} assets!${RESET}"
+            else
+                echo -e "${RED}Failed to create GitHub release. Try manually using the GitHub web interface.${RESET}"
+            fi
+        else
+            echo -e "${YELLOW}No assets found to upload. Creating release without assets.${RESET}"
+            gh release create "v${version}" --title "Wine Prefix Manager v${version}" --notes-file "$NOTES_FILE"
+        fi
+        
+        # Clean up
+        rm -f "$NOTES_FILE"
+    else
+        if [ "$USE_GH_CLI" = false ]; then
+            echo -e "${YELLOW}GitHub CLI not available. Release created without assets.${RESET}"
+        fi
+        if [ "$TAG_PUSHED" = false ]; then
+            echo -e "${YELLOW}Tag not pushed. Cannot create GitHub release.${RESET}"
+        fi
+        echo -e "${BLUE}Manual steps for creating a GitHub release:${RESET}"
+        echo "1. Go to your repository on GitHub"
+        echo "2. Navigate to Releases"
+        echo "3. Click 'Draft a new release'"
+        echo "4. Choose tag v${version}"
+        echo "5. Add title and release notes"
+        echo "6. Upload the following files from your $RELEASE_DIR directory:"
+        echo "   - ${APP_NAME}-${version}-x86_64.AppImage"
+        echo "   - ${APP_NAME}_${version}_amd64.deb"
+        echo "   - RPM and Arch packages if available"
+        echo "7. Publish the release"
+    fi
+    
+    echo -e "${GREEN}GitHub release process completed!${RESET}"
     
     return 0
 }
