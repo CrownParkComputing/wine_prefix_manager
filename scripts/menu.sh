@@ -119,6 +119,13 @@ while true; do
             echo "3. Push to GitHub"
             echo "4. Create a GitHub tag to trigger GitHub Actions workflows"
             echo "5. Install the new release locally"
+            echo
+            echo "Note: The new GitHub Actions workflow will handle the following:"
+            echo "- Building .deb packages with correct naming conventions"
+            echo "- Building .rpm packages"
+            echo "- Building AppImage packages with improved handling of modern libraries"
+            echo "- Creating a GitHub release with all packages"
+            echo
             read -p "Are you sure you want to continue? [y/N]: " confirm
             
             if [[ $confirm =~ ^[Yy]$ ]]; then

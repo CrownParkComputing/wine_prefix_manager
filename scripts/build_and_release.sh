@@ -13,9 +13,25 @@ show_usage() {
     echo "  --release              Build release version (default)"
     echo "  --increment TYPE       Increment version number (major, minor, patch)"
     echo "  --release-type TYPE    Set release type (major, minor, patch)"
-    echo "  --skip-git             Skip git operations"
+    echo "  --skip-git        # Build AppImage with multiple fallback options
+    set +e
+    
+    # Set architecture explicitly
+    export ARCH="x86_64"
+    
+    # First try with our strip wrapper
+    ./appimagetool AppDir "$APPIMAGE_NAME"
+    RESULT=$?
+    
+    # If that fails, try with APPIMAGE_EXTRACT_AND_RUN to avoid FUSE issues
+    if [ $RESULT -ne 0 ]; then
+      echo "First attempt failed, trying with APPIMAGE_EXTRACT_AND_RUN=1..."
+      export APPIMAGE_EXTRACT_AND_RUN=1
+      ./appimagetool AppDir "$APPIMAGE_NAME" 
+      RESULT=$?
+    figit operations"
     echo "  --distro DISTRO        Build package for specific distro"
-    echo "                         Supported: arch, debian, ubuntu, rpm, all"
+    echo "                         Supported: arch, debian, ubuntu, rpm, appimage, all"
     echo "                         'all' will build packages for all distros"
     echo "  --help                 Display this help message"
 }
@@ -72,13 +88,13 @@ while [[ $# -gt 0 ]]; do
             shift 2
             # Validate distro
             case "$DISTRO" in
-                "arch"|"debian"|"ubuntu"|"rpm"|"all")
+                "arch"|"debian"|"ubuntu"|"rpm"|"appimage"|"all")
                     if [ "$DISTRO" = "all" ]; then
                         BUILD_ALL_PACKAGES=true
                     fi
                     ;;
                 *)
-                    echo "Error: Unsupported distro '$DISTRO'. Supported distros: arch, debian, ubuntu, rpm, all"
+                    echo "Error: Unsupported distro '$DISTRO'. Supported distros: arch, debian, ubuntu, rpm, appimage, all"
                     exit 1
                     ;;
             esac
@@ -421,6 +437,250 @@ EOF
     fi
 fi
 
+# Create AppImage
+if [ "$DISTRO" = "appimage" ] || [ "$BUILD_ALL_PACKAGES" = true ]; then
+    echo "Creating AppImage package..."
+    
+    # Check if necessary tools are installed
+    if ! command -v wget &> /dev/null; then
+        echo "Warning: wget not found. Skipping AppImage creation."
+        APPIMAGE_CREATED=false
+    else
+        # Install required dependencies
+        echo "Installing required dependencies for AppImage..."
+        if command -v apt-get &> /dev/null; then
+            sudo -n apt-get update || echo "Skipping apt-get update - may need sudo privileges"
+            sudo -n apt-get install -y libfuse2 libgtk-3-0 libcurl4 libblkid1 liblzma5 imagemagick || echo "Skipping dependency installation - may need sudo privileges"
+        elif command -v pacman &> /dev/null; then
+            sudo -n pacman -Sy --noconfirm fuse2 gtk3 imagemagick || echo "Skipping dependency installation - may need sudo privileges"
+        fi
+        echo "Note: If the AppImage build fails, you may need to manually install dependencies with:"
+        echo "  sudo apt-get install libfuse2 libgtk-3-0 libcurl4 libblkid1 liblzma5 imagemagick (on Debian/Ubuntu)"
+        echo "  or"
+        echo "  sudo pacman -Sy fuse2 gtk3 imagemagick (on Arch Linux)"
+    
+    # Create directories for AppImage
+    APPDIR="${RELEASE_DIR}/AppDir"
+    mkdir -p "${APPDIR}/usr/bin"
+    mkdir -p "${APPDIR}/usr/lib/${APP_NAME}"
+    mkdir -p "${APPDIR}/usr/share/applications"
+    mkdir -p "${APPDIR}/usr/share/icons/hicolor/128x128/apps"
+    mkdir -p "${APPDIR}/usr/share/metainfo"
+    
+    # Copy application files
+    cp -r "${PACKAGE_DIR}"/* "${APPDIR}/usr/lib/${APP_NAME}/"
+    
+    # Create launcher script
+    cat > "${APPDIR}/usr/bin/${APP_NAME}" <<EOF
+#!/bin/bash
+exec /usr/lib/${APP_NAME}/${APP_NAME} "\$@"
+EOF
+    chmod +x "${APPDIR}/usr/bin/${APP_NAME}"
+    
+    # Create desktop entry
+    cat > "${APPDIR}/usr/share/applications/${APP_NAME}.desktop" <<EOF
+[Desktop Entry]
+Name=Wine Prefix Manager
+Comment=Manage Wine prefixes
+Exec=${APP_NAME}
+Icon=${APP_NAME}
+Terminal=false
+Type=Application
+Categories=Utility;
+EOF
+    
+    # Copy icon
+    if [ -f "${PACKAGE_DIR}/data/flutter_assets/assets/icon.png" ]; then
+        mkdir -p "${APPDIR}/usr/share/icons/hicolor/128x128/apps/"
+        cp "${PACKAGE_DIR}/data/flutter_assets/assets/icon.png" "${APPDIR}/usr/share/icons/hicolor/128x128/apps/${APP_NAME}.png"
+    fi
+    
+    # Create AppRun script
+    cat > "${APPDIR}/AppRun" <<EOF
+#!/bin/bash
+SELF=\$(readlink -f "\$0")
+HERE=\${SELF%/*}
+export PATH="\${HERE}/usr/bin:\${PATH}"
+export LD_LIBRARY_PATH="\${HERE}/usr/lib:\${LD_LIBRARY_PATH}"
+exec "\${HERE}/usr/bin/${APP_NAME}" "\$@"
+EOF
+    chmod +x "${APPDIR}/AppRun"
+    
+    # Create symlinks for icon and desktop file
+    ln -sf "./usr/share/icons/hicolor/128x128/apps/${APP_NAME}.png" "${APPDIR}/${APP_NAME}.png"
+    ln -sf "./usr/share/applications/${APP_NAME}.desktop" "${APPDIR}/${APP_NAME}.desktop"
+    
+    # Create appdata file
+    cat > "${APPDIR}/usr/share/metainfo/${APP_NAME}.appdata.xml" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>${APP_NAME}</id>
+  <name>Wine Prefix Manager</name>
+  <summary>Manage Wine prefixes on Linux</summary>
+  <description>
+    <p>A user-friendly tool for managing Wine and Proton prefixes on Linux.</p>
+  </description>
+  <url type="homepage">https://github.com/jon/wine_prefix_manager</url>
+  <launchable type="desktop-id">${APP_NAME}.desktop</launchable>
+  <releases>
+    <release version="${VERSION}" date="$(date '+%Y-%m-%d')"/>
+  </releases>
+</component>
+EOF
+    
+    # Download linuxdeploy tool if not present
+    if [ ! -f "${RELEASE_DIR}/linuxdeploy-x86_64.AppImage" ]; then
+        echo "Downloading linuxdeploy tool..."
+        wget -O "${RELEASE_DIR}/linuxdeploy-x86_64.AppImage" "https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage"
+        chmod +x "${RELEASE_DIR}/linuxdeploy-x86_64.AppImage"
+    fi
+    
+    # Build AppImage
+    APPIMAGE_NAME="${APP_NAME}-${VERSION}-x86_64.AppImage"
+    cd "${RELEASE_DIR}"
+    echo "Building AppImage..."
+    
+    # Create a wrapper for strip to handle .relr.dyn sections
+    mkdir -p wrapper
+    cat > wrapper/strip << 'EOF'
+#!/bin/bash
+
+# Get the real strip command
+REAL_STRIP=$(which -a strip | grep -v "$(pwd)/wrapper" | head -n1)
+
+# Process all arguments
+args=()
+for arg in "$@"; do
+  if [[ -f "$arg" ]]; then
+    # Check if file has .relr.dyn section
+    if readelf -S "$arg" 2>/dev/null | grep -q '\.relr\.dyn'; then
+      echo "Skipping strip for $arg (contains .relr.dyn section)"
+      continue
+    fi
+  fi
+  args+=("$arg")
+done
+
+# Only call strip if we have arguments left
+if [ ${#args[@]} -gt 0 ]; then
+  "$REAL_STRIP" "${args[@]}"
+fi
+EOF
+    chmod +x wrapper/strip
+    export PATH="$(pwd)/wrapper:$PATH"
+    
+    # Download appimagetool instead of using linuxdeploy
+    echo "Downloading appimagetool..."
+    if [ ! -f "appimagetool" ]; then
+      wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage -O appimagetool
+      chmod +x appimagetool
+    fi
+    
+    export VERSION="$VERSION"
+    
+    # Try to build AppImage with multiple fallback options
+    set +e
+    
+    # First try with our strip wrapper
+    ./appimagetool AppDir "$APPIMAGE_NAME"
+    RESULT=$?
+    
+    # If that fails, try with APPIMAGE_EXTRACT_AND_RUN to avoid FUSE issues
+    if [ $RESULT -ne 0 ]; then
+      echo "First attempt failed, trying with APPIMAGE_EXTRACT_AND_RUN=1..."
+      export APPIMAGE_EXTRACT_AND_RUN=1
+      ./appimagetool AppDir "$APPIMAGE_NAME" 
+      RESULT=$?
+    fi
+    
+    # If that still fails, try bundling only essential components
+    if [ $RESULT -ne 0 ]; then
+      echo "Basic AppImage creation failed, creating minimal AppImage..."
+      # Clean AppDir and reconstruct with minimal dependencies
+      rm -rf AppDir
+      mkdir -p AppDir/usr/{bin,lib/${APP_NAME},share/{applications,icons/hicolor/128x128/apps}}
+      
+      # Create a simple icon for AppImage
+      convert -size 256x256 xc:transparent -fill '#673AB7' -draw 'circle 128,128 128,20' -fill white -font Arial -pointsize 100 -gravity center -draw "text 0,0 'W'" AppDir/${APP_NAME}.png || echo "Could not create icon with ImageMagick, trying a fallback approach"
+      
+      # Fallback approach if ImageMagick is not available
+      if [ ! -f "AppDir/${APP_NAME}.png" ]; then
+        echo "Creating a simple PNG file manually"
+        # Create a simple 16x16 colored box as PNG
+        printf '\x89\x50\x4E\x47\x0D\x0A\x1A\x0A\x00\x00\x00\x0D\x49\x48\x44\x52\x00\x00\x00\x10\x00\x00\x00\x10\x08\x02\x00\x00\x00\x90\x91\x68\x36\x00\x00\x00\x01\x73\x52\x47\x42\x00\xAE\xCE\x1C\xE9\x00\x00\x00\x30\x49\x44\x41\x54\x38\x11\x63\xF8\x0F\x05\x0C\x0C\x0C\x0C\x44\x00\xA2\x4C\x46\x35\x60\x34\x0C\x46\xC3\x60\x34\x0C\x46\xC3\x60\x34\x0C\x46\xC3\x60\x34\x0C\x46\xC3\x00\x1D\x06\x00\x24\xE5\x04\x88\xFF\xFF\xFF\xFF\x00\x00\x00\x00\x49\x45\x4E\x44\xAE\x42\x60\x82' > AppDir/${APP_NAME}.png
+      fi
+      
+      # Copy only essential files
+      cp -r ../"${PACKAGE_DIR}"/* AppDir/usr/lib/${APP_NAME}/
+      
+      # Simplified AppRun
+      cat > AppDir/AppRun << 'EOF'
+#!/bin/bash
+SELF=$(readlink -f "$0")
+HERE=${SELF%/*}
+export LD_LIBRARY_PATH="${HERE}/usr/lib:${LD_LIBRARY_PATH}"
+exec "${HERE}/usr/lib/wine_prefix_manager/wine_prefix_manager" "$@"
+EOF
+      chmod +x AppDir/AppRun
+      
+      # Create desktop entry
+      cat > AppDir/usr/share/applications/${APP_NAME}.desktop << EOF
+[Desktop Entry]
+Name=Wine Prefix Manager
+Comment=Manage Wine prefixes
+Exec=${APP_NAME}
+Icon=${APP_NAME}
+Terminal=false
+Type=Application
+Categories=Utility;
+EOF
+      
+      # Copy icon
+      if [ -f "../${PACKAGE_DIR}/data/flutter_assets/assets/icon.png" ]; then
+        cp "../${PACKAGE_DIR}/data/flutter_assets/assets/icon.png" AppDir/usr/share/icons/hicolor/128x128/apps/${APP_NAME}.png
+      fi
+      
+      # Create symlinks
+      # Copy icon directly to root dir (needed by appimagetool)
+      cp AppDir/usr/share/icons/hicolor/128x128/apps/${APP_NAME}.png AppDir/${APP_NAME}.png
+      ln -sf usr/share/applications/${APP_NAME}.desktop AppDir/${APP_NAME}.desktop
+      
+      # Try building again with minimal approach and disable strip
+      export NO_STRIP=1
+      ./appimagetool AppDir "$APPIMAGE_NAME"
+      RESULT=$?
+    fi
+    
+    # If everything else fails, try one final approach with --no-appstream
+    if [ $RESULT -ne 0 ]; then
+      echo "Trying one last approach with --no-appstream..."
+      export ARCH="x86_64"
+      export APPIMAGE_EXTRACT_AND_RUN=1
+      export NO_STRIP=1
+      
+      # Try with a simpler approach
+      ./appimagetool --no-appstream AppDir "$APPIMAGE_NAME"
+      RESULT=$?
+    fi
+    
+    set -e
+    
+    # Check if AppImage was created successfully
+    if [ -f "$APPIMAGE_NAME" ]; then
+      sha256sum "${APPIMAGE_NAME}" > "${APPIMAGE_NAME}.sha256"
+      echo "AppImage created at: ${RELEASE_DIR}/${APPIMAGE_NAME}"
+      APPIMAGE_CREATED=true
+    else
+      echo "AppImage creation failed."
+      APPIMAGE_CREATED=false
+    fi
+    
+    # Go back to root directory
+    cd ..
+    
+    fi
+fi
+
 echo "Build artifacts created in ${RELEASE_DIR}/ directory:"
 ls -la $RELEASE_DIR
 
@@ -448,11 +708,31 @@ if [ "$SKIP_GIT" = false ]; then
 
     # Create GitHub release
     echo "Creating GitHub release..."
-    # Try to get release notes from git commit history
-    RELEASE_NOTES=$(git log --format="* %s" $(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo HEAD~10)..HEAD)
-    # If no release notes, use a simple placeholder
-    if [ -z "$RELEASE_NOTES" ]; then
-        RELEASE_NOTES="Release version $VERSION"
+    # Generate comprehensive release notes
+    COMMITS=$(git log --pretty=format:"* %s (%h)" $(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo HEAD~10)..HEAD)
+    
+    # Create release notes with version and commits
+    RELEASE_NOTES=$(cat << EOF
+# Wine Prefix Manager v${VERSION}
+
+Released on $(date '+%Y-%m-%d')
+
+## Changes in this version:
+
+${COMMITS}
+
+## Download Options
+
+* **Debian/Ubuntu**: Download the .deb file
+* **RPM-based distros**: Download the .rpm file
+* **Other Linux distros**: Download the AppImage file
+* **Source code**: Download the .tar.gz file
+EOF
+    )
+    
+    # If no commit history found, use a simple placeholder
+    if [ -z "$COMMITS" ]; then
+        RELEASE_NOTES="# Wine Prefix Manager v${VERSION}\n\nReleased on $(date '+%Y-%m-%d')\n\nThis release contains bug fixes and improvements."
     fi
     
     # Build the list of files to upload
@@ -474,6 +754,15 @@ if [ "$SKIP_GIT" = false ]; then
         RPM_CHECKSUM=$(find "${RELEASE_DIR}" -name "*.rpm.sha256" -printf "%p\n")
         if [ -n "$RPM_FILE" ]; then
             UPLOAD_FILES+=("$RPM_FILE" "$RPM_CHECKSUM")
+        fi
+    fi
+
+    # Add AppImage package if it was created
+    if [ "$APPIMAGE_CREATED" = true ]; then
+        APPIMAGE_FILE=$(find "${RELEASE_DIR}" -name "*.AppImage" -printf "%p\n" | grep -v "linuxdeploy")
+        APPIMAGE_CHECKSUM=$(find "${RELEASE_DIR}" -name "*.AppImage.sha256" -printf "%p\n")
+        if [ -n "$APPIMAGE_FILE" ]; then
+            UPLOAD_FILES+=("$APPIMAGE_FILE" "$APPIMAGE_CHECKSUM")
         fi
     fi
     

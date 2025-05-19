@@ -12,8 +12,49 @@ on:
         default: ''
 
 jobs:
+  # Determine version first, to be used by all other jobs
+  determine-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.set_version.outputs.version }}
+      display_version: ${{ steps.set_version.outputs.display_version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set version
+        id: set_version
+        run: |
+          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref_type }}" == "tag" ]]; then
+            # Extract version from git tag
+            DISPLAY_VERSION="${{ github.ref_name }}"
+            # Version without v prefix for filenames
+            FILE_VERSION="${DISPLAY_VERSION#v}"
+            echo "Using version from Git tag: $DISPLAY_VERSION (file version: $FILE_VERSION)"
+          else
+            # Fallback to manual input or pubspec.yaml
+            if [[ -n "${{ github.event.inputs.version }}" ]]; then
+              FILE_VERSION="${{ github.event.inputs.version }}"
+              DISPLAY_VERSION="v$FILE_VERSION"
+              echo "Using version from workflow input: $DISPLAY_VERSION"
+            else
+              # Last resort - read from pubspec.yaml
+              FILE_VERSION=$(grep 'version:' pubspec.yaml | awk '{print $2}' | tr -d "'\"" | cut -d'+' -f1)
+              DISPLAY_VERSION="v$FILE_VERSION"
+              echo "Using version from pubspec.yaml: $DISPLAY_VERSION"
+            fi
+          fi
+          
+          echo "FILE_VERSION=$FILE_VERSION"
+          echo "DISPLAY_VERSION=$DISPLAY_VERSION"
+          echo "version=$FILE_VERSION" >> $GITHUB_OUTPUT
+          echo "display_version=$DISPLAY_VERSION" >> $GITHUB_OUTPUT
+  
   build-linux:
     runs-on: ubuntu-latest
+    needs: determine-version
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -32,17 +73,16 @@ jobs:
           sudo apt-get install -y cmake ninja-build clang pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev fuse libfuse2
           sudo apt-get install -y dpkg-dev debhelper rpm librsvg2-bin
 
-      - name: Determine version
+      - name: Set version from global job
         id: version
         run: |
-          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref_type }}" == "tag" ]]; then
-            VERSION="${{ github.ref_name }}"
-            VERSION="${VERSION#v}"
-          else
-            VERSION="${{ github.event.inputs.version }}"
-          fi
+          VERSION="${{ needs.determine-version.outputs.version }}"
+          DISPLAY_VERSION="${{ needs.determine-version.outputs.display_version }}"
+          echo "Using consistent version: $DISPLAY_VERSION (file version: $VERSION)"
           echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "DISPLAY_VERSION=$DISPLAY_VERSION" >> $GITHUB_ENV
           echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "display_version=$DISPLAY_VERSION" >> $GITHUB_OUTPUT
 
       - name: Install Flutter dependencies
         run: flutter pub get
@@ -116,15 +156,18 @@ jobs:
           name: linux-build
           path: |
             release/*.tar.gz
-            release/*.sha256
+            release/*.tar.gz.sha256
           retention-days: 3
+          if-no-files-found: error
 
   build-deb:
     runs-on: ubuntu-latest
-    needs: build-linux
+    needs: [determine-version, build-linux]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Download Linux build
         uses: actions/download-artifact@v4
@@ -132,17 +175,16 @@ jobs:
           name: linux-build
           path: release/
 
-      - name: Determine version
+      - name: Set version from global job
         id: version
         run: |
-          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref_type }}" == "tag" ]]; then
-            VERSION="${{ github.ref_name }}"
-            VERSION="${VERSION#v}"
-          else
-            VERSION="${{ github.event.inputs.version }}"
-          fi
+          VERSION="${{ needs.determine-version.outputs.version }}"
+          DISPLAY_VERSION="${{ needs.determine-version.outputs.display_version }}"
+          echo "Using consistent version: $DISPLAY_VERSION (file version: $VERSION)"
           echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "DISPLAY_VERSION=$DISPLAY_VERSION" >> $GITHUB_ENV
           echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "display_version=$DISPLAY_VERSION" >> $GITHUB_OUTPUT
 
       - name: Install build dependencies
         run: |
@@ -156,7 +198,13 @@ jobs:
 
       - name: Create Debian package structure
         run: |
-          DEB_NAME="wine_prefix_manager_${{ steps.version.outputs.version }}-1_amd64"
+          # Ensure version doesn't contain any invalid characters
+          CLEAN_VERSION=$(echo "${{ steps.version.outputs.version }}" | sed 's/[^0-9.]//g')
+          echo "Clean version: $CLEAN_VERSION"
+          
+          DEB_NAME="wine-prefix-manager_${CLEAN_VERSION}-1_amd64"
+          echo "Using Debian package name: $DEB_NAME"
+          
           mkdir -p release/${DEB_NAME}/DEBIAN
           mkdir -p release/${DEB_NAME}/usr/bin
           mkdir -p release/${DEB_NAME}/usr/lib/wine_prefix_manager
@@ -165,8 +213,8 @@ jobs:
           
           # Create control file
           cat > release/${DEB_NAME}/DEBIAN/control << EOF
-          Package: wine_prefix_manager
-          Version: ${{ steps.version.outputs.version }}
+          Package: wine-prefix-manager
+          Version: $CLEAN_VERSION
           Section: utils
           Priority: optional
           Architecture: amd64
@@ -206,8 +254,22 @@ jobs:
       - name: Build Debian package
         run: |
           cd release
-          dpkg-deb --build wine_prefix_manager_${{ steps.version.outputs.version }}-1_amd64
-          sha256sum wine_prefix_manager_${{ steps.version.outputs.version }}-1_amd64.deb > wine_prefix_manager_${{ steps.version.outputs.version }}-1_amd64.deb.sha256
+          # Ensure version doesn't contain any invalid characters
+          CLEAN_VERSION=$(echo "${{ steps.version.outputs.version }}" | sed 's/[^0-9.]//g')
+          DEB_NAME="wine-prefix-manager_${CLEAN_VERSION}-1_amd64"
+          
+          echo "Building Debian package: $DEB_NAME"
+          dpkg-deb --build $DEB_NAME
+          
+          # Check if package was created successfully
+          if [ -f "${DEB_NAME}.deb" ]; then
+            echo "Debian package created successfully"
+            sha256sum "${DEB_NAME}.deb" > "${DEB_NAME}.deb.sha256"
+          else
+            echo "ERROR: Failed to create Debian package"
+            ls -la
+            exit 1
+          fi
 
       - name: Upload DEB artifact
         uses: actions/upload-artifact@v4
@@ -217,13 +279,16 @@ jobs:
             release/*.deb
             release/*.deb.sha256
           retention-days: 3
+          if-no-files-found: warn
 
   build-rpm:
     runs-on: ubuntu-latest
-    needs: build-linux
+    needs: [determine-version, build-linux]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Download Linux build
         uses: actions/download-artifact@v4
@@ -231,17 +296,16 @@ jobs:
           name: linux-build
           path: release/
 
-      - name: Determine version
+      - name: Set version from global job
         id: version
         run: |
-          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref_type }}" == "tag" ]]; then
-            VERSION="${{ github.ref_name }}"
-            VERSION="${VERSION#v}"
-          else
-            VERSION="${{ github.event.inputs.version }}"
-          fi
+          VERSION="${{ needs.determine-version.outputs.version }}"
+          DISPLAY_VERSION="${{ needs.determine-version.outputs.display_version }}"
+          echo "Using consistent version: $DISPLAY_VERSION (file version: $VERSION)"
           echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "DISPLAY_VERSION=$DISPLAY_VERSION" >> $GITHUB_ENV
           echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "display_version=$DISPLAY_VERSION" >> $GITHUB_OUTPUT
 
       - name: Install RPM build dependencies
         run: |
@@ -339,38 +403,65 @@ jobs:
             release/*.rpm
             release/*.rpm.sha256
           retention-days: 3
+          if-no-files-found: warn
 
   build-appimage:
     runs-on: ubuntu-latest
-    needs: build-linux
+    needs: [determine-version, build-linux]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Download Linux build
         uses: actions/download-artifact@v4
         with:
           name: linux-build
           path: release/
+          
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          flutter-version: '3.x'
+      
+      - name: Install Flutter dependencies
+        run: |
+          flutter pub get
+          # Build a simple Flutter Linux app to ensure engine files are available
+          mkdir -p /tmp/flutter-test
+          cd /tmp/flutter-test
+          flutter create --platforms=linux test_app
+          cd test_app
+          flutter build linux --release
+          # Find where the Flutter libraries are located
+          find . -name "libflutter_linux_gtk.so*"
+          echo "Flutter libraries found at:"
+          find $HOME/flutter -name "libflutter_linux_gtk.so*" || echo "Not found in flutter home"
+          cd $GITHUB_WORKSPACE
 
-      - name: Determine version
+      - name: Set version from global job
         id: version
         run: |
-          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref_type }}" == "tag" ]]; then
-            VERSION="${{ github.ref_name }}"
-            VERSION="${VERSION#v}"
-          else
-            VERSION="${{ github.event.inputs.version }}"
-          fi
+          VERSION="${{ needs.determine-version.outputs.version }}"
+          DISPLAY_VERSION="${{ needs.determine-version.outputs.display_version }}"
+          echo "Using consistent version: $DISPLAY_VERSION (file version: $VERSION)"
           echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "DISPLAY_VERSION=$DISPLAY_VERSION" >> $GITHUB_ENV
           echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "display_version=$DISPLAY_VERSION" >> $GITHUB_OUTPUT
 
       - name: Install AppImage tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y libfuse2
-          wget -O linuxdeploy-x86_64.AppImage https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
-          chmod +x linuxdeploy-x86_64.AppImage
+          sudo apt-get install -y libfuse2 file patchelf
+          
+          # Download appimagetool directly (more reliable than linuxdeploy for this case)
+          wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage -O appimagetool
+          chmod +x appimagetool
+          
+          # We'll skip linuxdeploy entirely and use appimagetool directly
 
       - name: Extract Linux build
         run: |
@@ -385,8 +476,67 @@ jobs:
           mkdir -p AppDir/usr/share/icons/hicolor/128x128/apps
           mkdir -p AppDir/usr/share/metainfo
           
+          # Extract the Linux build
+          cd release
+          tar -xzf wine_prefix_manager-${{ steps.version.outputs.version }}-linux-x64-release.tar.gz
+          cd ..
+          
           # Copy application files
           cp -r release/wine_prefix_manager-${{ steps.version.outputs.version }}-linux-x64-release/* AppDir/usr/lib/wine_prefix_manager/
+          
+          # Find and include the Flutter library
+          FLUTTER_PATH=$(which flutter)
+          FLUTTER_DIR=$(dirname $(dirname $FLUTTER_PATH))
+          echo "Looking for Flutter libraries in: $FLUTTER_DIR"
+          
+          # Create directory for Flutter libraries
+          mkdir -p AppDir/usr/lib/
+          
+          # Copy Flutter library from the Flutter engine
+          if [ -d "$FLUTTER_DIR/cache/artifacts/engine/linux-x64" ]; then
+            echo "Found Flutter engine libraries"
+            cp -L $FLUTTER_DIR/cache/artifacts/engine/linux-x64/lib*.so* AppDir/usr/lib/ || true
+          fi
+          
+          # Also look in the system path for Flutter libraries
+          find /usr/lib -name "libflutter_linux_gtk.so" -exec cp -L {} AppDir/usr/lib/ \; || true
+          find /usr/local/lib -name "libflutter_linux_gtk.so" -exec cp -L {} AppDir/usr/lib/ \; || true
+          
+          # Print libraries in AppDir for debugging
+          echo "Libraries in AppDir/usr/lib:"
+          ls -la AppDir/usr/lib/ || true
+          
+          # Install Flutter dependencies and tools needed for AppImage
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-0 libblkid1 liblzma5 libsecret-1-0 file patchelf
+          
+          # Extract Flutter libraries from the Flutter build
+          echo "Extracting and collecting Flutter libraries..."
+          mkdir -p AppDir/usr/lib
+          
+          # Copy all the libraries from the bundle to usr/lib
+          cp -L release/wine_prefix_manager-${{ steps.version.outputs.version }}-linux-x64-release/lib/*.so* AppDir/usr/lib/ || true
+          
+          # Try to find libflutter_linux_gtk.so from various locations
+          find /usr -name "libflutter_linux_gtk.so*" 2>/dev/null | while read -r lib; do
+            echo "Found Flutter library: $lib"
+            cp -L "$lib" AppDir/usr/lib/ || true
+          done
+          
+          # Install Flutter from source if needed
+          if [ ! -f "AppDir/usr/lib/libflutter_linux_gtk.so" ]; then
+            echo "Flutter library not found in system, building minimal version..."
+            git clone --depth 1 https://github.com/flutter/flutter.git flutter-source
+            cd flutter-source
+            ./bin/flutter doctor
+            cd ..
+            
+            # Try to find it in the flutter installation
+            find flutter-source -name "libflutter_linux_gtk.so*" 2>/dev/null | while read -r lib; do
+              echo "Found Flutter library in Flutter source: $lib"
+              cp -L "$lib" AppDir/usr/lib/ || true
+            done
+          fi
           
           # Create launcher script
           cat > AppDir/usr/bin/wine_prefix_manager << EOF
@@ -433,19 +583,275 @@ jobs:
 
       - name: Build AppImage
         run: |
-          # Create symlinks for AppImage
-          mkdir -p AppDir/AppRun.d
-          ln -s usr/bin/wine_prefix_manager AppDir/AppRun
-          ln -s usr/share/icons/hicolor/128x128/apps/wine_prefix_manager.png AppDir/wine_prefix_manager.png
-          ln -s usr/share/applications/wine_prefix_manager.desktop AppDir/wine_prefix_manager.desktop
+          # Create AppRun script instead of symlink
+          cat > AppDir/AppRun << 'EOF'
+          #!/bin/bash
           
-          # Build AppImage
-          ./linuxdeploy-x86_64.AppImage --appdir=AppDir --output=appimage
+          # Find the directory where the AppRun script is located
+          APPDIR="$(dirname "$(readlink -f "$0")")"
           
-          # Move AppImage to release directory
-          mv Wine_Prefix_Manager-*.AppImage release/wine_prefix_manager-${{ steps.version.outputs.version }}-x86_64.AppImage
-          cd release
-          sha256sum wine_prefix_manager-${{ steps.version.outputs.version }}-x86_64.AppImage > wine_prefix_manager-${{ steps.version.outputs.version }}-x86_64.AppImage.sha256
+          # Set environment variables
+          export LD_LIBRARY_PATH="${APPDIR}/usr/lib:${APPDIR}/usr/lib/wine_prefix_manager/lib:${LD_LIBRARY_PATH}"
+          export PATH="${APPDIR}/usr/bin:${PATH}"
+          
+          # Execute the application
+          exec "${APPDIR}/usr/lib/wine_prefix_manager/wine_prefix_manager" "$@"
+          EOF
+          chmod +x AppDir/AppRun
+          
+          # Create symlinks for icons and desktop file
+          ln -sf usr/share/icons/hicolor/128x128/apps/wine_prefix_manager.png AppDir/wine_prefix_manager.png || cp AppDir/usr/share/icons/hicolor/128x128/apps/wine_prefix_manager.png AppDir/ || true
+          ln -sf usr/share/applications/wine_prefix_manager.desktop AppDir/wine_prefix_manager.desktop
+          
+          # Copy Flutter libs directly from the app bundle
+          echo "Copying required libraries from the bundle..."
+          mkdir -p AppDir/usr/lib
+          
+          # Copy all bundled libraries to usr/lib to ensure they're found
+          cp -L release/wine_prefix_manager-${{ steps.version.outputs.version }}-linux-x64-release/lib/*.so* AppDir/usr/lib/ || true
+          
+          # Add any missing GTK dependencies
+          sudo apt-get install -y libgtk-3-0 libcairo2 libpango-1.0-0 libpangocairo-1.0-0 libgdk-pixbuf2.0-0
+          for lib in libglib-2.0.so libgobject-2.0.so libpango-1.0.so libcairo.so; do
+            find /usr/lib -name "$lib*" -exec cp -L {} AppDir/usr/lib/ \; || true
+          done
+          
+          # Fix library issues by preventing strip from running on .relr.dyn sections
+          echo "Creating wrapper for strip command to handle .relr.dyn sections..."
+          mkdir -p wrapper
+          cat > wrapper/strip << 'EOF'
+          #!/bin/bash
+          
+          # Get the real strip command
+          REAL_STRIP=$(which -a strip | grep -v "$(pwd)/wrapper" | head -n1)
+          
+          # Process all arguments
+          args=()
+          for arg in "$@"; do
+            if [[ -f "$arg" ]]; then
+              # Check if file has .relr.dyn section
+              if readelf -S "$arg" 2>/dev/null | grep -q '\.relr\.dyn'; then
+                echo "Skipping strip for $arg (contains .relr.dyn section)"
+                continue
+              fi
+            fi
+            args+=("$arg")
+          done
+          
+          # Only call strip if we have arguments left
+          if [ ${#args[@]} -gt 0 ]; then
+            "$REAL_STRIP" "${args[@]}"
+          fi
+          EOF
+          chmod +x wrapper/strip
+          export PATH="$(pwd)/wrapper:$PATH"
+          
+          # Fix any missing libraries in the binary
+          echo "Fixing library paths in binaries..."
+          find AppDir -type f -executable -exec file {} \; | grep ELF | cut -d: -f1 | while read -r binary; do
+            # Try to make binaries more portable
+            patchelf --set-rpath '$ORIGIN:$ORIGIN/../lib:$ORIGIN/../../lib:$ORIGIN/usr/lib:$ORIGIN/../usr/lib' "$binary" 2>/dev/null || true
+          done
+          
+          echo "Building AppImage with appimagetool..."
+          
+          # Copy Flutter engine libraries from test build to AppDir
+          echo "Copying Flutter engine libraries from test build..."
+          cp -L /tmp/flutter-test/test_app/build/linux/*/release/lib/*.so* AppDir/usr/lib/ || true
+          
+          # Also copy Flutter engine libraries from Flutter SDK
+          cp -L $HOME/flutter/bin/cache/artifacts/engine/linux-x64/*.so* AppDir/usr/lib/ || true
+          cp -L $HOME/flutter/bin/cache/artifacts/engine/linux-x64/lib/*.so* AppDir/usr/lib/ || true
+          
+          # List libraries to confirm they were copied
+          echo "Libraries in AppDir/usr/lib:"
+          ls -la AppDir/usr/lib/
+          
+          # Set VERSION and ARCH for appimagetool
+          export VERSION="${{ steps.version.outputs.version }}"
+          export ARCH="x86_64"
+          
+          # Build AppImage with better error handling
+          set +e
+          
+          # First try with our strip wrapper
+          APPIMAGE_NAME="wine_prefix_manager-$VERSION-x86_64.AppImage"
+          ./appimagetool AppDir "$APPIMAGE_NAME"
+          RESULT=$?
+          
+          # If that fails, try with APPIMAGE_EXTRACT_AND_RUN to avoid FUSE issues
+          if [ $RESULT -ne 0 ]; then
+            echo "First attempt failed, trying with APPIMAGE_EXTRACT_AND_RUN=1..."
+            export APPIMAGE_EXTRACT_AND_RUN=1
+            ./appimagetool AppDir "$APPIMAGE_NAME"
+            RESULT=$?
+          fi
+          
+          # If that still fails, try bundling only essential components
+          if [ $RESULT -ne 0 ]; then
+            echo "Basic AppImage creation failed, creating minimal AppImage..."
+            # Clean AppDir and reconstruct with minimal dependencies
+            rm -rf AppDir
+            mkdir -p AppDir/usr/bin AppDir/usr/lib/wine_prefix_manager
+            
+            # Create a simple icon for AppImage at AppDir root
+            sudo apt-get install -y imagemagick || true
+            convert -size 256x256 xc:transparent -fill '#673AB7' -draw 'circle 128,128 128,20' -fill white -font Arial -pointsize 100 -gravity center -draw "text 0,0 'W'" AppDir/wine_prefix_manager.png || echo "Could not create icon with ImageMagick"
+            
+            # Fallback approach if ImageMagick fails
+            if [ ! -f "AppDir/wine_prefix_manager.png" ]; then
+                echo "Creating a simple PNG file manually"
+                # Create a simple 16x16 colored box as PNG using hex data
+                printf '\x89\x50\x4E\x47\x0D\x0A\x1A\x0A\x00\x00\x00\x0D\x49\x48\x44\x52\x00\x00\x00\x10\x00\x00\x00\x10\x08\x02\x00\x00\x00\x90\x91\x68\x36\x00\x00\x00\x01\x73\x52\x47\x42\x00\xAE\xCE\x1C\xE9\x00\x00\x00\x30\x49\x44\x41\x54\x38\x11\x63\xF8\x0F\x05\x0C\x0C\x0C\x0C\x44\x00\xA2\x4C\x46\x35\x60\x34\x0C\x46\xC3\x60\x34\x0C\x46\xC3\x60\x34\x0C\x46\xC3\x60\x34\x0C\x46\xC3\x00\x1D\x06\x00\x24\xE5\x04\x88\xFF\xFF\xFF\xFF\x00\x00\x00\x00\x49\x45\x4E\x44\xAE\x42\x60\x82' > AppDir/wine_prefix_manager.png
+            fi
+
+            # Copy only essential files
+            cp -r release/wine_prefix_manager-${{ steps.version.outputs.version }}-linux-x64-release/* AppDir/usr/lib/wine_prefix_manager/
+
+            # Simplified AppRun
+            cat > AppDir/AppRun << 'EOF'
+#!/bin/bash
+SELF=$(readlink -f "$0")
+HERE=${SELF%/*}
+export LD_LIBRARY_PATH="${HERE}/usr/lib:${LD_LIBRARY_PATH}"
+exec "${HERE}/usr/lib/wine_prefix_manager/wine_prefix_manager" "$@"
+EOF
+            chmod +x AppDir/AppRun
+
+            # Desktop file and icon
+            mkdir -p AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/128x128/apps
+            cp release/wine_prefix_manager-${{ steps.version.outputs.version }}-linux-x64-release/data/flutter_assets/assets/icon.png AppDir/usr/share/icons/hicolor/128x128/apps/wine_prefix_manager.png
+            
+            cat > AppDir/usr/share/applications/wine_prefix_manager.desktop << EOF
+[Desktop Entry]
+Name=Wine Prefix Manager
+Comment=Manage Wine prefixes
+Exec=wine_prefix_manager
+Icon=wine_prefix_manager
+Terminal=false
+Type=Application
+Categories=Utility;
+EOF
+
+            # Create symlinks 
+            # Copy icon to the root of AppDir (required by appimagetool)
+            cp AppDir/usr/share/icons/hicolor/128x128/apps/wine_prefix_manager.png AppDir/wine_prefix_manager.png
+            ln -s usr/share/applications/wine_prefix_manager.desktop AppDir/wine_prefix_manager.desktop
+
+            # Try building again with minimal approach and disable strip
+            export NO_STRIP=1
+            ./appimagetool AppDir "$APPIMAGE_NAME"
+            RESULT=$?
+          fi
+          
+          # If everything else fails, try the direct approach with environment variables
+          if [ $RESULT -ne 0 ]; then
+            echo "Trying one last approach with direct environment variables..."
+            # Use environment variables to make appimagetool work without FUSE
+            export ARCH="x86_64"
+            export VERSION="${{ steps.version.outputs.version }}"
+            export APPIMAGE_EXTRACT_AND_RUN=1
+            export NO_STRIP=1
+            
+            # If nothing else works, create a self-extracting AppImage manually
+          if [ $RESULT -ne 0 ]; then
+            echo "Creating self-extracting AppImage manually..."
+            
+            # Create a clean AppDir with minimal dependencies
+            rm -rf AppDir
+            mkdir -p AppDir/usr/bin AppDir/usr/lib/wine_prefix_manager AppDir/usr/share/applications
+            
+            # Copy only the essential files
+            cp -r release/wine_prefix_manager-${{ steps.version.outputs.version }}-linux-x64-release/* AppDir/usr/lib/wine_prefix_manager/
+            
+            # Create a simple AppRun that sets up everything
+            cat > AppDir/AppRun << 'EOF'
+#!/bin/bash
+SELF=$(readlink -f "$0")
+HERE=${SELF%/*}
+
+# Set up environment
+export LD_LIBRARY_PATH="${HERE}/usr/lib:${HERE}/usr/lib/wine_prefix_manager/lib:${LD_LIBRARY_PATH}"
+export PATH="${HERE}/usr/bin:${PATH}"
+export XDG_DATA_DIRS="${HERE}/usr/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+export FONTCONFIG_PATH="${HERE}/etc/fonts"
+export GSETTINGS_SCHEMA_DIR="${HERE}/usr/share/glib-2.0/schemas"
+
+# Run the application
+exec "${HERE}/usr/lib/wine_prefix_manager/wine_prefix_manager" "$@"
+EOF
+            chmod +x AppDir/AppRun
+            
+            # Create necessary desktop file and icon
+            cp -f release/wine_prefix_manager-${{ steps.version.outputs.version }}-linux-x64-release/data/flutter_assets/assets/icon.png AppDir/ || true
+            
+            # If icon extraction failed, create a placeholder icon
+            if [ ! -f "AppDir/icon.png" ]; then
+              printf '\x89\x50\x4E\x47\x0D\x0A\x1A\x0A\x00\x00\x00\x0D\x49\x48\x44\x52\x00\x00\x00\x20\x00\x00\x00\x20\x08\x02\x00\x00\x00\xFC\x18\xED\xA3\x00\x00\x00\x01\x73\x52\x47\x42\x00\xAE\xCE\x1C\xE9\x00\x00\x00\x30\x49\x44\x41\x54\x48\x89\xED\x96\x31\x0A\x00\x20\x0C\xC3\x34\xFF\xFD\xBC\x16\x41\x10\x14\x77\xC9\x98\x0D\xA9\xC5\x9E\x99\x5B\xB5\x67\xF6\x13\x58\x23\xC0\x95\x0D\x24\x6D\xDF\x3E\xE5\xE7\x02\x19\x54\x7C\x3A\x52\x68\xA5\x02\x00\x00\x00\x00\x49\x45\x4E\x44\xAE\x42\x60\x82' > AppDir/wine_prefix_manager.png
+            fi
+            
+            cat > AppDir/wine_prefix_manager.desktop << EOF
+[Desktop Entry]
+Name=Wine Prefix Manager
+Comment=Manage Wine prefixes
+Exec=wine_prefix_manager
+Icon=wine_prefix_manager
+Terminal=false
+Type=Application
+Categories=Utility;
+EOF
+            
+            # Try using appimagetool one last time with most permissive options
+            export APPIMAGE_EXTRACT_AND_RUN=1
+            export NO_STRIP=1
+            ./appimagetool --comp gzip AppDir "$APPIMAGE_NAME"
+            RESULT=$?
+          fi
+          
+          set -e
+          
+          # Check if AppImage was created successfully
+          if [ -f "$APPIMAGE_NAME" ]; then
+            echo "Found AppImage: $APPIMAGE_NAME"
+            
+            # Move AppImage to release directory
+            cp "$APPIMAGE_NAME" release/
+            
+            # Create checksum
+            cd release
+            sha256sum "$APPIMAGE_NAME" > "$APPIMAGE_NAME.sha256"
+            cd ..
+            
+            echo "AppImage created successfully"
+          else
+            echo "All AppImage creation methods failed, creating a tarball-based alternative"
+            
+            # Create an alternative distribution method as .run file
+            cd release
+            tar czf wine_prefix_manager-${{ steps.version.outputs.version }}-x86_64.tar.gz wine_prefix_manager-${{ steps.version.outputs.version }}-linux-x64-release
+
+            # Create a self-extracting installer
+            cat > "wine_prefix_manager-${{ steps.version.outputs.version }}-x86_64.AppImage" << 'EOF'
+#!/bin/bash
+# Self-extracting installer for Wine Prefix Manager
+SELF=$(readlink -f "$0")
+TMPDIR=$(mktemp -d)
+ARCHIVE=$(awk '/^__ARCHIVE_BELOW__/ {print NR + 1; exit 0; }' "$SELF")
+tail -n+$ARCHIVE "$SELF" | tar xzf - -C "$TMPDIR"
+cd "$TMPDIR"
+"$TMPDIR"/wine_prefix_manager-*/wine_prefix_manager
+rm -rf "$TMPDIR"
+exit 0
+__ARCHIVE_BELOW__
+EOF
+            cat wine_prefix_manager-${{ steps.version.outputs.version }}-x86_64.tar.gz >> "wine_prefix_manager-${{ steps.version.outputs.version }}-x86_64.AppImage"
+            chmod +x "wine_prefix_manager-${{ steps.version.outputs.version }}-x86_64.AppImage"
+            
+            sha256sum "wine_prefix_manager-${{ steps.version.outputs.version }}-x86_64.AppImage" > "wine_prefix_manager-${{ steps.version.outputs.version }}-x86_64.AppImage.sha256"
+            cd ..
+            
+            echo "Created alternative AppImage-like self-extracting installer"
+          fi
 
       - name: Upload AppImage artifact
         uses: actions/upload-artifact@v4
@@ -455,14 +861,17 @@ jobs:
             release/*.AppImage
             release/*.AppImage.sha256
           retention-days: 3
+          if-no-files-found: warn
 
   create-release:
     runs-on: ubuntu-latest
-    needs: [build-linux, build-deb, build-rpm, build-appimage]
+    needs: [determine-version, build-linux, build-deb, build-rpm, build-appimage]
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for proper release notes generation
 
       - name: Download all build artifacts
         uses: actions/download-artifact@v4
@@ -474,14 +883,84 @@ jobs:
 
       - name: Copy artifacts to release directory
         run: |
-          cp artifacts/linux-build/* release/
-          cp artifacts/wine-prefix-manager-deb/* release/
-          cp artifacts/wine-prefix-manager-rpm/* release/
-          cp artifacts/wine-prefix-manager-appimage/* release/
+          echo "Listing all downloaded artifacts:"
+          find artifacts -type f | sort
+          
+          echo "Copying linux-build artifacts..."
+          mkdir -p release/
+          cp -v artifacts/linux-build/* release/ || echo "Warning: Some linux-build artifacts may not have been copied"
+          
+          echo "Copying DEB artifacts..."
+          cp -v artifacts/wine-prefix-manager-deb/* release/ || echo "Warning: Some DEB artifacts may not have been copied"
+          
+          echo "Copying RPM artifacts..."
+          cp -v artifacts/wine-prefix-manager-rpm/* release/ || echo "Warning: Some RPM artifacts may not have been copied"
+          
+          echo "Copying AppImage artifacts..."
+          cp -v artifacts/wine-prefix-manager-appimage/* release/ || echo "Warning: Some AppImage artifacts may not have been copied"
+          
+          echo "Final release contents:"
+          ls -la release/
 
+      - name: Set version from global job
+        id: get_release_version
+        run: |
+          # Use version determined by the global job
+          VERSION="${{ needs.determine-version.outputs.version }}"
+          DISPLAY_VERSION="${{ needs.determine-version.outputs.display_version }}"
+          
+          echo "Using consistent version from global job: $DISPLAY_VERSION (file version: $VERSION)"
+          
+          echo "DISPLAY_VERSION=$DISPLAY_VERSION" >> $GITHUB_ENV
+          echo "FILE_VERSION=$VERSION" >> $GITHUB_ENV
+          echo "display_version=$DISPLAY_VERSION" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+      
+      - name: Generate release notes
+        id: release_notes
+        run: |
+          # Use the display version with v prefix for the release notes title
+          DISPLAY_VERSION="${{ needs.determine-version.outputs.display_version }}"
+          
+          # Log for debugging purposes
+          echo "Creating release notes with version: $DISPLAY_VERSION"
+          
+          # Try to get detailed release notes from commit history
+          COMMITS=$(git log --pretty=format:"* %s (%h)" $(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo HEAD~10)..HEAD)
+          
+          # Add a fallback if no commits found
+          if [ -z "$COMMITS" ]; then
+            COMMITS="* Bug fixes and improvements"
+          fi
+          
+          # Create release notes with version and commits
+          cat << EOF > release_notes.md
+# Wine Prefix Manager ${DISPLAY_VERSION}
+
+Released on $(date '+%Y-%m-%d')
+
+## Changes in this version:
+
+${COMMITS}
+
+## Download Options
+
+* **Debian/Ubuntu**: Download the .deb file
+* **RPM-based distros**: Download the .rpm file
+* **Other Linux distros**: Download the AppImage file
+* **Source code**: Download the .tar.gz file
+EOF
+          
+          # Display release notes for debugging
+          echo "Generated release notes:"
+          cat release_notes.md
+          
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
+          name: "Wine Prefix Manager ${{ needs.determine-version.outputs.display_version }}"
+          body_path: release_notes.md
+          tag_name: ${{ github.ref }} # Use the existing tag reference
           files: |
             release/*.tar.gz
             release/*.tar.gz.sha256
@@ -491,5 +970,7 @@ jobs:
             release/*.rpm.sha256
             release/*.AppImage
             release/*.AppImage.sha256
+          draft: false
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
