@@ -1,0 +1,649 @@
+// filepath: /home/jon/wine_prefix_manager/lib/pages/game_library_page.dart
+import 'package:flutter/material.dart';
+import 'package:collection/collection.dart'; // Import for groupBy
+import '../models/prefix_models.dart';
+import '../models/settings.dart';
+import '../widgets/game_card.dart'; // Import GameCard for GameLaunchState
+import '../widgets/game_info_modal.dart'; // Import GameInfoModal
+import '../widgets/game_settings_modal.dart'; // Import GameSettingsModal
+import '../services/ui_action_service.dart'; // Import UIActionService for addExecutableToPrefix
+import 'package:provider/provider.dart'; // Import Provider to access UIActionService
+import 'package:path/path.dart' as p; // Import for path manipulation
+import 'package:file_picker/file_picker.dart';
+
+class GameLibraryPage extends StatelessWidget {
+  final List<GameEntry> games;
+  final Function(WinePrefix, ExeEntry) onLaunchGame;
+  final Function(GameEntry, String?) onSaveLaunchOptions;
+  final Function(GameEntry, String?) onChangeCategory;
+  final Function(GameEntry, bool) onToggleWorkingStatus;
+  final Function(GameEntry)? onUpdateMetadata;
+  final Function(GameEntry)? onDelete;
+  final Function(GameEntry, ExeEntry)? onUpdateCompressedGame;
+  final Function(String?)? onGenreSelected;
+  final String? selectedGenre;
+  final CoverSize coverSize;
+  final Map<String, GameLaunchState> gameLaunchStates;
+  final Function(GameEntry) onStopGame;
+  final VoidCallback? onRefresh;
+  final bool isRefreshing;
+
+  const GameLibraryPage({
+    super.key,
+    required this.games,
+    required this.onLaunchGame,
+    required this.onSaveLaunchOptions,
+    required this.onChangeCategory,
+    required this.onToggleWorkingStatus,
+    this.onUpdateMetadata,
+    this.onDelete,
+    this.onUpdateCompressedGame,
+    this.onGenreSelected,
+    this.selectedGenre,
+    this.coverSize = CoverSize.medium,
+    required this.gameLaunchStates,
+    required this.onStopGame,
+    this.onRefresh,
+    this.isRefreshing = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // Apply genre filter first
+    final filteredGames = selectedGenre != null
+        ? games.where((game) => game.exe.category == selectedGenre).toList()
+        : games;
+
+    // Group filtered games by prefix with error handling
+    Map<WinePrefix, List<GameEntry>> groupedGames;
+    try {
+      groupedGames = groupBy<GameEntry, WinePrefix>(
+        filteredGames,
+        (game) => game.prefix,
+      );
+    } catch (e) {
+      // If grouping fails (e.g., during prefix operations), show loading state
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Game Library'),
+        ),
+        body: const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    // Sort prefixes by name for consistent order
+    final sortedPrefixes = groupedGames.keys.toList()
+      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Game Library'),
+        actions: [
+          // Add refresh button
+          if (onRefresh != null) // Only show if onRefresh is provided
+            IconButton(
+              icon: isRefreshing 
+                ? const SizedBox(
+                    width: 24, 
+                    height: 24, 
+                    child: CircularProgressIndicator(strokeWidth: 2)
+                  ) 
+                : const Icon(Icons.refresh),
+              tooltip: 'Refresh Game Library',
+              onPressed: isRefreshing ? null : onRefresh,
+            ),
+        ],
+      ),
+      body: Column(
+        children: [
+          // Display current filter if one is selected
+          if (selectedGenre != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Chip(
+                  label: Text('Category: ${selectedGenre!}'),
+                  deleteIcon: const Icon(Icons.close, size: 16),
+                  onDeleted: () {
+                    if (onGenreSelected != null) onGenreSelected!(null);
+                  },
+                ),
+              ),
+            ),
+          // Game List Area
+          Expanded(
+            child: filteredGames.isEmpty
+                ? Center( // Show message if no games match filter or no games exist
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.sports_esports_outlined, size: 64, color: Colors.grey),
+                        const SizedBox(height: 16),
+                        Text(
+                          selectedGenre != null
+                              ? 'No games found in category "$selectedGenre"'
+                              : 'No games found in library',
+                          style: const TextStyle(fontSize: 18),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Add games via the Manage tab',
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                      ],
+                    ),
+                  )
+                : ListView.builder( // Use ListView for prefix groups
+                    padding: const EdgeInsets.symmetric(vertical: 8.0),
+                    itemCount: sortedPrefixes.length,
+                    itemBuilder: (context, index) {
+                      final prefix = sortedPrefixes[index];
+                      final gamesInPrefix = groupedGames[prefix]!;
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Prefix Header with Add Executable Button
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  prefix.name,
+                                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                    color: Theme.of(context).colorScheme.primary,
+                                  ),
+                                ),
+                                // Add buttons for this prefix
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    // Add Compressed Game button
+                                    IconButton(
+                                      icon: const Icon(Icons.archive),
+                                      tooltip: 'Add Compressed Game',
+                                      onPressed: () {
+                                        final navigatorContext = Navigator.of(context).context;
+                                        _addCompressedGameToPrefix(navigatorContext, prefix);
+                                      },
+                                    ),
+                                    // Add EXE button
+                                    IconButton(
+                                      icon: const Icon(Icons.add),
+                                      tooltip: 'Add Executable',
+                                      onPressed: () {
+                                        final navigatorContext = Navigator.of(context).context;
+                                        _addExecutableToPrefix(navigatorContext, prefix);
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                          // Grid for games within this prefix
+                          GridView.builder(
+                            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                            shrinkWrap: true, // Important for GridView inside ListView
+                            physics: const NeverScrollableScrollPhysics(), // Disable GridView scrolling
+                            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: _getCrossAxisCount(context),
+                              childAspectRatio: 0.7,
+                              crossAxisSpacing: 16,
+                              mainAxisSpacing: 16,
+                            ),
+                            itemCount: gamesInPrefix.length,
+                            itemBuilder: (context, gameIndex) {
+                              final game = gamesInPrefix[gameIndex];
+                              // Get the launch state for this specific game
+                              final launchState = gameLaunchStates[game.exe.path] ?? GameLaunchState.idle;
+
+                              return Card( // Removed GestureDetector, GameCard handles taps
+                                elevation: 4,
+                                clipBehavior: Clip.antiAlias,
+                                child: GameCard(
+                                  game: game,
+                                  onShowInfo: (g) => _showGameInfo(context, g), // Pass info callback
+                                  onShowSettings: (g) => _showGameSettings(context, g), // Pass settings callback
+                                  onLaunch: (g) => onLaunchGame(g.prefix, g.exe), // Pass launch callback
+                                  onStop: onStopGame, // Pass stop callback
+                                  onDelete: (g) => _showDeleteConfirmation(context, g), // Pass delete callback with confirmation
+                                  launchState: launchState, // Pass current state
+                                ),
+                              );
+                            },
+                          ),
+                          const Divider(height: 24, thickness: 1, indent: 16, endIndent: 16), // Separator between prefixes
+                        ],
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  int _getCrossAxisCount(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
+    if (width > 1200) return 6;
+    if (width > 900) return 5;
+    if (width > 600) return 4;
+    if (width > 400) return 3;
+    return 2;
+  }
+
+  void _showFilterDialog(BuildContext context, String? selectedGenre, Function(String?)? onGenreSelected) {
+    // Extract unique categories from games
+    final categories = games
+        .map((game) => game.exe.category)
+        .toSet()
+        .toList()
+      ..sort((a, b) => (a ?? 'Uncategorized').compareTo(b ?? 'Uncategorized'));
+    
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Filter by Category'),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 300, // Fixed height for scrollable list
+            child: ListView.builder(
+              itemCount: categories.length,
+              itemBuilder: (context, index) {
+                final category = categories[index];
+                final isSelected = category == selectedGenre;
+                return ListTile(
+                  title: Text(category ?? 'Uncategorized'),
+                  tileColor: isSelected ? Colors.blue.withOpacity(0.2) : null,
+                  onTap: () {
+                    if (onGenreSelected != null) onGenreSelected!(category);
+                    Navigator.pop(context);
+                  },
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+              },
+              child: const Text('Cancel'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // Method to add executable to a specific prefix - uses the same UIActionService method
+  // that's used in the prefix management screen
+  void _addExecutableToPrefix(BuildContext context, WinePrefix prefix) {
+    // Find uiActionService from the context
+    final uiActionService = Provider.of<UIActionService>(context, listen: false);
+    
+    // Make sure we're using the primary navigator context for dialogs
+    final navigatorContext = Navigator.of(context).context;
+    
+    // Use the navigator's root context for showing dialogs
+    uiActionService.addExecutableToPrefix(navigatorContext, prefix);
+  }
+
+  void _showGameInfo(BuildContext context, GameEntry game) {
+    showDialog(
+      context: context,
+      builder: (context) => GameInfoModal(
+        game: game,
+        onLaunchGame: () => onLaunchGame(game.prefix, game.exe),
+        onUpdateMetadata: onUpdateMetadata,
+      ),
+    );
+  }
+
+  void _showGameSettings(BuildContext context, GameEntry game) {
+    showDialog(
+      context: context,
+      builder: (context) => GameSettingsModal(
+        game: game,
+        onSaveLaunchOptions: onSaveLaunchOptions,
+        onChangeCategory: onChangeCategory,
+        onToggleWorkingStatus: onToggleWorkingStatus,
+        onDelete: onDelete,
+        onUpdateCompressedGame: onUpdateCompressedGame,
+      ),
+    );
+  }
+
+  void _showDeleteConfirmation(BuildContext context, GameEntry game) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Delete ${game.exe.isCompressed ? 'Compressed ' : ''}Game'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Are you sure you want to delete "${game.exe.name}"?'),
+            const SizedBox(height: 8),
+            Text(
+              game.exe.isCompressed 
+                ? 'This will remove the game from your library. The original archive file will not be deleted.'
+                : 'This will remove the game from your library. The game files on disk will not be deleted.',
+              style: const TextStyle(color: Colors.grey, fontSize: 12),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(context).pop(); // Close confirmation dialog
+              if (onDelete != null) {
+                onDelete!(game);
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Add compressed game to a specific prefix
+  void _addCompressedGameToPrefix(BuildContext context, WinePrefix prefix) async {
+    final result = await showDialog<Map<String, String>>(
+      context: context,
+      builder: (context) => _CompressedGameDialog(selectedPrefix: prefix),
+    );
+
+    if (result != null) {
+      await _addCompressedGameToPrefixActual(
+        context,
+        prefix,
+        result['archivePath']!,
+        result['extractPath']!,
+        result['gameName']!,
+      );
+    }
+  }
+
+  // Actual implementation of adding compressed game
+  Future<void> _addCompressedGameToPrefixActual(
+    BuildContext context,
+    WinePrefix prefix,
+    String archivePath,
+    String extractPath,
+    String gameName,
+  ) async {
+    try {
+      final uiActionService = Provider.of<UIActionService>(context, listen: false);
+      
+      // Create the compressed game entry
+      final compressedExeEntry = ExeEntry(
+        path: p.join(extractPath, '$gameName.exe'), // Virtual exe path
+        name: gameName,
+        isGame: true,
+        isCompressed: true,
+        compressedArchivePath: archivePath,
+        extractedBasePath: extractPath,
+        saveDataPaths: [], // Can be added later
+        lastExtracted: null,
+        needsRecompression: false,
+      );
+
+      // Add the game to the prefix via UIActionService
+      await uiActionService.addSpecificExecutableToPrefix(prefix, compressedExeEntry);
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$gameName added as compressed game to ${prefix.name}')),
+        );
+      }
+      
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error adding compressed game: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+}
+
+class _CompressedGameDialog extends StatefulWidget {
+  final WinePrefix selectedPrefix;
+
+  const _CompressedGameDialog({required this.selectedPrefix});
+
+  @override
+  State<_CompressedGameDialog> createState() => _CompressedGameDialogState();
+}
+
+class _CompressedGameDialogState extends State<_CompressedGameDialog> {
+  String archivePath = '';
+  String extractPath = '';
+  String gameName = '';
+  late TextEditingController gameNameController;
+
+  @override
+  void initState() {
+    super.initState();
+    gameNameController = TextEditingController();
+    
+    // Default extract path to drive_c/Games in the prefix
+    extractPath = p.join(widget.selectedPrefix.path, 'drive_c', 'Games');
+  }
+
+  @override
+  void dispose() {
+    gameNameController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _selectArchive() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['tar.zst', 'tar.gz', 'tar.xz', 'tgz', 'zip', '7z'],
+      dialogTitle: 'Select Compressed Game Archive',
+    );
+
+    if (result != null && result.files.single.path != null) {
+      setState(() {
+        archivePath = result.files.single.path!;
+        // Auto-generate game name from filename
+        final baseName = p.basenameWithoutExtension(result.files.single.name);
+        gameName = baseName.replaceAll(RegExp(r'[._-]'), ' ');
+        gameNameController.text = gameName;
+      });
+    }
+  }
+
+  Future<void> _selectExtractPath() async {
+    final selectedDir = await FilePicker.platform.getDirectoryPath(
+      dialogTitle: 'Select Where to Extract Game',
+      initialDirectory: extractPath,
+    );
+
+    if (selectedDir != null) {
+      setState(() {
+        extractPath = selectedDir;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isValid = archivePath.isNotEmpty && 
+                   extractPath.isNotEmpty && 
+                   gameNameController.text.trim().isNotEmpty;
+
+    return AlertDialog(
+      title: const Text('Add Compressed Game'),
+      content: SizedBox(
+        width: 500,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Add to prefix: ${widget.selectedPrefix.name}',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Archive selection
+            Text(
+              'Game Archive:',
+              style: theme.textTheme.titleSmall,
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: theme.dividerColor),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      archivePath.isEmpty ? 'No archive selected' : p.basename(archivePath),
+                      style: TextStyle(
+                        fontFamily: 'monospace',
+                        fontWeight: archivePath.isEmpty ? FontWeight.normal : FontWeight.bold,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.archive),
+                  label: const Text('Browse'),
+                  onPressed: _selectArchive,
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // Game name
+            Text(
+              'Game Name:',
+              style: theme.textTheme.titleSmall,
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: gameNameController,
+              decoration: const InputDecoration(
+                hintText: 'Enter game name',
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (value) {
+                setState(() {
+                  gameName = value.trim();
+                });
+              },
+            ),
+            const SizedBox(height: 16),
+
+            // Extract path
+            Text(
+              'Extract Location:',
+              style: theme.textTheme.titleSmall,
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: theme.dividerColor),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      extractPath,
+                      style: const TextStyle(fontFamily: 'monospace'),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.folder_open),
+                  label: const Text('Browse'),
+                  onPressed: _selectExtractPath,
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // Supported formats info
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface,
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: theme.dividerColor),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Supported formats:',
+                    style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '• tar.zst, tar.gz, tar.xz, tgz\n• zip, 7z',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: isValid ? () {
+            Navigator.of(context).pop({
+              'archivePath': archivePath,
+              'extractPath': p.join(extractPath, _sanitizeFileName(gameName)),
+              'gameName': gameName,
+            });
+          } : null,
+          child: const Text('Add Compressed Game'),
+        ),
+      ],
+    );
+  }
+
+  String _sanitizeFileName(String name) {
+    return name.replaceAll(RegExp(r'[<>:"/\\|?*]'), '_').replaceAll(RegExp(r'\s+'), '_');
+  }
+}

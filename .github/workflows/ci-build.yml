@@ -1,0 +1,87 @@
+name: CI Build
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.github/ISSUE_TEMPLATE/**'
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          flutter-version: '3.x'
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build clang pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev
+
+      - name: Install Flutter dependencies
+        run: flutter pub get
+
+      - name: Analyze project source
+        run: |
+          # Create a temporary analysis options file to ignore plugin warnings
+          cat > .analyze_temp_options.yaml << EOL
+          include: package:flutter_lints/flutter.yaml
+          
+          analyzer:
+            errors:
+              invalid_use_of_internal_member: ignore
+              missing_required_param: error
+              missing_return: error
+              must_be_immutable: warning
+              sort_child_properties_last: ignore
+              deprecated_member_use: ignore
+              use_build_context_synchronously: ignore
+              unnecessary_null_comparison: ignore
+              unused_import: ignore
+              unused_field: ignore
+              unused_local_variable: ignore
+              unused_element: ignore
+              unnecessary_import: ignore
+            exclude:
+              - "**/*.g.dart"
+              - "**/*.freezed.dart"
+              - "lib/generated_plugin_registrant.dart"
+          EOL
+          
+          # Run analyze with our temporary options file
+          RESULT=0
+          flutter analyze --no-fatal-warnings --options=.analyze_temp_options.yaml || RESULT=$?
+          
+          # Check if there are any real errors that aren't from file_picker
+          flutter analyze --options=.analyze_temp_options.yaml 2>&1 | grep -v "file_picker" | grep -E "^error" > real_errors.txt || true
+          
+          if [ -s real_errors.txt ]; then
+            echo "Critical errors found in your code that must be fixed before merging:"
+            cat real_errors.txt
+            exit 1
+          else
+            echo "No critical issues detected, proceeding with build"
+          fi
+          
+          # Clean up temp file
+          rm -f .analyze_temp_options.yaml real_errors.txt
+
+      - name: Build Linux debug application
+        run: flutter build linux --debug
+
+      - name: Archive build output
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-debug-build
+          path: build/linux/x64/debug/bundle
+          retention-days: 1

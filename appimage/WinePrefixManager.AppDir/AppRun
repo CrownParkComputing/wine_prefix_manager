@@ -1,0 +1,16 @@
+#!/bin/bash
+
+# AppRun script for Wine Prefix Manager
+
+# Get the directory where this AppImage is located
+APPDIR="$(dirname "$(readlink -f "$0")")"
+
+# Set up environment
+export PATH="$APPDIR/usr/bin:$PATH"
+export LD_LIBRARY_PATH="$APPDIR/usr/lib:$LD_LIBRARY_PATH"
+
+# Change to a writable directory (user's home)
+cd "$HOME"
+
+# Launch the application
+exec "$APPDIR/usr/bin/wine_prefix_manager" "$@"

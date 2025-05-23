@@ -1,0 +1,39 @@
+name: wine_prefix_manager
+description: A wine prefix manager for Linux gaming
+publish_to: 'none'
+version: 3.1.2+1748007424
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # Cross-platform and Linux dependencies only
+  shared_preferences: ^2.2.1
+  provider: ^6.0.0
+  path: ^1.8.0
+  path_provider: ^2.0.0 # Added for logs page
+  http: ^1.1.0  # For API requests to GitHub
+  dio: ^5.0.0
+  process_run: ^0.13.0
+  file_picker: ^6.0.0
+  window_manager: ^0.4.3 # Updated version
+  archive: ^3.3.7  # For tar.gz extraction
+  collection: ^1.17.0 # Added for groupBy
+  package_info_plus: ^5.0.1 # Added for version info
+  # Use a specific version of bitsdojo_window with Linux fixes # Removed unused bitsdojo_window
+  # bitsdojo_window: ^0.1.5
+  intl: ^0.18.1
+  share_plus: ^7.0.2
+  file_saver: ^0.2.4
+  url_launcher: ^6.1.14
+  # ...any other dependencies you need...
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.0
+
+flutter:
+  uses-material-design: true

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Wine Prefix Manager
+Comment=Manage Wine prefixes with ease
+Exec=wine_prefix_manager
+Icon=wine_prefix_manager
+Categories=Utility;System;
+Terminal=false
+StartupWMClass=wine_prefix_manager
