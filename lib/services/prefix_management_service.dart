@@ -26,175 +26,243 @@ class PrefixManagementService {
 
   /// Scans the prefix directory specified in settings for existing Wine/Proton prefixes.
   /// Returns a list of discovered WinePrefix objects.
-  Future<List<WinePrefix>> scanForExistingPrefixes(Settings settings) async {
-    List<WinePrefix> foundPrefixes = [];
-    final prefixBaseDir = settings.prefixDirectory; // Use the primary directory for scanning
-    
-    _logService.log('Scanning for prefixes in: $prefixBaseDir');
+  Future<List<WinePrefix>> scanForPrefixes(Settings settings) async {
+    final List<WinePrefix> prefixes = [];
+    List<WinePrefix> invalidPrefixes = []; // Track invalid prefixes for cleanup
 
-    if (prefixBaseDir.isEmpty || !await Directory(prefixBaseDir).exists()) {
-      // Prefix directory not set or does not exist. Cannot scan.
-      _logService.log('Prefix directory not set or does not exist: $prefixBaseDir', LogLevel.warning);
-      return foundPrefixes; // Return empty list if base directory is invalid
+    // Determine the base directory for prefixes
+    String baseDir;
+    if (settings.prefixDirectory.isNotEmpty && Directory(settings.prefixDirectory).existsSync()) {
+      baseDir = settings.prefixDirectory;
+    } else {
+      final homeDir = Platform.environment['HOME'];
+      if (homeDir != null) {
+        baseDir = path.join(homeDir, '.local', 'share', 'wineprefixes');
+      } else {
+        baseDir = path.join(Directory.current.absolute.path, 'wineprefixes');
+      }
     }
 
-    // Define the prefix type subdirectories to scan
-    List<String> typeSubdirs = [
-      '', // Also scan root for legacy prefixes
-      'custom',
-      'wine',
-      'proton',
-      'proton-ge',
-      'proton-kronek',
-    ];
+    _logService.log('Scanning for prefixes in: $baseDir');
 
-    // Scanning for prefixes in specified directories
+    if (!Directory(baseDir).existsSync()) {
+      _logService.log('Base prefix directory does not exist: $baseDir');
+      return prefixes; // Return empty list if directory doesn't exist
+    }
+
+    // Define expected type subdirectories
+    final typeSubdirs = ['wine', 'proton', 'proton-ge', 'proton-kronek', 'custom'];
+
     for (final typeSubdir in typeSubdirs) {
-      final scanDir = typeSubdir.isEmpty 
-          ? prefixBaseDir 
-          : path.join(prefixBaseDir, typeSubdir);
+      final typeDirPath = path.join(baseDir, typeSubdir);
       
-      if (!await Directory(scanDir).exists()) {
-        _logService.log('Skipping non-existent subdirectory: $scanDir');
-        continue; // Skip if subdirectory doesn't exist
+      if (!Directory(typeDirPath).existsSync()) {
+        _logService.log('Skipping non-existent subdirectory: $typeDirPath');
+        continue;
       }
-      
-      _logService.log('Scanning subdirectory: $scanDir');
-      
-      try {
-        await for (final entry in Directory(scanDir).list()) {
-          if (entry is Directory) {
-            _logService.log('Checking directory: ${entry.path}');
-            final prefixName = path.basename(entry.path);
 
-            // --- Check for registry files ---
-            final systemRegPath = path.join(entry.path, 'system.reg');
-            final userRegPath = path.join(entry.path, 'user.reg');
-            final systemRegExists = await File(systemRegPath).exists();
-            final userRegExists = await File(userRegPath).exists();
-
-            // Declare variables needed in multiple scopes
-            String? buildPath;
-            PrefixType type = PrefixType.wine; // Default to wine
-            bool foundRegFiles = systemRegExists || userRegExists; // Flag if .reg found in root
-            
-            if (foundRegFiles) {
-              _logService.log('Found registry files in root directory: ${entry.path}');
-            }
-
-            // If not found in root, check inside 'pfx' subdirectory
-            if (!foundRegFiles) {
-              final pfxPath = path.join(entry.path, 'pfx');
-              if (await Directory(pfxPath).exists()) {
-                final systemRegPfxPath = path.join(pfxPath, 'system.reg');
-                final userRegPfxPath = path.join(pfxPath, 'user.reg');
-                final systemRegPfxExists = await File(systemRegPfxPath).exists();
-                final userRegPfxExists = await File(userRegPfxPath).exists();
-                if (systemRegPfxExists || userRegPfxExists) {
-                  // Found potential prefix nested in pfx
-                  foundRegFiles = true; // Mark as found
-                  _logService.log('Found registry files in pfx subdirectory: $pfxPath');
-                }
-              }
-            }
-            // --- End Check for registry files ---
-
-            // Also check for drive_c directory as fallback
-            if (!foundRegFiles) {
-              final driveCPath = path.join(entry.path, 'drive_c');
-              if (await Directory(driveCPath).exists()) {
-                foundRegFiles = true; // Consider this a valid prefix if it has a drive_c directory
-                _logService.log('No registry files found, but found drive_c directory: $driveCPath');
-              }
-            }
-
-            // --- Process if registry files were found ---
-            if (foundRegFiles) {
-              _logService.log('Processing prefix: ${entry.path}');
-
-              // Config file should always be in the root directory (entry.path)
-              final configFile = File(path.join(entry.path, '.prefix_config'));
-
-              if (await configFile.exists()) {
-                try {
-                  final configContent = await configFile.readAsString();
-                  _logService.log('Config file content: $configContent');
-                  final config = json.decode(configContent);
-                  buildPath = config['buildPath'] as String?;
-                  final typeString = config['type'] as String? ?? 'PrefixType.wine'; // Read type or default to wine
-                  _logService.log('Read from config - buildPath: $buildPath, type: $typeString');
-                  
-                  if (typeString == 'PrefixType.proton') {
-                    type = PrefixType.proton;
-                  } else if (typeString == 'PrefixType.custom' || typeString == 'PrefixType.gaming') {
-                    type = PrefixType.wine;
-                  } else {
-                    type = PrefixType.wine; // Default to wine for unknown or "PrefixType.wine"
-                  }
-                  _logService.log('Determined prefix type: ${type.name}');
-                } catch (e) {
-                   _logService.log('Error reading config file: $e', LogLevel.error);
-                   // Proceed without build path if config is corrupt
-                }
+      _logService.log('Scanning subdirectory: $typeDirPath');
+      await for (final entity in Directory(typeDirPath).list()) {
+        if (entity is Directory) {
+          _logService.log('Checking directory: ${entity.path}');
+          try {
+            final WinePrefix? prefix = await _processDirectory(entity.path, typeSubdir);
+            if (prefix != null) {
+              // Validate the prefix before adding
+              final bool isValid = await _validatePrefix(prefix);
+              if (isValid) {
+                prefixes.add(prefix);
+                _logService.log('Added prefix: ${prefix.name}, type: ${prefix.type.name}, arch: ${prefix.architecture}, path: ${prefix.path}');
               } else {
-                // Config file (.prefix_config) not found. Attempting to recreate.
-                _logService.log('Config file not found. Recreating based on directory structure.');
-                // Guess type based on subdirectory and name
-                if (typeSubdir.contains('proton') || prefixName.toLowerCase().contains('proton')) {
-                  type = PrefixType.proton;
-                } else if (typeSubdir == 'custom') {
-                  type = PrefixType.wine;
-                } else if (typeSubdir == 'wine') {
-                  type = PrefixType.wine;
-                } else {
-                  type = PrefixType.wine; // Default guess
-                }
-                buildPath = null; // Cannot determine build path
-
-                // Create default config content
-                final defaultConfig = {
-                  'buildPath': buildPath,
-                  'type': type.toString(), // Use enum name directly
-                  // Add other default fields if necessary in the future
-                };
-
-                try {
-                  await configFile.writeAsString(json.encode(defaultConfig));
-                  _logService.log('Created default .prefix_config with type: ${type.name}');
-                } catch (e) {
-                  _logService.log('Failed to create default .prefix_config: $e', LogLevel.error);
-                  // Proceed without config if creation fails
-                }
+                invalidPrefixes.add(prefix);
+                _logService.log('Found invalid prefix: ${prefix.name} at ${prefix.path}', LogLevel.warning);
               }
-
-              // Create the WinePrefix object
-              // Note: ExeEntries are loaded separately (e.g., by PrefixStorageService)
-              final prefix = WinePrefix(
-                name: prefixName,
-                path: entry.path, // Use the main directory path for the prefix object
-                wineBuildPath: buildPath ?? '', // Use empty string if not found
-                type: type,
-                exeEntries: [], // Scanner doesn't load exe entries
-              );
-              foundPrefixes.add(prefix);
-              _logService.log('Added prefix: ${prefix.name}, type: ${prefix.type.name}, path: ${prefix.path}');
-
-            } else {
-              _logService.log('Skipping directory (no system.reg, user.reg, or drive_c found): ${entry.path}', LogLevel.warning);
             }
-            // --- End Process if registry files were found ---
+          } catch (e) {
+            _logService.log('Error processing directory ${entity.path}: $e', LogLevel.error);
           }
         }
-      } catch (e) {
-        _logService.log('Error scanning subdirectory $scanDir: $e', LogLevel.error);
-        // Continue with other subdirectories
       }
     }
 
-    _logService.log('Scan complete. Found ${foundPrefixes.length} prefixes.');
-    return foundPrefixes;
+    // Clean up invalid prefixes
+    if (invalidPrefixes.isNotEmpty) {
+      _logService.log('Found ${invalidPrefixes.length} invalid prefixes. Starting cleanup...');
+      await _cleanupInvalidPrefixes(invalidPrefixes);
+    }
+
+    _logService.log('Scan complete. Found ${prefixes.length} valid prefixes.');
+    return prefixes;
   }
 
+  /// Validates a prefix to ensure it's usable
+  Future<bool> _validatePrefix(WinePrefix prefix) async {
+    try {
+      // Check 1: Prefix directory must exist and contain essential Wine files
+      if (!Directory(prefix.path).existsSync()) {
+        _logService.log('Prefix directory does not exist: ${prefix.path}', LogLevel.warning);
+        return false;
+      }
+
+      // Check for essential Wine files (system.reg, user.reg, or drive_c)
+      final systemReg = File(path.join(prefix.path, 'system.reg'));
+      final userReg = File(path.join(prefix.path, 'user.reg'));
+      final driveC = Directory(path.join(prefix.path, 'drive_c'));
+      
+      if (!systemReg.existsSync() && !userReg.existsSync() && !driveC.existsSync()) {
+        _logService.log('Prefix missing essential Wine files: ${prefix.path}', LogLevel.warning);
+        return false;
+      }
+
+      // Check 2: Build path must exist (if specified)
+      if (prefix.wineBuildPath.isNotEmpty) {
+        if (!Directory(prefix.wineBuildPath).existsSync()) {
+          _logService.log('Build path does not exist: ${prefix.wineBuildPath}', LogLevel.warning);
+          return false;
+        }
+
+        // Check for essential executable based on prefix type
+        String expectedExecutable;
+        if (prefix.type == PrefixType.proton) {
+          // For Proton, check for proton script
+          expectedExecutable = path.join(prefix.wineBuildPath, 'proton');
+          if (!File(expectedExecutable).existsSync()) {
+            // Try proton.sh as alternative
+            expectedExecutable = path.join(prefix.wineBuildPath, 'proton.sh');
+            if (!File(expectedExecutable).existsSync()) {
+              _logService.log('Proton script not found in build path: ${prefix.wineBuildPath}', LogLevel.warning);
+              return false;
+            }
+          }
+        } else {
+          // For Wine, check for wine executable
+          expectedExecutable = path.join(prefix.wineBuildPath, 'bin', 'wine');
+          if (!File(expectedExecutable).existsSync()) {
+            _logService.log('Wine executable not found in build path: ${expectedExecutable}', LogLevel.warning);
+            return false;
+          }
+        }
+      }
+
+      // Check 3: Architecture must be valid
+      if (prefix.architecture != 'win32' && prefix.architecture != 'win64') {
+        _logService.log('Invalid architecture: ${prefix.architecture}', LogLevel.warning);
+        return false;
+      }
+
+      return true;
+    } catch (e) {
+      _logService.log('Error validating prefix ${prefix.name}: $e', LogLevel.error);
+      return false;
+    }
+  }
+
+  /// Cleans up invalid prefixes
+  Future<void> _cleanupInvalidPrefixes(List<WinePrefix> invalidPrefixes) async {
+    for (final prefix in invalidPrefixes) {
+      try {
+        _logService.log('Cleaning up invalid prefix: ${prefix.name} at ${prefix.path}');
+        
+        // Remove the prefix directory and its contents
+        final prefixDir = Directory(prefix.path);
+        if (prefixDir.existsSync()) {
+          await prefixDir.delete(recursive: true);
+          _logService.log('Deleted invalid prefix directory: ${prefix.path}');
+        }
+
+        // Clean up empty parent directories
+        await _cleanupEmptyParentDirectories(prefix.path);
+        
+      } catch (e) {
+        _logService.log('Error cleaning up invalid prefix ${prefix.name}: $e', LogLevel.error);
+      }
+    }
+    
+    _logService.log('Cleanup complete. Removed ${invalidPrefixes.length} invalid prefixes.');
+  }
+
+  /// Removes empty parent directories up to the type subdirectory level
+  Future<void> _cleanupEmptyParentDirectories(String prefixPath) async {
+    try {
+      final parentDir = Directory(path.dirname(prefixPath));
+      
+      // Only clean up if the parent is a type subdirectory (wine, proton, etc.)
+      final parentName = path.basename(parentDir.path);
+      final validTypeNames = ['wine', 'proton', 'proton-ge', 'proton-kronek', 'custom'];
+      
+      if (validTypeNames.contains(parentName) && parentDir.existsSync()) {
+        // Check if directory is empty
+        final contents = await parentDir.list().toList();
+        if (contents.isEmpty) {
+          await parentDir.delete();
+          _logService.log('Removed empty type directory: ${parentDir.path}');
+        }
+      }
+    } catch (e) {
+      _logService.log('Error cleaning up empty parent directories for $prefixPath: $e', LogLevel.warning);
+    }
+  }
+
+  Future<WinePrefix?> _processDirectory(String dirPath, String typeSubdir) async {
+    final prefixName = path.basename(dirPath);
+    
+    // Check for registry files or drive_c directory
+    final systemReg = File(path.join(dirPath, 'system.reg'));
+    final userReg = File(path.join(dirPath, 'user.reg'));
+    final driveC = Directory(path.join(dirPath, 'drive_c'));
+    
+    if (!systemReg.existsSync() && !userReg.existsSync() && !driveC.existsSync()) {
+      _logService.log('Skipping directory (no system.reg, user.reg, or drive_c found): $dirPath', LogLevel.warning);
+      return null;
+    }
+
+    // Read configuration
+    final configFile = File(path.join(dirPath, '.prefix_config'));
+    String? buildPath;
+    PrefixType type = PrefixType.wine;
+    String architecture = 'win64';
+
+    if (configFile.existsSync()) {
+      try {
+        final configContent = await configFile.readAsString();
+        _logService.log('Config file content: $configContent');
+        final config = json.decode(configContent);
+        buildPath = config['buildPath'] as String?;
+        architecture = config['architecture'] as String? ?? 'win64';
+        
+        final typeString = config['type'] as String? ?? 'PrefixType.wine';
+        if (typeString == 'PrefixType.proton') {
+          type = PrefixType.proton;
+        } else {
+          type = PrefixType.wine;
+        }
+        
+        _logService.log('Read from config - buildPath: $buildPath, type: $typeString, architecture: $architecture');
+      } catch (e) {
+        _logService.log('Error reading config file: $e', LogLevel.error);
+        // Continue with defaults
+      }
+    } else {
+      // Guess type based on subdirectory
+      if (typeSubdir.contains('proton') || prefixName.toLowerCase().contains('proton')) {
+        type = PrefixType.proton;
+      } else {
+        type = PrefixType.wine;
+      }
+      _logService.log('Config file not found. Guessed type: ${type.name}');
+    }
+
+    _logService.log('Determined prefix type: ${type.name}');
+
+    return WinePrefix(
+      name: prefixName,
+      path: dirPath,
+      wineBuildPath: buildPath ?? '',
+      type: type,
+      architecture: architecture,
+      exeEntries: [],
+    );
+  }
 
   /// Deletes the specified prefix directory recursively.
   /// Returns true if successful, false otherwise.
@@ -450,45 +518,84 @@ class PrefixManagementService {
     }
   }
 
-  /// Applies controller fixes to the prefix by adding registry entries
-  /// for better controller support.
-  Future<void> applyControllerFix(WinePrefix prefix) async {
-    try {
-      _logService.log('Applying controller fixes to prefix: ${prefix.name}');
-      final env = await _prepareEnvironment(prefix);
-      final winePath = env['WINE'] ?? 'wine';
-      
-      // First registry entry: DisableHidraw
-      final disableHidrawResult = await Process.run(
-        winePath,
-        ['reg', 'add', 'HKEY_LOCAL_MACHINE\\System\\CurrentControlSet\\Services\\winebus', 
-              '/v', 'DisableHidraw', '/t', 'REG_DWORD', '/d', '1', '/f'],
-        environment: env,
-      );
-      
-      if (disableHidrawResult.exitCode != 0) {
-        _logService.log('Error adding DisableHidraw registry entry: ${disableHidrawResult.stderr}', LogLevel.error);
-        throw Exception('Failed to add DisableHidraw registry entry: ${disableHidrawResult.stderr}');
+  /// Applies a common controller fix (XInput, DInput) to the prefix.
+  /// This typically involves running a script or specific Winetricks verbs.
+  Future<void> applyControllerFix(
+    WinePrefix prefix,
+    {Function(String)? onStatusUpdate,
+     String? customWineExecutable,
+     Map<String, String>? customEnv,}
+  ) async {
+    onStatusUpdate?.call('Applying winebus controller fix...');
+    _logService.log('Applying winebus controller fix for prefix: ${prefix.name}');
+
+    final String wineExec = customWineExecutable ?? await getWineExecutableForPrefix(prefix) ?? await _prepareEnvironment(prefix).then((env) => env['WINE'] ?? 'wine');
+    final Map<String,String> env = customEnv ?? await _prepareEnvironment(prefix);
+    
+    final commandShell = Shell(environment: env, verbose: true);
+
+    // Determine if this is a Proton executable (not a wine executable)
+    final bool isProtonExecutable = wineExec.contains('proton') && !wineExec.endsWith('/wine') && !wineExec.endsWith('/wine64');
+
+    final List<Map<String, String>> regCommands = [
+      {
+        'key': '"HKEY_LOCAL_MACHINE\\System\\CurrentControlSet\\Services\\winebus"',
+        'valueName': '"DisableHidraw"',
+        'type': 'REG_DWORD',
+        'data': '1',
+        'description': 'Disabling Hidraw for winebus'
+      },
+      {
+        'key': '"HKEY_LOCAL_MACHINE\\System\\CurrentControlSet\\Services\\winebus"',
+        'valueName': '"Enable SDL"',
+        'type': 'REG_DWORD',
+        'data': '1',
+        'description': 'Enabling SDL for winebus'
+      }
+    ];
+
+    for (final cmdDetails in regCommands) {
+      String commandString;
+      if (isProtonExecutable) {
+        // For Proton executables, prefix with 'run'
+        commandString = '''$wineExec run reg add ${cmdDetails['key']} /v ${cmdDetails['valueName']} /t ${cmdDetails['type']} /d ${cmdDetails['data']} /f''';
+      } else {
+        // For regular wine executables
+        commandString = '''$wineExec reg add ${cmdDetails['key']} /v ${cmdDetails['valueName']} /t ${cmdDetails['type']} /d ${cmdDetails['data']} /f''';
       }
       
-      // Second registry entry: Enable SDL
-      final enableSDLResult = await Process.run(
-        winePath,
-        ['reg', 'add', 'HKEY_LOCAL_MACHINE\\System\\CurrentControlSet\\Services\\winebus', 
-              '/v', 'Enable SDL', '/t', 'REG_DWORD', '/d', '1', '/f'],
-        environment: env,
-      );
-      
-      if (enableSDLResult.exitCode != 0) {
-        _logService.log('Error adding Enable SDL registry entry: ${enableSDLResult.stderr}', LogLevel.error);
-        throw Exception('Failed to add Enable SDL registry entry: ${enableSDLResult.stderr}');
+      onStatusUpdate?.call('Applying: ${cmdDetails['description']}');
+      _logService.log('Executing registry command: $commandString');
+      try {
+        final result = await commandShell.run(commandString);
+        if (result.first.exitCode == 0) {
+          _logService.log('Successfully applied registry change: ${cmdDetails['valueName']}');
+        } else {
+          _logService.log('Failed to apply registry change: ${cmdDetails['valueName']}. Error: ${result.first.errText}', LogLevel.error);
+          onStatusUpdate?.call('Failed to apply: ${cmdDetails['valueName']}');
+        }
+      } catch (e) {
+        _logService.log('Exception during registry command for ${cmdDetails['valueName']}: $e', LogLevel.error);
+        onStatusUpdate?.call('Error applying: ${cmdDetails['valueName']}');
       }
-      
-      _logService.log('Controller fixes successfully applied to prefix: ${prefix.name}');
-    } catch (e) {
-      _logService.log('Error applying controller fixes: $e', LogLevel.error);
-      throw Exception('Error applying controller fixes: $e');
     }
+
+    onStatusUpdate?.call('Controller fix application finished.');
+    _logService.log('Controller fix application finished for prefix: ${prefix.name}');
+  }
+
+  /// Retrieves the appropriate wine executable path for a given prefix.
+  Future<String?> getWineExecutableForPrefix(WinePrefix prefix) async {
+    // Implementation of getWineExecutableForPrefix method
+    // This is a placeholder and should be implemented based on your specific requirements
+    return null; // Placeholder return, actual implementation needed
+  }
+
+  /// Retrieves the appropriate environment variables for a given prefix.
+  Future<Map<String, String>> getEnvironmentForPrefix(WinePrefix prefix) async {
+    // Implementation of getEnvironmentForPrefix method
+    // This is a placeholder and should be implemented based on your specific requirements
+    return {}; // Placeholder return, actual implementation needed
   }
 
   /// Determines if a prefix has DXVK and VKD3D-Proton properly installed

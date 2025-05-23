@@ -13,6 +13,14 @@ A Flutter application for managing Wine/Proton prefixes on Linux.
 ![Prefix Management](Screenshots/Screenshot_20250327_181841.png)
 
 *   Create new Wine/Proton prefixes using downloaded builds (e.g., GE-Proton, Wine-GE).
+*   **Automatic setup for new prefixes:**
+    *   Microsoft Visual C++ 2015-2022 Redistributable installation (x64 for 64-bit prefixes, x86 for 32-bit prefixes) - downloaded directly from Microsoft
+    *   Game controller registry fixes (DisableHidraw and Enable SDL for winebus)
+    *   Essential gaming dependencies (DXVK, VKD3D for 64-bit Wine prefixes)
+    *   **Proton-specific optimizations:**
+        *   Proton-GE: Only installs VC++ runtime (other components are built-in)
+        *   Kronek Proton: Full gaming dependencies (DXVK, VKD3D, VC++ runtime)
+        *   Standard Proton: VC++ runtime and minimal essential components
 *   Add Windows executables (`.exe`) to prefixes.
 *   Identify games using IGDB integration (requires API credentials).
 *   Download cover art and screenshots for identified games.

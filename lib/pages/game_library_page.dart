@@ -4,13 +4,19 @@ import 'package:collection/collection.dart'; // Import for groupBy
 import '../models/prefix_models.dart';
 import '../models/settings.dart';
 import '../widgets/game_card.dart'; // Import GameCard for GameLaunchState
+import '../widgets/game_info_modal.dart'; // Import GameInfoModal
+import '../widgets/game_settings_modal.dart'; // Import GameSettingsModal
 import '../services/ui_action_service.dart'; // Import UIActionService for addExecutableToPrefix
 import 'package:provider/provider.dart'; // Import Provider to access UIActionService
 
 class GameLibraryPage extends StatelessWidget {
   final List<GameEntry> games;
   final Function(WinePrefix, ExeEntry) onLaunchGame;
-  final Function(BuildContext, GameEntry) onShowDetails;
+  final Function(GameEntry, String?) onSaveLaunchOptions;
+  final Function(GameEntry, String?) onChangeCategory;
+  final Function(GameEntry, bool) onToggleWorkingStatus;
+  final Function(GameEntry)? onUpdateMetadata;
+  final Function(GameEntry)? onChangePrefix;
   final Function(String?)? onGenreSelected;
   final String? selectedGenre;
   final CoverSize coverSize;
@@ -23,7 +29,11 @@ class GameLibraryPage extends StatelessWidget {
     super.key,
     required this.games,
     required this.onLaunchGame,
-    required this.onShowDetails,
+    required this.onSaveLaunchOptions,
+    required this.onChangeCategory,
+    required this.onToggleWorkingStatus,
+    this.onUpdateMetadata,
+    this.onChangePrefix,
     this.onGenreSelected,
     this.selectedGenre,
     this.coverSize = CoverSize.medium,
@@ -187,7 +197,8 @@ class GameLibraryPage extends StatelessWidget {
                                 clipBehavior: Clip.antiAlias,
                                 child: GameCard(
                                   game: game,
-                                  onTap: (g) => onShowDetails(context, g), // Pass details callback
+                                  onShowInfo: (g) => _showGameInfo(context, g), // Pass info callback
+                                  onShowSettings: (g) => _showGameSettings(context, g), // Pass settings callback
                                   onLaunch: (g) => onLaunchGame(g.prefix, g.exe), // Pass launch callback
                                   onStop: onStopGame, // Pass stop callback
                                   launchState: launchState, // Pass current state
@@ -313,5 +324,29 @@ class GameLibraryPage extends StatelessWidget {
     
     // Use the navigator's root context for showing dialogs
     uiActionService.addExecutableToPrefix(navigatorContext, prefix);
+  }
+
+  void _showGameInfo(BuildContext context, GameEntry game) {
+    showDialog(
+      context: context,
+      builder: (context) => GameInfoModal(
+        game: game,
+        onLaunchGame: () => onLaunchGame(game.prefix, game.exe),
+        onUpdateMetadata: onUpdateMetadata,
+      ),
+    );
+  }
+
+  void _showGameSettings(BuildContext context, GameEntry game) {
+    showDialog(
+      context: context,
+      builder: (context) => GameSettingsModal(
+        game: game,
+        onSaveLaunchOptions: onSaveLaunchOptions,
+        onChangeCategory: onChangeCategory,
+        onToggleWorkingStatus: onToggleWorkingStatus,
+        onChangePrefix: onChangePrefix,
+      ),
+    );
   }
 }

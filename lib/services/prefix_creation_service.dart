@@ -27,11 +27,12 @@ class PrefixCreationService {
     required String prefixName,
     required Settings settings,
     required PrefixType prefixType,
+    required String architecture,
     required StatusCallback onStatusUpdate,
     required ProgressCallback onProgressUpdate,
   }) async {
     // Log what we're doing
-    _logService.log('Creating ${prefixType.name} prefix: $prefixName');
+    _logService.log('Creating ${prefixType.name} prefix: $prefixName with architecture $architecture');
     
     // Delegate to the appropriate specialized service based on prefix type
     switch (prefixType) {
@@ -40,6 +41,7 @@ class PrefixCreationService {
           selectedBuild: selectedBuild,
           prefixName: prefixName,
           settings: settings,
+          architecture: architecture,
           onStatusUpdate: onStatusUpdate,
           onProgressUpdate: onProgressUpdate,
         );
@@ -49,6 +51,7 @@ class PrefixCreationService {
           selectedBuild: selectedBuild,
           prefixName: prefixName,
           settings: settings,
+          architecture: architecture,
           onStatusUpdate: onStatusUpdate,
           onProgressUpdate: onProgressUpdate,
         );

@@ -11,11 +11,13 @@ import '../models/prefix_models.dart'; // Import PrefixType
 class PrefixCreationForm extends StatefulWidget {
   final Settings? settings;
   final PrefixType? initialPrefixType; // Added parameter for initial tab selection
+  final VoidCallback? onSuccess; // <<<< Added this
 
   const PrefixCreationForm({
     Key? key, 
     required this.settings,
     this.initialPrefixType, // Optional parameter
+    this.onSuccess, // <<<< Added this
   }) : super(key: key);
 
   @override
@@ -28,6 +30,8 @@ class _PrefixCreationFormState extends State<PrefixCreationForm> with TickerProv
   bool _isLoading = false; // Loading state for this form
   String _prefixName = '';
   String _status = 'Ready'; // Status messages for this form
+  double _progress = 0.0; // Added for progress bar
+  String _selectedArchitecture = 'win64'; // Added for architecture selection, default to 64-bit
   final TextEditingController _prefixNameController = TextEditingController();
   TabController? _prefixTabController;
   PrefixType _selectedPrefixType = PrefixType.wine; // Changed from custom to wine
@@ -143,22 +147,26 @@ class _PrefixCreationFormState extends State<PrefixCreationForm> with TickerProv
     setState(() {
       _isLoading = true;
       _status = 'Starting prefix creation...';
+      _progress = 0.0; // Reset progress
     });
     _logService.log('Starting prefix creation for "$_prefixName"...');
 
+    // Determine architecture to pass. Proton defaults to win64.
+    final String architectureToPass = (prefixType == PrefixType.proton) ? 'win64' : _selectedArchitecture;
+
     try {
-      // Pass the explicitly selected prefix type
+      // Pass the explicitly selected prefix type and architecture
       final newPrefix = await _prefixCreationService.downloadAndCreatePrefix(
         selectedBuild: _selectedBuild,
         prefixName: _prefixName,
         settings: widget.settings!,
-        prefixType: prefixType, // Pass the tab's prefix type
+        prefixType: prefixType, 
+        architecture: architectureToPass, // Pass selected or defaulted architecture
         onStatusUpdate: (status) {
-          // Update local status, don't log here as service might log too
           if (mounted) setState(() { _status = status; });
         },
         onProgressUpdate: (progress) {
-          // Optional: Update a progress indicator if needed
+          if (mounted) setState(() { _progress = progress; });
         },
       );
 
@@ -170,6 +178,7 @@ class _PrefixCreationFormState extends State<PrefixCreationForm> with TickerProv
           _prefixName = '';
           _selectedBuild = null;
         });
+        widget.onSuccess?.call(); // <<<< Added this call
       } else if (mounted) {
          // Error handled by service callback or exception below
          if (!_status.toLowerCase().contains('error') && !_status.toLowerCase().contains('failed')) {
@@ -240,15 +249,58 @@ class _PrefixCreationFormState extends State<PrefixCreationForm> with TickerProv
   }
   
   Widget _buildWinePrefixTab(bool Function(String) checkPrefixExists) {
-    // Filter builds for Wine
-    final wineBuilds = _builds.where((build) => build.type == PrefixType.wine).toList();
-    
+    // Filter builds for Wine initially (will be further filtered by architecture)
+    final baseWineBuilds = _builds.where((build) => build.type == PrefixType.wine).toList();
+
+    // Further filter by selected architecture
+    final filteredWineBuilds = baseWineBuilds
+        .where((build) => build.architecture == _selectedArchitecture || build.architecture == null) // Allow builds with matching arch or no specified arch
+        .toList();
+
     return SingleChildScrollView(
       child: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Architecture Selection for Wine (Moved to the top)
+            Card(
+              elevation: 3, margin: const EdgeInsets.only(bottom: 24),
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Select Architecture', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<String>(
+                        decoration: InputDecoration(
+                          // labelText: 'Architecture', // Already in Card Title
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          filled: true,
+                        ),
+                        value: _selectedArchitecture,
+                        items: const [
+                          DropdownMenuItem(value: 'win64', child: Text('64-bit (win64)')),
+                          DropdownMenuItem(value: 'win32', child: Text('32-bit (win32)')),
+                        ],
+                        onChanged: (String? newValue) {
+                          if (newValue != null && newValue != _selectedArchitecture) {
+                            setState(() {
+                              _selectedArchitecture = newValue;
+                              // Reset selected build if it's not compatible with the new architecture
+                              if (_selectedBuild != null && _selectedBuild!.architecture != null && _selectedBuild!.architecture != _selectedArchitecture) {
+                                _selectedBuild = null;
+                              }
+                            });
+                          }
+                        },
+                      ),
+                    ]
+                ),
+              ),
+            ),
+
             // Build Selection Card
             Card(
               elevation: 3, margin: const EdgeInsets.only(bottom: 24),
@@ -271,11 +323,11 @@ class _PrefixCreationFormState extends State<PrefixCreationForm> with TickerProv
                     const SizedBox(height: 16),
                     _isLoading && _builds.isEmpty
                       ? const Center(child: CircularProgressIndicator())
-                      : wineBuilds.isEmpty
+                      : filteredWineBuilds.isEmpty
                         ? Center(
                             child: Column(
                               children: [
-                                const Text('No Wine builds available.'),
+                                Text('No Wine builds available for $_selectedArchitecture.'),
                                 const SizedBox(height: 8),
                                 ElevatedButton.icon(
                                   onPressed: _fetchBuilds,
@@ -292,7 +344,9 @@ class _PrefixCreationFormState extends State<PrefixCreationForm> with TickerProv
                             ),
                             child: DropdownButtonHideUnderline(
                               child: DropdownButton<BaseBuild>(
-                                value: _selectedBuild?.type == PrefixType.wine ? _selectedBuild : null,
+                                value: _selectedBuild?.type == PrefixType.wine && (_selectedBuild?.architecture == _selectedArchitecture || _selectedBuild?.architecture == null) 
+                                      ? _selectedBuild 
+                                      : null,
                                 onChanged: (BaseBuild? newValue) {
                                   if (newValue != null && newValue.installPath != null) {
                                     _updateStatus('Cannot create prefix from installed build yet.', isError: true);
@@ -303,7 +357,7 @@ class _PrefixCreationFormState extends State<PrefixCreationForm> with TickerProv
                                 hint: const Text('   Select a Wine build'),
                                 isExpanded: true,
                                 padding: const EdgeInsets.symmetric(horizontal: 16),
-                                items: wineBuilds
+                                items: filteredWineBuilds
                                     .map((build) {
                                        final bool isInstalled = build.installPath != null;
                                        final String displayName = isInstalled ? "${build.getDisplayName} (Installed)" : build.getDisplayName;
@@ -372,8 +426,30 @@ class _PrefixCreationFormState extends State<PrefixCreationForm> with TickerProv
               ),
             ),
 
-            // Status message
-            _buildStatusMessage(),
+            // Status and Progress Area
+            if (_isLoading)
+              Padding(
+                padding: const EdgeInsets.only(top: 20.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(_status, style: Theme.of(context).textTheme.bodyMedium),
+                    const SizedBox(height: 8),
+                    LinearProgressIndicator(value: _progress > 0 ? _progress : null, backgroundColor: Colors.grey[300]),
+                  ],
+                ),
+              )
+            else if (_status != 'Ready' && _status.isNotEmpty) // Show status even if not loading, unless it's just "Ready"
+              Padding(
+                padding: const EdgeInsets.only(top: 20.0),
+                child: Text(_status, 
+                  style: TextStyle(
+                    color: _status.toLowerCase().contains('error') || _status.toLowerCase().contains('failed') 
+                        ? Theme.of(context).colorScheme.error 
+                        : null
+                  )
+                ),
+              ),
           ],
         ),
       ),
@@ -545,52 +621,31 @@ class _PrefixCreationFormState extends State<PrefixCreationForm> with TickerProv
               ),
             ),
 
-            // Status message
-            _buildStatusMessage(),
-          ],
-        ),
-      ),
-    );
-  }
-  
-  Widget _buildStatusMessage() {
-    if (_status.isEmpty) return const SizedBox.shrink();
-    
-    return Padding(
-      padding: const EdgeInsets.only(top: 24),
-      child: Card(
-        color: _status.contains('Error') || _status.contains('Failed') || _status.contains('already exists') || _status.contains('not yet supported')
-          ? Theme.of(context).colorScheme.errorContainer
-          : Theme.of(context).colorScheme.primaryContainer,
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            children: [
-              if (_isLoading && !_status.toLowerCase().contains('starting'))
-                  Padding(
-                    padding: const EdgeInsets.only(right: 12.0),
-                    child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Theme.of(context).colorScheme.primary)),
-                  )
-              else
-                  Icon(
-                    _status.contains('Error') || _status.contains('Failed') || _status.contains('already exists') || _status.contains('not yet supported') ? Icons.error : Icons.info,
-                    color: _status.contains('Error') || _status.contains('Failed') || _status.contains('already exists') || _status.contains('not yet supported')
-                      ? Theme.of(context).colorScheme.error
-                      : Theme.of(context).colorScheme.primary,
-                  ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  _status,
+            // Status and Progress Area
+            if (_isLoading)
+              Padding(
+                padding: const EdgeInsets.only(top: 20.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(_status, style: Theme.of(context).textTheme.bodyMedium),
+                    const SizedBox(height: 8),
+                    LinearProgressIndicator(value: _progress > 0 ? _progress : null, backgroundColor: Colors.grey[300]),
+                  ],
+                ),
+              )
+            else if (_status != 'Ready' && _status.isNotEmpty) // Show status even if not loading, unless it's just "Ready"
+              Padding(
+                padding: const EdgeInsets.only(top: 20.0),
+                child: Text(_status, 
                   style: TextStyle(
-                    color: _status.contains('Error') || _status.contains('Failed') || _status.contains('already exists') || _status.contains('not yet supported')
-                      ? Theme.of(context).colorScheme.onErrorContainer
-                      : Theme.of(context).colorScheme.onPrimaryContainer,
-                  ),
+                    color: _status.toLowerCase().contains('error') || _status.toLowerCase().contains('failed') 
+                        ? Theme.of(context).colorScheme.error 
+                        : null
+                  )
                 ),
               ),
-            ],
-          ),
+          ],
         ),
       ),
     );

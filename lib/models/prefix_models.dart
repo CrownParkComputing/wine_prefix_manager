@@ -9,6 +9,7 @@ class WinePrefix {
   final String wineBuildPath;
   final PrefixType type;
   final List<ExeEntry> exeEntries;
+  final String architecture; // Added architecture field
   final Map<String, String> environmentVariables; // Environment variables for the prefix
 
   final List<GameEntry>? gameEntries; // Change to final since the constructor is const
@@ -19,6 +20,7 @@ class WinePrefix {
     required this.wineBuildPath,
     required this.type,
     required this.exeEntries,
+    required this.architecture, // Added to constructor
     this.gameEntries,
     this.environmentVariables = const {}, // Default to empty map
   });
@@ -28,6 +30,7 @@ class WinePrefix {
     'path': path,
     'wineBuildPath': wineBuildPath,
     'type': type.toString(), // Stores as "PrefixType.proton", "PrefixType.wine", etc.
+    'architecture': architecture, // Added to JSON
     'exeEntries': exeEntries.map((e) => e.toJson()).toList(),
     'environmentVariables': environmentVariables, // Add environment variables to JSON
   };
@@ -60,6 +63,7 @@ class WinePrefix {
       path: json['path'],
       wineBuildPath: json['wineBuildPath'],
       type: type, // Use parsed type
+      architecture: json['architecture'] as String? ?? 'win64', // Added from JSON, default to win64 if missing
       exeEntries: (json['exeEntries'] as List)
           .map((e) => ExeEntry.fromJson(e))
           .toList(),
@@ -73,6 +77,7 @@ class WinePrefix {
     String? wineBuildPath,
     PrefixType? type,
     List<ExeEntry>? exeEntries,
+    String? architecture, // Added to copyWith
     Map<String, String>? environmentVariables,
   }) {
     return WinePrefix(
@@ -81,6 +86,7 @@ class WinePrefix {
       wineBuildPath: wineBuildPath ?? this.wineBuildPath,
       type: type ?? this.type,
       exeEntries: exeEntries ?? this.exeEntries,
+      architecture: architecture ?? this.architecture, // Added to copyWith
       environmentVariables: environmentVariables ?? this.environmentVariables,
     );
   }

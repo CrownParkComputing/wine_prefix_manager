@@ -7,6 +7,7 @@ import 'package:process_run/shell.dart';
 import '../models/prefix_models.dart';
 import '../models/settings.dart'; // Import Settings model
 import 'log_service.dart'; // Import LogService
+import 'package:dio/dio.dart';
 
 /// Service for downloading and installing components like DXVK and VKD3D-Proton
 /// and general dependencies using winetricks.
@@ -78,8 +79,30 @@ class WineComponentInstaller {
     }
   }
 
+  /// Extracts a tar.zst file to a specific directory
+  Future<void> _extractTarZst(String filePath, String targetDir) async {
+    final bytes = File(filePath).readAsBytesSync();
+
+    // Decompress the zst file
+    // Note: Dart's 'archive' package doesn't support Zstandard directly.
+    // We'll use the system's `tar` command for this as a workaround.
+    // This requires `zstd` to be installed on the system.
+    Directory(targetDir).createSync(recursive: true);
+    final shell = Shell(verbose: false); // Use a local shell instance
+    try {
+      await shell.run('tar -xf "$filePath" -C "$targetDir" --use-compress-program=unzstd');
+    } catch (e) {
+      // Fallback if unzstd is not available or tar doesn't support it directly
+      LogService().log('tar with unzstd failed: $e. Trying zstd -d and then tar -xf.', LogLevel.warning);
+      final tempTarPath = '${filePath}.tar';
+      await shell.run('zstd -d "$filePath" -o "$tempTarPath"');
+      await shell.run('tar -xf "$tempTarPath" -C "$targetDir"');
+      await File(tempTarPath).delete(); // Clean up temporary .tar file
+    }
+  }
+
   /// Installs DXVK to a Wine prefix
-  Future<bool> installDxvk(WinePrefix prefix, Settings settings, {Function(String)? progressCallback}) async { // Added settings parameter
+  Future<bool> installDxvk(WinePrefix prefix, Settings settings, {Function(String)? progressCallback, String? customWineExecutable, Map<String, String>? customEnv}) async { // Added settings, customWineExecutable, customEnv
     // Allow installation for Wine and Gaming types. Proton types manage their own.
     // Removed check for protonExperimental
     if (prefix.type == PrefixType.proton) {
@@ -196,55 +219,75 @@ class WineComponentInstaller {
       }
 
       // Install the DLLs
-      progressCallback?.call('Installing DXVK DLLs to prefix...');
+      progressCallback?.call('Installing DXVK DLLs to prefix (${prefix.architecture})...');
       final x64Dir = path.join(dxvkDirToInstallFrom, 'x64');
       final x32Dir = path.join(dxvkDirToInstallFrom, 'x32');
 
       // Ensure the Windows system directories exist
       final sys32Dir = Directory(path.join(prefix.path, 'drive_c', 'windows', 'system32'));
-      final sysWow64Dir = Directory(path.join(prefix.path, 'drive_c', 'windows', 'syswow64'));
       sys32Dir.createSync(recursive: true);
-      sysWow64Dir.createSync(recursive: true);
 
-      // Copy the DLLs
-      bool copied64 = false;
-      if (Directory(x64Dir).existsSync()) {
-        for (var file in Directory(x64Dir).listSync()) {
-          if (file is File && path.extension(file.path) == '.dll') {
-            final targetPath = path.join(sys32Dir.path, path.basename(file.path));
-            file.copySync(targetPath);
-            copied64 = true;
+      bool copiedDlls = false;
+
+      if (prefix.architecture == 'win64') {
+        // For 64-bit prefixes, x64 DLLs go to system32, and x32 DLLs go to syswow64
+        final sysWow64Dir = Directory(path.join(prefix.path, 'drive_c', 'windows', 'syswow64'));
+        sysWow64Dir.createSync(recursive: true);
+
+        if (Directory(x64Dir).existsSync()) {
+          for (var file in Directory(x64Dir).listSync()) {
+            if (file is File && path.extension(file.path) == '.dll') {
+              final targetPath = path.join(sys32Dir.path, path.basename(file.path));
+              file.copySync(targetPath);
+              copiedDlls = true;
+            }
           }
         }
-      }
-      if (copied64) progressCallback?.call('Copied x64 DLLs.');
-
-      bool copied32 = false;
-      if (Directory(x32Dir).existsSync()) {
-        for (var file in Directory(x32Dir).listSync()) {
-          if (file is File && path.extension(file.path) == '.dll') {
-            final targetPath = path.join(sysWow64Dir.path, path.basename(file.path));
-            file.copySync(targetPath);
-            copied32 = true;
+        if (copiedDlls) progressCallback?.call('Copied x64 DLLs to system32.');
+        
+        bool copied32ToSyswow64 = false;
+        if (Directory(x32Dir).existsSync()) {
+          for (var file in Directory(x32Dir).listSync()) {
+            if (file is File && path.extension(file.path) == '.dll') {
+              final targetPath = path.join(sysWow64Dir.path, path.basename(file.path));
+              file.copySync(targetPath);
+              copied32ToSyswow64 = true;
+            }
           }
         }
+        if (copied32ToSyswow64) progressCallback?.call('Copied x32 DLLs to syswow64.');
+        copiedDlls = copiedDlls || copied32ToSyswow64;
+
+      } else { // win32 architecture
+        // For 32-bit prefixes, x32 DLLs go to system32. x64 DLLs are not used.
+        if (Directory(x32Dir).existsSync()) {
+          for (var file in Directory(x32Dir).listSync()) {
+            if (file is File && path.extension(file.path) == '.dll') {
+              final targetPath = path.join(sys32Dir.path, path.basename(file.path));
+              file.copySync(targetPath);
+              copiedDlls = true;
+            }
+          }
+        }
+        if (copiedDlls) progressCallback?.call('Copied x32 DLLs to system32.');
       }
-      if (copied32) progressCallback?.call('Copied x32 DLLs.');
 
       // Run winecfg after copying DLLs
-      progressCallback?.call('Running winecfg to apply changes...');
-      try {
-        // Run asynchronously, don't wait for it to finish
-        Process.start(
-          'winecfg',
-          [],
-          environment: {'WINEPREFIX': prefix.path},
-          runInShell: true // May help find winecfg in PATH
-        );
-        progressCallback?.call('winecfg launched. Check the Wine configuration window.');
-      } catch (winecfgError) {
-        progressCallback?.call('Failed to launch winecfg: $winecfgError. DXVK DLLs are copied, but you may need to run winecfg manually.');
-        // Don't return false here, as DLLs were copied.
+      if (copiedDlls) { // Only run winecfg if DLLs were actually copied
+        progressCallback?.call('Running winecfg to apply changes...');
+        try {
+          // Run asynchronously, don't wait for it to finish
+          Process.start(
+            customWineExecutable ?? 'winecfg', // Use custom wine executable if provided
+            [],
+            environment: customEnv ?? {'WINEPREFIX': prefix.path}, // Use custom env if provided
+            runInShell: true // May help find winecfg in PATH
+          );
+          progressCallback?.call('winecfg launched. Check the Wine configuration window.');
+        } catch (winecfgError) {
+          progressCallback?.call('Failed to launch winecfg: $winecfgError. DXVK DLLs are copied, but you may need to run winecfg manually.');
+          // Don't return false here, as DLLs were copied.
+        }
       }
 
       progressCallback?.call('DXVK ${dxvkVersionTag ?? 'unknown version'} DLLs installed successfully.');
@@ -269,221 +312,283 @@ class WineComponentInstaller {
   }
 
   /// Installs VKD3D-Proton to a Wine prefix
-  Future<bool> installVkd3d(WinePrefix prefix, Settings settings, {Function(String)? progressCallback}) async {
-    final logService = LogService(); // Get logger instance
+  Future<bool> installVkd3d(WinePrefix prefix, Settings settings, {Function(String)? progressCallback, String? customWineExecutable, Map<String, String>? customEnv}) async {
     // Allow installation for Wine and Gaming types. Proton types manage their own.
-    // Removed check for protonExperimental
     if (prefix.type == PrefixType.proton) {
       progressCallback?.call('VKD3D-Proton installation is not typically needed for Proton prefixes.');
       return true; // Consider it successful, as Proton handles it.
     }
 
     String? downloadPath;
+    Directory? tempDownloadDir;
     Directory? extractDir;
+    String? vkd3dVersionTag;
+    final LogService logService = LogService(); // Use a local instance or pass it if preferred
 
     try {
-      // Use the specific version URL instead of fetching from GitHub API
-      const specificVersion = 'v2.14.1';
-      const specificVersionNumber = '2.14.1';
-      const directUrl = 'https://github.com/HansKristian-Work/vkd3d-proton/releases/download/$specificVersion/vkd3d-proton-$specificVersionNumber.tar.zst';
+      progressCallback?.call('Fetching latest VKD3D-Proton release information...');
+      logService.log('Fetching latest VKD3D-Proton release from ${settings.vkd3dApiUrl}');
+      final release = await getLatestVkd3dRelease(settings);
+      vkd3dVersionTag = release['tag_name']?.toString();
+      final assets = release['assets'] as List;
+      progressCallback?.call('Found ${assets.length} assets in VKD3D-Proton release ${vkd3dVersionTag ?? ""}');
 
-      progressCallback?.call('Using VKD3D-Proton $specificVersionNumber');
-      progressCallback?.call('Downloading from: $directUrl');
+      final vkd3dAsset = assets.firstWhere(
+        (asset) => asset['name'].toString().endsWith('.tar.zst'),
+        orElse: () => null,
+      );
 
-      try {
-        downloadPath = await _downloadRelease(directUrl, prefix.path);
-        final msg = 'Downloaded VKD3D-Proton successfully to $downloadPath';
-        progressCallback?.call(msg);
-        logService.log(msg);
-      } catch (e) {
-        progressCallback?.call('Download failed: $e');
-        logService.log('VKD3D-Proton download failed: $e', LogLevel.error); return false;
+      if (vkd3dAsset == null) {
+        progressCallback?.call('Could not find VKD3D-Proton .tar.zst asset.');
+        logService.log('VKD3D-Proton .tar.zst asset not found in release: ${release['html_url']}', LogLevel.error);
+        return false;
       }
 
-      // Extract the archive
+      final downloadUrl = vkd3dAsset['browser_download_url'];
+      final fileName = vkd3dAsset['name'];
+      logService.log('Found VKD3D asset: $fileName');
+      progressCallback?.call('Downloading VKD3D-Proton ${vkd3dVersionTag ?? fileName}...');
+      
+      tempDownloadDir = await Directory.systemTemp.createTemp('vkd3d_download_');
+      downloadPath = path.join(tempDownloadDir.path, fileName);
+
+      final dio = Dio();
+      await dio.download(downloadUrl, downloadPath, onReceiveProgress: (received, total) {
+        if (total > 0) {
+          final progress = (received / total * 100).toStringAsFixed(1);
+          progressCallback?.call('Downloading VKD3D: $progress%');
+        }
+      });
+      logService.log('VKD3D-Proton downloaded to $downloadPath');
+
       progressCallback?.call('Extracting VKD3D-Proton...');
+      extractDir = await Directory.systemTemp.createTemp('vkd3d_extract_');
+      await _extractTarZst(downloadPath, extractDir.path);
+      logService.log('VKD3D-Proton extracted to ${extractDir.path}');
 
-      // Check file extension to determine extraction method
-      extractDir = Directory.systemTemp.createTempSync('vkd3d_extract_');
-
-      if (path.extension(downloadPath) == '.zst') {
-        // Use external zstd command for .tar.zst files
-        progressCallback?.call('Using zstd to extract .tar.zst file...');
-
-        // First, check if zstd and tar are installed
-        final zstdCheckResults = await Shell(verbose: false).run('which zstd'); // Corrected variable name
-        final tarCheckResults = await Shell(verbose: false).run('which tar'); // Corrected variable name
-        if (zstdCheckResults.first.exitCode != 0) { // Access first result
-          progressCallback?.call('Error: zstd not found. Please install zstd to extract .tar.zst files.');
-          logService.log('zstd command not found, cannot extract VKD3D.', LogLevel.error); return false;
-        }
-        if (tarCheckResults.first.exitCode != 0) { // Access first result
-          progressCallback?.call('Error: tar not found. Please install tar to extract .tar.zst files.');
-          logService.log('tar command not found, cannot extract VKD3D.', LogLevel.error); return false;
-        }
-
-        // Extract using zstd to get the tar file
-        final tarFile = path.join(path.dirname(downloadPath), 'vkd3d-proton.tar');
-        final zstdResult = await Process.run('zstd', ['-d', downloadPath, '-o', tarFile]);
-
-        if (zstdResult.exitCode != 0) {
-          progressCallback?.call('Error extracting with zstd: ${zstdResult.stderr}');
-          logService.log('zstd extraction failed: ${zstdResult.stderr}', LogLevel.error); return false;
-        }
-
-        // Now extract the tar file
-        final tarResult = await Process.run('tar', ['-xf', tarFile, '-C', extractDir.path]);
-
-        if (tarResult.exitCode != 0) {
-          progressCallback?.call('Error extracting tar: ${tarResult.stderr}');
-          logService.log('tar extraction failed: ${tarResult.stderr}', LogLevel.error); return false;
-        }
-
-        // Clean up the intermediate tar file
-        await File(tarFile).delete();
-      } else {
-        // Use the existing method for .tar.gz
-        await _extractTarGz(downloadPath, extractDir.path);
+      // The actual DLLs are usually inside a versioned subdirectory
+      final extractedItems = extractDir.listSync();
+      Directory? vkd3dInstallDir;
+      
+      List<Directory> potentialDirs = extractedItems.whereType<Directory>().toList();
+      if (potentialDirs.isNotEmpty) {
+        vkd3dInstallDir = potentialDirs.firstWhere(
+          (dir) => path.basename(dir.path).startsWith('vkd3d-proton'),
+          // If no specific 'vkd3d-proton*' directory is found, try to use the first directory found.
+          orElse: () => potentialDirs.first, 
+        );
       }
 
-      // Look for the setup script
-      progressCallback?.call('Looking for setup script...');
-      File? setupScriptFile;
+      if (vkd3dInstallDir == null || !await vkd3dInstallDir.exists()) {
+          logService.log('Could not find the main VKD3D directory (e.g., vkd3d-proton-X.Y) in ${extractDir.path}. Extracted items: ${extractedItems.map((e) => e.path).join(', ')}', LogLevel.error);
+          progressCallback?.call('Error: Could not locate VKD3D files after extraction.');
+          return false;
+      }
+      logService.log('Using VKD3D installation directory: ${vkd3dInstallDir.path}');
 
-      void findSetupScript(Directory dir) {
-        for (var entity in dir.listSync()) {
-          if (entity is File && path.basename(entity.path) == 'setup_vkd3d_proton.sh') {
-            setupScriptFile = entity;
-            return;
-          } else if (entity is Directory) {
-            findSetupScript(entity);
+
+      final String vkd3dDllSourceDir64 = path.join(vkd3dInstallDir.path, 'x64');
+      final String vkd3dDllSourceDir32 = path.join(vkd3dInstallDir.path, 'x86');
+
+      final String system32TargetDir = path.join(prefix.path, 'drive_c', 'windows', 'system32');
+      final String syswow64TargetDir = path.join(prefix.path, 'drive_c', 'windows', 'syswow64');
+
+      await Directory(system32TargetDir).create(recursive: true);
+      await Directory(syswow64TargetDir).create(recursive: true);
+
+      final List<String> dllsToCopy = ['d3d12.dll', 'd3d12core.dll'];
+      bool copiedAnyDlls = false;
+
+      if (prefix.architecture == 'win64') {
+        logService.log('Copying 64-bit VKD3D DLLs to $system32TargetDir for win64 prefix...');
+        progressCallback?.call('Copying 64-bit VKD3D DLLs to system32...');
+        for (final dll in dllsToCopy) {
+          final sourceFile = path.join(vkd3dDllSourceDir64, dll);
+          final destinationFile = path.join(system32TargetDir, dll);
+          if (await File(sourceFile).exists()) {
+            await _copyFileWithBackup(sourceFile, destinationFile, logService);
+            logService.log('Copied $sourceFile to $destinationFile');
+            copiedAnyDlls = true;
+          } else {
+            logService.log('Source DLL not found: $sourceFile for win64 system32', LogLevel.warning);
+          }
+        }
+
+        logService.log('Copying 32-bit VKD3D DLLs to $syswow64TargetDir for win64 prefix...');
+        progressCallback?.call('Copying 32-bit VKD3D DLLs to syswow64...');
+        for (final dll in dllsToCopy) {
+          final sourceFile = path.join(vkd3dDllSourceDir32, dll);
+          final destinationFile = path.join(syswow64TargetDir, dll);
+           if (await File(sourceFile).exists()) {
+            await _copyFileWithBackup(sourceFile, destinationFile, logService);
+            logService.log('Copied $sourceFile to $destinationFile');
+            copiedAnyDlls = true;
+          } else {
+            logService.log('Source DLL not found: $sourceFile for win64 syswow64', LogLevel.warning);
+          }
+        }
+      } else { // win32
+        logService.log('Copying 32-bit VKD3D DLLs to $system32TargetDir for win32 prefix...');
+        progressCallback?.call('Copying 32-bit VKD3D DLLs to system32...');
+        for (final dll in dllsToCopy) {
+          final sourceFile = path.join(vkd3dDllSourceDir32, dll);
+          final destinationFile = path.join(system32TargetDir, dll);
+          if (await File(sourceFile).exists()) {
+            await _copyFileWithBackup(sourceFile, destinationFile, logService);
+            logService.log('Copied $sourceFile to $destinationFile');
+            copiedAnyDlls = true;
+          } else {
+            logService.log('Source DLL not found: $sourceFile for win32 system32', LogLevel.warning);
           }
         }
       }
 
-      findSetupScript(extractDir);
-
-      if (setupScriptFile == null) {
-        // If no script found, list contents for debugging
-        progressCallback?.call('Could not find setup_vkd3d_proton.sh. Contents of extracted directory:');
-        _listDirectoryContents(extractDir, progressCallback);
-        logService.log('setup_vkd3d_proton.sh not found in extracted archive.', LogLevel.error); return false;
+      if (!copiedAnyDlls) {
+        final errorMessage = 'VKD3D-Proton: No DLLs were copied. Check source paths ($vkd3dDllSourceDir64, $vkd3dDllSourceDir32) and DLL names.';
+        logService.log(errorMessage, LogLevel.error);
+        progressCallback?.call('Error: $errorMessage');
+        return false;
       }
-
-      progressCallback?.call('Found setup script at: ${setupScriptFile!.path}');
-
-      // Make setup script executable
-      await Process.run('chmod', ['+x', setupScriptFile!.path]);
-
-      // Run the setup script
-      progressCallback?.call('Installing VKD3D-Proton to prefix: ${prefix.path}');
-      final result = await Process.run(
-        'bash', // Explicitly use bash
-        [setupScriptFile!.path, 'install'], // Pass script path and 'install' arg
-        environment: {'WINEPREFIX': prefix.path},
-        workingDirectory: path.dirname(setupScriptFile!.path),
-        stdoutEncoding: utf8, // Capture output as UTF8
-        stderrEncoding: utf8,
-      );
-
-      // Log script output regardless of exit code
-      logService.log('VKD3D Setup Script STDOUT:\n${result.stdout}');
-      logService.log('VKD3D Setup Script STDERR:\n${result.stderr}');
-
-      if (result.exitCode != 0) {
-        progressCallback?.call('VKD3D-Proton installation failed (Exit Code: ${result.exitCode}): ${result.stderr}');
-        logService.log('VKD3D setup script failed (Exit Code: ${result.exitCode})', LogLevel.error); return false;
-      }
-
-      final successMsg = 'VKD3D-Proton $specificVersionNumber has been installed successfully';
-      progressCallback?.call(successMsg);
-      logService.log(successMsg);
+      
+      final successMessage = 'VKD3D-Proton ${vkd3dVersionTag ??fileName} installed successfully to prefix: ${prefix.path}';
+      logService.log(successMessage);
+      progressCallback?.call(successMessage);
       return true;
-    } catch (e) {
+
+    } catch (e, s) {
       progressCallback?.call('Error installing VKD3D-Proton: $e');
-      logService.log('Exception during VKD3D-Proton installation: $e', LogLevel.error); return false;
+      logService.log('Error installing VKD3D-Proton: $e\n$s', LogLevel.error);
+      return false;
     } finally {
-      // Cleanup
+      // Clean up
       try {
         if (downloadPath != null && await File(downloadPath).exists()) {
           await File(downloadPath).delete();
         }
+        if (tempDownloadDir != null && await tempDownloadDir.exists()) {
+          await tempDownloadDir.delete(recursive: true);
+        }
         if (extractDir != null && await extractDir.exists()) {
           await extractDir.delete(recursive: true);
         }
-      } catch (cleanupError) {
-        progressCallback?.call('Warning: Error during cleanup: $cleanupError');
-        logService.log('Warning: Error during VKD3D cleanup: $cleanupError', LogLevel.warning);
+      } catch (e) {
+        logService.log('Error cleaning up VKD3D temp files: $e', LogLevel.warning);
       }
-    }
-  }
-
-  // Helper method to list directory contents recursively for debugging
-  void _listDirectoryContents(Directory dir, Function(String)? progressCallback, {String indent = ''}) {
-    try {
-      for (var entity in dir.listSync()) {
-        if (entity is File) {
-          progressCallback?.call('$indent${path.basename(entity.path)}');
-        } else if (entity is Directory) {
-          progressCallback?.call('$indent${path.basename(entity.path)}/');
-          _listDirectoryContents(entity, progressCallback, indent: '$indent  ');
-        }
-      }
-    } catch (e) {
-      progressCallback?.call('$indent[Error listing contents: $e]');
     }
   }
 
   /// Installs a component (verb) using winetricks into the specified prefix.
-  Future<void> installComponent({
-    required String prefixPath,
-    required String component,
-    required String wineExecutablePath, // Path to the 'wine' binary (e.g., 'wine' or '/path/to/build/bin/wine')
-    required Function(String status) onStatusUpdate,
-  }) async {
+  /// 
+  /// The `component` parameter is the name of the Winetricks verb to install (e.g., 'dxvk', 'vcrun2019').
+  /// The `prefix` parameter is the WinePrefix object representing the target prefix.
+  /// The `progressCallback` is an optional function to receive status updates.
+  /// The `customWineExecutable` is an optional path to a specific wine executable (e.g., for Proton).
+  /// The `customEnv` is an optional map of environment variables for the Winetricks command.
+  Future<void> installComponent(WinePrefix prefix, String component, {Function(String)? progressCallback, String? customWineExecutable, Map<String, String>? customEnv}) async {
+    progressCallback?.call('Installing $component using Winetricks...');
     final logService = LogService();
-    logService.log('Attempting to install component "$component" into prefix "$prefixPath" using wine at "$wineExecutablePath"');
 
-    // Check if winetricks is installed
-    final winetricksCheckResults = await Shell(verbose: false).run('which winetricks');
-    final winetricksCheck = winetricksCheckResults.first; // Get the first result
-    if (winetricksCheck.exitCode != 0) {
-      final errorMsg = 'Error: winetricks command not found. Please install winetricks.';
-      logService.log(errorMsg, LogLevel.error);
-      onStatusUpdate(errorMsg);
-      throw Exception(errorMsg);
+    // Determine the environment for Winetricks
+    // Start with Platform.environment, then merge customEnv, then specific overrides.
+    final Map<String, String> winetricksEnv = {
+      ...(Platform.environment),
+      ...(customEnv ?? {}), // customEnv can override Platform.environment
+      'WINEPREFIX': prefix.path, // Explicitly set WINEPREFIX
+      'WINEARCH': prefix.architecture, // Explicitly set WINEARCH
+    };
+
+    // If customWineExecutable is provided, use it to set WINE and adjust PATH
+    if (customWineExecutable != null && customWineExecutable.isNotEmpty) {
+      winetricksEnv['WINE'] = customWineExecutable; // Explicitly set WINE
+      final wineDir = path.dirname(customWineExecutable);
+      // Prepend wineDir to PATH, ensuring existing PATH (from customEnv or Platform.env) is respected
+      winetricksEnv['PATH'] = '$wineDir:${winetricksEnv['PATH'] ?? Platform.environment['PATH'] ?? ''}';
+      logService.log('Using customWineExecutable for Winetricks: $customWineExecutable. PATH updated: ${winetricksEnv['PATH']}');
+    } else if (customEnv?.containsKey('WINE') == true) {
+      logService.log('Using WINE from customEnv for Winetricks: ${customEnv!['WINE']}');
+    } else {
+      logService.log('Using system WINE for Winetricks (customWineExecutable not provided and WINE not in customEnv).');
     }
 
-    final shell = Shell(
-      environment: {
-        'WINEPREFIX': prefixPath,
-        'WINE': wineExecutablePath, // Tell winetricks which wine binary to use
-      },
-      verbose: false, // Keep shell output minimal unless debugging
-    );
+    // Construct the command
+    String command = 'winetricks -q $component';
 
-    onStatusUpdate('Running winetricks $component...');
-    logService.log('Executing: WINEPREFIX="$prefixPath" WINE="$wineExecutablePath" winetricks -q $component');
+    final shell = Shell(environment: winetricksEnv, verbose: true);
 
     try {
-      // Use -q for quiet mode to reduce unnecessary dialogs
-      final results = await shell.run('winetricks -q $component');
-      final result = results.first; // Get the first result
+      logService.log(
+        'Running Winetricks command: "$command" with env:\n'
+        '  WINEPREFIX=${winetricksEnv['WINEPREFIX']}\n'
+        '  WINEARCH=${winetricksEnv['WINEARCH']}\n'
+        '  WINE=${winetricksEnv['WINE']}\n'
+        '  PATH=${winetricksEnv['PATH']}'
+      );
+      final results = await shell.run(command);
+      final result = results.first; // Assuming single command, take the first result
 
-      if (result.exitCode != 0) {
-        final errorMsg = 'Winetricks failed for component "$component" (Exit Code: ${result.exitCode}): ${result.stderr}';
-        logService.log(errorMsg, LogLevel.error);
-        onStatusUpdate('Error installing $component: ${result.stderr.isNotEmpty ? result.stderr : result.stdout}'); // Show stdout if stderr is empty
-        throw Exception(errorMsg);
+      if (result.exitCode == 0) {
+        progressCallback?.call('$component installed successfully.');
+        logService.log('Winetricks $component installed successfully. Output: ${result.outText}');
+      } else {
+        progressCallback?.call('Failed to install $component. Exit code: ${result.exitCode}');
+        logService.log(
+          'Winetricks $component installation failed. Exit code: ${result.exitCode}\nStdout: ${result.outText}\nStderr: ${result.errText}',
+          LogLevel.error,
+        );
+        // Potentially throw an exception here if installation is critical
       }
+    } catch (e, stackTrace) {
+      progressCallback?.call('Error installing $component with Winetricks: $e');
+      logService.log('Exception during Winetricks $component installation: $e\n$stackTrace', LogLevel.error);
+      // Potentially throw an exception here
+    }
+  }
+}
 
-      onStatusUpdate('Component "$component" installed successfully.');
-      logService.log('Component "$component" installed successfully.');
+// Typedef for the status callback function
+typedef StatusCallback = void Function(String status);
+
+// Helper function to copy file with backup
+// This can be a private method in the class or a top-level private function
+// For now, adding as a private method to WineComponentInstaller
+extension WineComponentInstallerHelpers on WineComponentInstaller {
+  Future<void> _copyFileWithBackup(String sourcePath, String destinationPath, LogService logService) async {
+    final destinationFile = File(destinationPath);
+    final sourceFile = File(sourcePath);
+
+    if (!await sourceFile.exists()) {
+      logService.log('Source file for copy does not exist: $sourcePath', LogLevel.warning);
+      return;
+    }
+
+    if (await destinationFile.exists()) {
+      String backupPath = '$destinationPath.old';
+      // If .old exists, try .old.bak, then .old.bak2 etc. (simple increment for now)
+      int i = 0;
+      while(await File(backupPath).exists()) {
+        i++;
+        backupPath = '$destinationPath.old$i';
+      }
+      try {
+        await destinationFile.rename(backupPath);
+        logService.log('Backed up existing file: $destinationPath to $backupPath');
+      } catch (e) {
+        logService.log('Failed to backup $destinationPath to $backupPath: $e', LogLevel.error);
+        // Decide if this is fatal. For now, we'll try to overwrite if backup fails.
+        try {
+          await destinationFile.delete();
+          logService.log('Deleted $destinationPath after failed backup to allow overwrite.');
+        } catch (delErr) {
+          logService.log('Failed to delete $destinationPath after failed backup: $delErr. Copy might fail.', LogLevel.error);
+          return; // Cannot proceed if backup fails and delete fails
+        }
+      }
+    }
+    try {
+      await sourceFile.copy(destinationPath);
+      logService.log('Copied $sourcePath to $destinationPath');
     } catch (e) {
-      final errorMsg = 'Error running winetricks for component "$component": $e';
-      logService.log(errorMsg, LogLevel.error);
-      onStatusUpdate('Error installing $component: $e');
-      rethrow; // Re-throw the exception to be handled by the caller
+      logService.log('Failed to copy $sourcePath to $destinationPath: $e', LogLevel.error);
     }
   }
 }

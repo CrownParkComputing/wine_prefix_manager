@@ -8,7 +8,8 @@ enum GameLaunchState { idle, launching, running, failed }
 
 class GameCard extends StatelessWidget {
   final GameEntry game;
-  final Function(GameEntry) onTap; // For showing details
+  final Function(GameEntry)? onShowInfo; // For showing info modal
+  final Function(GameEntry)? onShowSettings; // For showing settings
   final Function(GameEntry) onLaunch;
   final Function(GameEntry)? onStop; // Callback to stop the game, nullable if not running
   final GameLaunchState launchState; // Current state of the game
@@ -16,7 +17,8 @@ class GameCard extends StatelessWidget {
   const GameCard({
     Key? key,
     required this.game,
-    required this.onTap,
+    this.onShowInfo, // Changed from onTap
+    this.onShowSettings, // Added for settings
     required this.onLaunch,
     this.onStop,
     this.launchState = GameLaunchState.idle, // Default to idle
@@ -68,13 +70,6 @@ class GameCard extends StatelessWidget {
           bottom: 8,
           child: Row(
             children: [
-              // Wine/Proton icon
-              Icon(
-                game.prefix.type == PrefixType.wine ? Icons.wine_bar : Icons.gamepad,
-                color: Colors.white,
-                size: 16,
-              ),
-              const SizedBox(width: 8),
               // Not working warning icon
               if (game.exe.notWorking)
                 Tooltip(
@@ -86,27 +81,102 @@ class GameCard extends StatelessWidget {
                   ),
                 ),
               // Display play time if available
-              if ((game.exe.playTimeMinutes ?? 0) > 0) 
-                const SizedBox(width: 8),
-              if ((game.exe.playTimeMinutes ?? 0) > 0)
+              if ((game.exe.playTimeMinutes ?? 0) > 0) ...[
+                if (game.exe.notWorking) const SizedBox(width: 8),
                 Tooltip(
-                  message: _formatPlayTime(game.exe.playTimeMinutes ?? 0),
+                  message: 'Play time: ${_formatPlayTime(game.exe.playTimeMinutes ?? 0)}',
                   child: const Icon(
                     Icons.timer,
                     color: Colors.white,
                     size: 16,
                   ),
                 ),
+              ],
             ],
           ),
         ),
 
-        // Clickable overlay for details
-        Positioned.fill(
+        // Mini action icons in corners
+        // Info icon - top-left
+        Positioned(
+          top: 8,
+          left: 8,
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.8),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: Colors.white.withOpacity(0.3),
+                width: 1,
+              ),
+            ),
+            child: IconButton(
+              onPressed: () {
+                print('Details icon tapped for ${game.exe.name}'); // Debug print
+                onShowInfo?.call(game);
+              },
+              icon: const Icon(
+                Icons.info_outline,
+                color: Colors.white,
+                size: 16,
+              ),
+              tooltip: 'Game Details',
+              padding: const EdgeInsets.all(4),
+              constraints: const BoxConstraints(
+                minWidth: 28,
+                minHeight: 28,
+              ),
+            ),
+          ),
+        ),
+
+        // Settings icon - top-right
+        Positioned(
+          top: 8,
+          right: 8,
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.8),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: Colors.white.withOpacity(0.3),
+                width: 1,
+              ),
+            ),
+            child: IconButton(
+              onPressed: () {
+                print('Settings icon tapped for ${game.exe.name}'); // Debug print
+                onShowSettings?.call(game);
+              },
+              icon: const Icon(
+                Icons.settings_outlined,
+                color: Colors.white,
+                size: 16,
+              ),
+              tooltip: 'Game Settings',
+              padding: const EdgeInsets.all(4),
+              constraints: const BoxConstraints(
+                minWidth: 28,
+                minHeight: 28,
+              ),
+            ),
+          ),
+        ),
+
+        // Clickable overlay for launch (excluding the corner icon areas)
+        Positioned(
+          left: 40, // Exclude left corner area for info icon
+          right: 40, // Exclude right corner area for settings icon
+          top: 40, // Exclude top area where icons are
+          bottom: 0,
           child: Material(
             color: Colors.transparent,
             child: InkWell(
-              onTap: () => onTap(game), // Tap anywhere on the card shows details
+              onTap: () {
+                // This area is for launching the game
+                print('Launch area tapped for ${game.exe.name}'); // Debug print
+                onLaunch(game);
+              },
               splashColor: Colors.white.withOpacity(0.1),
               highlightColor: Colors.white.withOpacity(0.05),
             ),

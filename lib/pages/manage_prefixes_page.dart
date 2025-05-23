@@ -4,6 +4,8 @@ import '../models/settings.dart';
 import '../pages/prefix_management_page.dart'; // Import the refactored page
 import '../widgets/prefix_creation_form.dart'; // Import the original form widget
 import '../widgets/prefix_creation_form_for_type.dart'; // Import the type-specific form widget
+import 'create_prefix_page.dart'; // Import the create prefix page to be used as a dialog
+import '../widgets/wine_component_settings_dialog.dart'; // Import the new dialog
 
 // Define callback types needed by child widgets, to be passed from main.dart
 typedef OnExeAction = Future<void> Function(WinePrefix prefix, ExeEntry exe);
@@ -67,6 +69,20 @@ class _ManagePrefixesPageState extends State<ManagePrefixesPage> {
         title: const Text('Manage Prefixes'),
         automaticallyImplyLeading: false,
         elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings_applications_outlined),
+            tooltip: 'Wine Component Settings',
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (BuildContext context) {
+                  return const WineComponentSettingsDialog();
+                },
+              );
+            },
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         child: Column(
@@ -153,6 +169,38 @@ class _ManagePrefixesPageState extends State<ManagePrefixesPage> {
             ),
           ],
         ),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          showDialog(
+            context: context,
+            builder: (BuildContext context) {
+              return AlertDialog( // Changed to AlertDialog for better sizing and structure
+                title: const Text('Create New Prefix'), // Title for the dialog
+                contentPadding: EdgeInsets.zero, // Remove default padding, CreatePrefixPage handles it
+                content: SizedBox( // Constrain the size of the content
+                  width: MediaQuery.of(context).size.width * 0.8, // 80% of screen width
+                  height: MediaQuery.of(context).size.height * 0.7, // 70% of screen height
+                  child: CreatePrefixPage(
+                    onSuccess: () {
+                      Navigator.of(context).pop();
+                    },
+                  ),
+                ),
+                actions: <Widget>[
+                  TextButton(
+                    child: const Text('Close'),
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                    },
+                  ),
+                ],
+              );
+            },
+          );
+        },
+        icon: const Icon(Icons.add),
+        label: const Text("New Prefix"),
       ),
     );
   }

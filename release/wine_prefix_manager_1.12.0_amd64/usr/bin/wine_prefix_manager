@@ -1,2 +1,0 @@
-#!/bin/sh
-exec /usr/lib/wine_prefix_manager/wine_prefix_manager "$@"

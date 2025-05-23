@@ -131,7 +131,7 @@ class PrefixProvider with ChangeNotifier {
      }
     _setLoading(true, "Scanning for prefixes...");
     try {
-      final scannedPrefixes = await _managementService.scanForExistingPrefixes(_settings!);
+      final scannedPrefixes = await _managementService.scanForPrefixes(_settings!);
       bool updated = false;
       int addedCount = 0;
       List<WinePrefix> currentPrefixes = List.from(_prefixes); // Makes a copy

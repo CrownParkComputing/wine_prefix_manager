@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 // Models
 import 'models/settings.dart';
@@ -24,12 +25,14 @@ import 'services/ui_action_service.dart'; // Import UIActionService
 // import 'widgets/custom_title_bar.dart'; // Removed import
 import 'pages/home_page.dart';
 import 'pages/manage_prefixes_page.dart';
-import 'pages/create_prefix_page.dart'; // Add import for CreatePrefixPage
 import 'pages/settings_page.dart';
 import 'pages/logs_page.dart';
 import 'pages/file_manager_page.dart';
 import 'widgets/rename_prefix_dialog.dart'; // Import RenamePrefixDialog
 import 'widgets/env_variables_dialog.dart'; // Add import for environment variables dialog
+import 'pages/game_library_page.dart';
+import 'pages/game_details_page.dart'; // Add import for GameDetailsPage
+import 'widgets/about_screen.dart'; // Correct import for AboutScreen
 
 // Constants
 // const String appTitle = 'Wine Prefix Manager'; // Removed
@@ -158,14 +161,126 @@ class _MyAppState extends State<MyApp> {
       builder: (context, themeProvider, child) {
         return MaterialApp(
           title: 'Wine Prefix Manager',
-          // Replace the routes and initialRoute with home: MainScaffold() to use the navigation rail
-          home: const MainScaffold(),
-          theme: themeProvider.themeData, // Use dynamic theme data
-          themeMode: themeProvider.isDarkMode ? ThemeMode.dark : ThemeMode.light, // Set mode based on provider state
+          home: const MainScaffold(), // MainScaffold is the home
+          theme: themeProvider.themeData, 
+          themeMode: themeProvider.isDarkMode ? ThemeMode.dark : ThemeMode.light, 
           debugShowCheckedModeBanner: false,
-          // Add named routes
+          onGenerateRoute: (settings) {
+            switch (settings.name) {
+              case '/':
+                return MaterialPageRoute(builder: (context) => const MainScaffold());
+              case '/settings':
+                return MaterialPageRoute(builder: (context) => const SettingsPage());
+              case '/game_details':
+                if (settings.arguments is GameEntry) {
+                  final game = settings.arguments as GameEntry;
+                  // Get required services from context
+                  final prefixProvider = Provider.of<PrefixProvider>(context, listen: false);
+                  final uiActionService = Provider.of<UIActionService>(context, listen: false);
+                  final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
+                  
+                  return MaterialPageRoute(
+                    builder: (context) => GameDetailsPage(
+                      game: game,
+                      settings: settingsProvider.settings,
+                      availablePrefixes: prefixProvider.prefixes,
+                      onLaunchGame: () {
+                        Navigator.of(context).pop(); // Go back after launch
+                        uiActionService.launchGame(game);
+                      },
+                      onChangePrefix: (game) async {
+                        // Simple placeholder - just log for now
+                        final logService = Provider.of<LogService>(context, listen: false);
+                        logService.log('Change prefix requested for ${game.exe.name}');
+                      },
+                      onToggleWorkingStatus: (game, notWorking) async {
+                        // Update working status via prefix provider
+                        final updatedExe = game.exe.copyWith(notWorking: notWorking);
+                        await prefixProvider.updateExecutable(game.prefix, updatedExe);
+                      },
+                      onChangeCategory: (game, category) async {
+                        // Update category via prefix provider
+                        final updatedExe = game.exe.copyWith(category: category);
+                        await prefixProvider.updateExecutable(game.prefix, updatedExe);
+                      },
+                      onEditExePath: (game) async {
+                        // Simple placeholder - just log for now
+                        final logService = Provider.of<LogService>(context, listen: false);
+                        logService.log('Edit exe path requested for ${game.exe.name}');
+                      },
+                      onUpdateMetadata: (game) async {
+                        // Simple placeholder - just log for now
+                        final logService = Provider.of<LogService>(context, listen: false);
+                        logService.log('Update metadata requested for ${game.exe.name}');
+                      },
+                      onSaveLaunchOptions: (game, options) async {
+                        // Update launch options via prefix provider
+                        final updatedExe = game.exe.copyWith(launchOptions: options);
+                        await prefixProvider.updateExecutable(game.prefix, updatedExe);
+                      },
+                    ),
+                  );
+                }
+                return MaterialPageRoute(builder: (context) => const MainScaffold());
+              default:
+                return MaterialPageRoute(builder: (context) => const MainScaffold());
+            }
+          },
           routes: {
-            '/create_prefix': (context) => const CreatePrefixPage(),
+            '/manage_prefixes': (context) => ManagePrefixesPage(
+              settings: _settings,
+              onAddExecutable: (prefix) async {
+                // Implementation needed
+              },
+              onShowCommonComponents: (context, prefix) async {
+                // Implementation needed
+              },
+              onDeletePrefix: (context, prefix) {
+                // Implementation needed
+              },
+              onDeleteExecutable: (context, prefix, exe) {
+                // Implementation needed
+              },
+              onRunExe: (prefix, exe) async {
+                // Implementation needed
+              },
+              onKillProcess: (prefix, exe) async {
+                // Implementation needed
+              },
+              runningProcesses: {},
+              onRunWinetricksGui: (prefix) async {
+                // Implementation needed
+              },
+              onRunInstaller: (prefix) async {
+                // Implementation needed
+              },
+              onExploreHostFiles: (prefix) async {
+                // Implementation needed
+              },
+              onRunWinecfg: (context, prefix) async {
+                // Implementation needed
+              },
+              onRenamePrefix: (context, prefix, newName) async {
+                // Implementation needed
+              },
+              onApplyControllerFix: (context, prefix) async {
+                // Implementation needed
+              },
+              onEditEnvVariables: (context, prefix) async {
+                // Implementation needed
+              },
+            ),
+            '/game_library': (context) => GameLibraryPage(
+              games: [], // Provide empty list for now
+              onLaunchGame: (prefix, exe) async {}, // Default empty function
+              onSaveLaunchOptions: (game, options) async {}, // Default empty function
+              onChangeCategory: (game, category) async {}, // Default empty function
+              onToggleWorkingStatus: (game, notWorking) async {}, // Default empty function
+              gameLaunchStates: {}, // Default empty map
+              onStopGame: (game) {}, // Default empty function
+            ),
+            '/logs': (context) => LogsPage(),
+            '/file_manager': (context) => FileManagerPage(game: null),
           },
         );
       },
@@ -181,13 +296,8 @@ class MainScaffold extends StatefulWidget {
 }
 
 class _MainScaffoldState extends State<MainScaffold> {
-  int _selectedIndex = 0;
-  // Removed service/provider instances that are now primarily accessed via UIActionService or directly where needed
-  // late final Settings _settings;
-  // late final LogService _logService; // Keep if _addLogMessage remains
-  // late final IgdbService _igdbService;
-  // late final PrefixProvider _prefixProvider;
-  late final UIActionService _uiActionService; // Keep UIActionService
+  int _selectedIndex = 0; // Default to Home (Game Library) which is index 0
+  late final UIActionService _uiActionService;
   final Map<String, int> _runningProcesses = {}; // State for running processes
   
   // Global key to access navigator
@@ -242,6 +352,8 @@ class _MainScaffoldState extends State<MainScaffold> {
     final processService = Provider.of<ProcessService>(context, listen: false);
     final prefixManagementService = Provider.of<PrefixManagementService>(context, listen: false);
     final logService = Provider.of<LogService>(context, listen: false);
+    // Access SettingsProvider for settings
+    final settingsProvider = Provider.of<SettingsProvider>(context, listen: false); 
     
     switch (index) {
       case 0:
@@ -249,9 +361,9 @@ class _MainScaffoldState extends State<MainScaffold> {
           onNavigateToTab: navigateToTab,
         );
       case 1:
-        final settingsProvider = Provider.of<SettingsProvider>(context, listen: true);
+        // Use settings from SettingsProvider
         return ManagePrefixesPage(
-          settings: settingsProvider.settings,
+          settings: settingsProvider.settings, 
           onAddExecutable: (prefix) => _uiActionService.addExecutableToPrefix(context, prefix),
           onShowCommonComponents: (context, prefix) => _uiActionService.showCommonComponentsDialog(context, prefix),
           onDeletePrefix: (ctx, pfx) => prefixProvider.deletePrefix(pfx),
@@ -274,7 +386,9 @@ class _MainScaffoldState extends State<MainScaffold> {
           },
           onApplyControllerFix: (ctx, pfx) async {
             try {
-              await prefixManagementService.applyControllerFix(pfx);
+              await prefixManagementService.applyControllerFix(pfx, onStatusUpdate: (status) {
+                logService.log('Controller Fix: $status');
+              });
               if (mounted) {
                 ScaffoldMessenger.of(ctx).showSnackBar(
                   SnackBar(content: Text('Controller fixes applied to "${pfx.name}"')),
@@ -320,59 +434,34 @@ class _MainScaffoldState extends State<MainScaffold> {
             }
           },
           runningProcesses: _runningProcesses,
-          onRunWinetricksGui: (pfx) async {
-            try {
-              await prefixManagementService.runWinetricksGui(pfx);
-            } catch (e) {
-              logService.log('Error running Winetricks GUI for ${pfx.name}: $e', LogLevel.error);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Error running Winetricks GUI: $e')),
-              );
-            }
-          },
-          onRunInstaller: (pfx) async {
-            await _uiActionService.runInstallerInPrefix(context, pfx);
-          },
-          onExploreHostFiles: (pfx) async {
-            try {
-              await prefixManagementService.runWineExplorer(pfx);
-            } catch (e) {
-              logService.log('Error running Wine Explorer for ${pfx.name}: $e', LogLevel.error);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Error running Wine Explorer: $e')),
-              );
-            }
-          },
-          onRunWinecfg: (ctx, pfx) async {
-            try {
-              await prefixManagementService.runWinecfg(pfx);
-            } catch (e) {
-              logService.log('Error running winecfg for ${pfx.name}: $e', LogLevel.error);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Error running winecfg: $e')),
-              );
-            }
-          },
+          onRunWinetricksGui: (pfx) => Provider.of<PrefixManagementService>(context, listen: false).runWinetricksGui(pfx),
+          onRunInstaller: (pfx) => _uiActionService.runInstallerInPrefix(context, pfx),
+          onExploreHostFiles: (pfx) => _uiActionService.explorePrefixFiles(pfx),
+          onRunWinecfg: (ctx, pfx) => Provider.of<PrefixManagementService>(context, listen: false).runWinecfg(pfx),
           onEditEnvVariables: (ctx, pfx) async {
-            await showDialog(
+            final result = await showDialog<Map<String, String>>(
               context: ctx,
-              builder: (dialogContext) => EnvVariablesDialog(
-                prefix: pfx,
-              ),
+              builder: (_) => EnvVariablesDialog(prefix: pfx),
             );
+            if (result != null && mounted) {
+              await prefixProvider.updatePrefix(pfx.copyWith(environmentVariables: result));
+            }
           },
         );
       case 2:
-        // Add CreatePrefixPage as a new navigation destination
-        return const CreatePrefixPage();
+        // SettingsPage uses SettingsProvider, no need to pass settings
+        return SettingsPage(); 
       case 3:
-        return SettingsPage();
-      case 4:
         return LogsPage();
-      case 5:
+      case 4:
         return _buildFileManagerPage(context);
+      case 5:
+        // About page (uses WelcomeScreen widget for now)
+        return const AboutScreen();
       default:
-        return const Center(child: Text('Page not found'));
+        // Adjust default to reflect removed item, or ensure all valid indices are handled.
+        // If _selectedIndex can go beyond 4, this needs a valid default.
+        return HomePage(onNavigateToTab: navigateToTab); // Default to HomePage
     }
   }
 
@@ -426,11 +515,6 @@ class _MainScaffoldState extends State<MainScaffold> {
                       label: Text('Manage'),
                     ),
                     NavigationRailDestination(
-                      icon: Icon(Icons.add_circle_outline),
-                      selectedIcon: Icon(Icons.add_circle),
-                      label: Text('Create'),
-                    ),
-                    NavigationRailDestination(
                       icon: Icon(Icons.settings_outlined),
                       selectedIcon: Icon(Icons.settings),
                       label: Text('Settings'),
@@ -441,9 +525,14 @@ class _MainScaffoldState extends State<MainScaffold> {
                       label: Text('Logs'),
                     ),
                     NavigationRailDestination(
-                      icon: Icon(Icons.archive_outlined),
-                      selectedIcon: Icon(Icons.archive),
+                      icon: Icon(Icons.folder_copy_outlined),
+                      selectedIcon: Icon(Icons.folder_copy),
                       label: Text('Files'),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.info_outline),
+                      selectedIcon: Icon(Icons.info),
+                      label: Text('About'),
                     ),
                   ],
                 ),

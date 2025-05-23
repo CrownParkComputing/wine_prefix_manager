@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/prefix_models.dart';
 import '../models/settings.dart'; // Needed for Common Components Dialog
 import 'common_components_dialog.dart'; // Import for confirmation dialog
+import 'action_button.dart'; // Import the new ActionButton widget
 
 // Define callback types required by this widget
 typedef PrefixActionCallback = void Function(WinePrefix prefix);
@@ -42,97 +43,76 @@ class PrefixDetailActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Helper to create IconButton with Tooltip
-    Widget _buildIconButton(IconData icon, String tooltip, VoidCallback? onPressed, {Color? color}) {
-      return Tooltip(
-        message: tooltip,
-        child: IconButton(
-          icon: Icon(icon),
-          onPressed: onPressed,
-          color: color, // Allow custom color for delete button
-          visualDensity: VisualDensity.compact, // Make buttons slightly smaller
-          padding: const EdgeInsets.all(8.0), // Adjust padding if needed
-          constraints: const BoxConstraints(), // Remove default constraints if needed
-        ),
-      );
-    }
+    final bool isProton = prefix.type == PrefixType.proton;
+    // Determine if DXVK/VKD3D can be installed/reinstalled
+    // bool canInstallGraphics = prefix.type == PrefixType.wine || prefix.wineBuildPath?.contains('Kronek') == true;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 8.0), // Adjusted padding
+      padding: const EdgeInsets.only(left: 16.0, right: 16.0, bottom: 16.0, top: 8.0),
       child: Wrap(
-        spacing: 4, // Reduced spacing
-        runSpacing: 0, // No vertical spacing needed for icons
-        alignment: WrapAlignment.start,
-        children: [
-          _buildIconButton(
-            Icons.add_box_outlined, // Changed icon
-            'Add Executable',
-            () => onAddExecutable(prefix),
+        spacing: 8.0, // Horizontal spacing between chips
+        runSpacing: 4.0, // Vertical spacing between lines of chips
+        children: <Widget>[
+          ActionButton(
+            icon: Icons.add_to_photos_outlined,
+            label: 'Add Executable',
+            onPressed: () => onAddExecutable(prefix),
           ),
-          _buildIconButton( // Added Rename Button
-            Icons.edit_outlined,
-            'Rename Prefix',
-            () => onRenamePrefix(context, prefix), // Call new callback
+          ActionButton(
+            icon: Icons.construction_outlined,
+            label: 'Winetricks GUI',
+            onPressed: () => onRunWinetricksGui(prefix),
           ),
-          _buildIconButton(
-            Icons.settings_applications_outlined, // Changed icon
-            'Run winecfg',
-            () => onRunWinecfg(context, prefix), // Pass context
+          ActionButton(
+            icon: Icons.settings_applications_outlined,
+            label: 'Winecfg',
+            onPressed: () => onRunWinecfg(context, prefix),
           ),
-          _buildIconButton(
-            Icons.handyman_outlined, // Changed icon
-            'Run Winetricks GUI',
-            () => onRunWinetricksGui(prefix), // Don't pass context
+          // ActionButton(
+          //   icon: Icons.build_circle_outlined,
+          //   label: 'Winetricks Verbs',
+          //   onPressed: () => onShowWinetricksVerbs(context, prefix, settings!),
+          // ), // Removed
+          // ActionButton(
+          //   icon: Icons.extension_outlined,
+          //   label: 'Common Components',
+          //   onPressed: () => onShowCommonComponents(context, prefix),
+          // ), // Removed Common Components button
+          ActionButton(
+            icon: Icons.rule_folder_outlined, // Changed icon to be more generic
+            label: 'Install Software',
+            tooltip: 'Run an installer (e.g., setup.exe) in this prefix',
+            onPressed: () => onRunInstaller(prefix),
           ),
-          // Removed Winetricks Verbs button
-          _buildIconButton(
-            Icons.build_circle_outlined, // Changed icon
-            'Install Common Components',
-            // FIX: Remove settings! argument from call
-            () => onShowCommonComponents(context, prefix),
+          // ActionButton(
+          //   icon: Icons.gamepad_outlined,
+          //   label: 'Controller Fix',
+          //   tooltip: 'Apply common controller fixes (XInput, DInput)',
+          //   onPressed: () => onApplyControllerFix(context, prefix),
+          // ), // Removed Controller Fix button
+           ActionButton(
+            icon: Icons.edit_note_outlined,
+            label: 'Env Variables',
+            tooltip: 'Edit environment variables for this prefix',
+            onPressed: () => onEditEnvVariables(context, prefix),
           ),
-          _buildIconButton(
-            Icons.terminal_outlined, // Changed icon
-            'Run Installer (.exe/.msi)',
-            () => onRunInstaller(prefix),
+          ActionButton(
+            icon: Icons.folder_open_outlined,
+            label: isProton ? 'Explore C: Drive' : 'Explore Files',
+            tooltip: isProton ? 'Open the C: drive of this Proton prefix' : 'Explore host files mapped to this prefix',
+            onPressed: () => onExploreHostFiles(prefix),
           ),
-          _buildIconButton(
-            Icons.folder_open_outlined, // Changed icon
-            'Explore Prefix (Wine Explorer)', // Updated tooltip
-            () => onExploreHostFiles(prefix), // Callback name updated for clarity
+          ActionButton(
+            icon: Icons.edit_outlined,
+            label: 'Rename Prefix',
+            onPressed: () => onRenamePrefix(context, prefix),
+            isDestructive: false, 
           ),
-          _buildIconButton(
-            Icons.sports_esports_outlined, // Controller/gamepad icon
-            'Apply Controller Fix',
-            () { // Show confirmation before applying
-              showConfirmationDialog(
-                context: context,
-                title: 'Apply Controller Fix?',
-                content: Text('Apply registry changes to improve controller support in "${prefix.name}"?'
-                    '\n\nThis will add settings to enable SDL and disable Hidraw for better controller compatibility.'),
-                confirmButtonText: 'Apply',
-                onConfirm: () => onApplyControllerFix(context, prefix),
-              );
-            },
-          ),
-          _buildIconButton(
-            Icons.tune_outlined, // Environment variables icon
-            'Environment Variables',
-            () => onEditEnvVariables(context, prefix),
-          ),
-          _buildIconButton(
-            Icons.delete_forever_outlined, // Changed icon
-            'Delete Prefix',
-            () { // Modified onPressed for confirmation
-              showConfirmationDialog(
-                context: context,
-                title: 'Delete Prefix?',
-                content: Text('Are you sure you want to permanently delete the prefix "${prefix.name}" and all its contents?\n\nThis action cannot be undone.'),
-                confirmButtonText: 'Delete',
-                onConfirm: () => onDeletePrefix(context, prefix), // Call original callback on confirm
-              );
-            },
-            color: Theme.of(context).colorScheme.error, // Use error color
+          ActionButton(
+            icon: Icons.delete_forever_outlined,
+            label: 'Delete Prefix',
+            onPressed: () => onDeletePrefix(context, prefix),
+            isDestructive: true,
           ),
         ],
       ),

@@ -6,7 +6,9 @@ import '../providers/settings_provider.dart';
 import '../models/prefix_models.dart';
 
 class CreatePrefixPage extends StatefulWidget {
-  const CreatePrefixPage({Key? key}) : super(key: key);
+  final VoidCallback? onSuccess;
+
+  const CreatePrefixPage({Key? key, this.onSuccess}) : super(key: key);
 
   @override
   State<CreatePrefixPage> createState() => _CreatePrefixPageState();
@@ -21,17 +23,16 @@ class _CreatePrefixPageState extends State<CreatePrefixPage> {
     final settingsProvider = Provider.of<SettingsProvider>(context);
     final settings = settingsProvider.settings;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Create New Prefix'),
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
+    // The main content is now returned directly, without Scaffold/AppBar
+    return SingleChildScrollView( // Added SingleChildScrollView for dialog content
+      child: Padding(
+        padding: const EdgeInsets.all(24.0), // Increased padding for dialog look
         child: _selectedType == null
             // Step 1: Choose prefix type
             ? _buildPrefixTypeSelection()
             // Step 2: Show creation form based on selection
             : Column(
+                mainAxisSize: MainAxisSize.min, // So column takes minimum space
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Header with back button
@@ -46,17 +47,22 @@ class _CreatePrefixPageState extends State<CreatePrefixPage> {
                         },
                       ),
                       Text(
-                        '${_selectedType == PrefixType.wine ? "Wine" : "Proton"} Prefix',
+                        'Create ${_selectedType == PrefixType.wine ? "Wine" : "Proton"} Prefix', // Updated title
                         style: Theme.of(context).textTheme.headlineSmall,
                       ),
                     ],
                   ),
                   const SizedBox(height: 16),
                   // Show the appropriate creation form
-                  Expanded(
+                  // The PrefixCreationForm might need to be constrained in height
+                  // or ensure it's also scrollable if it becomes too large.
+                  Flexible( // Added Flexible to allow form to take available space
                     child: PrefixCreationForm(
                       settings: settings,
                       initialPrefixType: _selectedType!,
+                      onSuccess: widget.onSuccess,
+                      // Potentially add an onCancel or onCreated callback
+                      // to close the dialog after creation/cancellation.
                     ),
                   ),
                 ],
@@ -66,9 +72,10 @@ class _CreatePrefixPageState extends State<CreatePrefixPage> {
   }
 
   Widget _buildPrefixTypeSelection() {
-    return Center(
-      child: Column(
+    // This part remains largely the same, but consider dialog context
+    return Column( // Changed from Center to Column for better dialog layout
         mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Text(
             'Select Prefix Type',
@@ -99,9 +106,13 @@ class _CreatePrefixPageState extends State<CreatePrefixPage> {
               ),
             ],
           ),
+          const SizedBox(height: 24), // Added some bottom padding
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(), // Close button
+            child: const Text('Cancel'),
+          ),
         ],
-      ),
-    );
+      );
   }
 
   Widget _buildPrefixTypeCard({

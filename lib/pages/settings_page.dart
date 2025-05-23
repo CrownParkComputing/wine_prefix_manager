@@ -25,21 +25,23 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
   late TextEditingController _backupPathController; // Add a controller for the backup path
   Settings? _settings;
   // Controllers for URL settings
-  late TextEditingController _dxvkApiUrlController;
-  late TextEditingController _vkd3dApiUrlController;
-  late TextEditingController _wineBuildsApiUrlController;
-  late TextEditingController _protonGeApiUrlController;
-  
-  // Tab controller for the settings tabs
   late TabController _tabController;
   late TextEditingController _twitchOAuthUrlController;
   late TextEditingController _igdbApiBaseUrlController;
   late TextEditingController _igdbImageBaseUrlController;
-  late TextEditingController _kronekProtonApiUrlController; // Add controller for Kronek Proton URL
 
   bool _isLoading = true;
   CoverSize _selectedCoverSize = CoverSize.medium;
   String _imageCachePath = 'Loading...';
+
+  // Create a dummy settings instance to access default URL values
+  final _defaultSettingsInstance = Settings(
+    prefixDirectory: '', // Dummy value, not used for defaults here
+    igdbClientId: '', // Dummy value
+    igdbClientSecret: '', // Dummy value
+    categories: [], // Dummy value
+    igdbImageBaseUrl: '' // Dummy value, actual default taken from constructor if needed elsewhere
+  );
 
   @override
   void initState() {
@@ -52,14 +54,9 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
     _gameLibraryPathController = TextEditingController();
     _backupPathController = TextEditingController();
     // URL settings controllers
-    _dxvkApiUrlController = TextEditingController();
-    _vkd3dApiUrlController = TextEditingController();
-    _wineBuildsApiUrlController = TextEditingController();
-    _protonGeApiUrlController = TextEditingController();
     _twitchOAuthUrlController = TextEditingController();
     _igdbApiBaseUrlController = TextEditingController();
     _igdbImageBaseUrlController = TextEditingController();
-    _kronekProtonApiUrlController = TextEditingController(); // Initialize Kronek Proton URL controller
     
     // Load settings
     _loadSettings();
@@ -74,20 +71,16 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
     _gameLibraryPathController.dispose();
     _backupPathController.dispose();
     // URL settings controllers
-    _dxvkApiUrlController.dispose();
-    _vkd3dApiUrlController.dispose();
-    _wineBuildsApiUrlController.dispose();
-    _protonGeApiUrlController.dispose();
     _twitchOAuthUrlController.dispose();
     _igdbApiBaseUrlController.dispose();
     _igdbImageBaseUrlController.dispose();
-    _kronekProtonApiUrlController.dispose(); // Dispose Kronek Proton URL controller
     // Tab controller
     _tabController.dispose();
     super.dispose();
   }
 
   Future<void> _loadSettings() async {
+    if (!mounted) return;
     setState(() {
       _isLoading = true;
     });
@@ -101,6 +94,7 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
       // Error getting image cache path
     }
 
+    if (!mounted) return;
     setState(() {
       _settings = settings;
       _prefixDirController.text = settings.prefixDirectory;
@@ -110,87 +104,51 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
       _gameLibraryPathController.text = settings.gameLibraryPath ?? '';
       _backupPathController.text = settings.backupPath ?? ''; // Add backup path to the initialization
       _imageCachePath = cachePath;
-      _dxvkApiUrlController.text = settings.dxvkApiUrl;
-      _vkd3dApiUrlController.text = settings.vkd3dApiUrl;
-      _wineBuildsApiUrlController.text = settings.wineBuildsApiUrl;
-      _protonGeApiUrlController.text = settings.protonGeApiUrl;
       _twitchOAuthUrlController.text = settings.twitchOAuthUrl;
       _igdbApiBaseUrlController.text = settings.igdbApiBaseUrl;
       _igdbImageBaseUrlController.text = settings.igdbImageBaseUrl;
-      _kronekProtonApiUrlController.text = settings.kronekProtonApiUrl;
       _isLoading = false;
     });
   }
 
   Future<void> _saveSettings() async {
     if (_formKey.currentState!.validate()) {
+      if (!mounted) return;
       // Show loading indicator
       setState(() {
         _isLoading = true;
       });
       
-      // Provide all required fields, even if dummy values are sufficient for defaults here
-      final defaultSettings = Settings(
-        prefixDirectory: '', igdbClientId: '', igdbClientSecret: '', categories: [],
-        // Provide required URL fields (using their actual defaults from Settings constructor)
-        dxvkApiUrl: 'https://api.github.com/repos/doitsujin/dxvk/releases/latest',
-        vkd3dApiUrl: 'https://api.github.com/repos/HansKristian-Work/vkd3d-proton/releases/latest',
-        wineBuildsApiUrl: 'https://api.github.com/repos/Kron4ek/Wine-Builds/releases/tags/10.4',
-        protonGeApiUrl: 'https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases',
-        twitchOAuthUrl: 'https://id.twitch.tv/oauth2/token',
-        igdbApiBaseUrl: 'https://api.igdb.com/v4',
-        igdbImageBaseUrl: 'https://images.igdb.com/igdb/image/upload',
-      );
+      final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
+      final currentSettings = settingsProvider.settings; // Get current settings to preserve others
+      final logService = Provider.of<LogService>(context, listen: false);
 
-      final settingsToSave = Settings(
+      // Create new settings object, only updating fields managed by this page
+      final settingsToSave = currentSettings.copyWith(
         prefixDirectory: _prefixDirController.text.trim(),
         igdbClientId: _igdbClientIdController.text.trim(),
         igdbClientSecret: _igdbClientSecretController.text.trim(),
-        igdbAccessToken: _settings?.igdbAccessToken,
-        igdbTokenExpiry: _settings?.igdbTokenExpiry,
         coverSize: _selectedCoverSize,
-        categories: _settings!.categories,
         gameLibraryPath: _gameLibraryPathController.text.trim().isEmpty
             ? null
             : _gameLibraryPathController.text.trim(),
         backupPath: _backupPathController.text.trim().isEmpty
             ? null
-            : _backupPathController.text.trim(), // Include the backup path
-        dxvkApiUrl: _dxvkApiUrlController.text.trim().isEmpty
-            ? defaultSettings.dxvkApiUrl
-            : _dxvkApiUrlController.text.trim(),
-        vkd3dApiUrl: _vkd3dApiUrlController.text.trim().isEmpty
-            ? defaultSettings.vkd3dApiUrl
-            : _vkd3dApiUrlController.text.trim(),
-        wineBuildsApiUrl: _wineBuildsApiUrlController.text.trim().isEmpty
-            ? defaultSettings.wineBuildsApiUrl
-            : _wineBuildsApiUrlController.text.trim(),
-        protonGeApiUrl: _protonGeApiUrlController.text.trim().isEmpty
-            ? defaultSettings.protonGeApiUrl
-            : _protonGeApiUrlController.text.trim(),
+            : _backupPathController.text.trim(),
         twitchOAuthUrl: _twitchOAuthUrlController.text.trim().isEmpty
-            ? defaultSettings.twitchOAuthUrl
+            ? _defaultSettingsInstance.twitchOAuthUrl // Use default from dummy instance
             : _twitchOAuthUrlController.text.trim(),
         igdbApiBaseUrl: _igdbApiBaseUrlController.text.trim().isEmpty
-            ? defaultSettings.igdbApiBaseUrl
+            ? _defaultSettingsInstance.igdbApiBaseUrl // Use default from dummy instance
             : _igdbApiBaseUrlController.text.trim(),
         igdbImageBaseUrl: _igdbImageBaseUrlController.text.trim().isEmpty
-            ? defaultSettings.igdbImageBaseUrl
+            ? _defaultSettingsInstance.igdbImageBaseUrl // Use default from dummy instance
             : _igdbImageBaseUrlController.text.trim(),
-        kronekProtonApiUrl: _kronekProtonApiUrlController.text.trim().isEmpty
-            ? defaultSettings.kronekProtonApiUrl
-            : _kronekProtonApiUrlController.text.trim(),
       );
 
       try {
-        // Use the SettingsProvider to update settings
-        if (mounted) {
-          await Provider.of<SettingsProvider>(context, listen: false).updateSettings(settingsToSave);
-          
-          // Log the settings change
-          final logService = Provider.of<LogService>(context, listen: false);
-          logService.log('Settings updated successfully');
-        }
+        await settingsProvider.updateSettings(settingsToSave);
+        logService.log('Settings updated successfully');
 
         if (widget.onSettingsChanged != null) {
           widget.onSettingsChanged!();
@@ -213,7 +171,7 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
           );
         }
       } catch (e) {
-        // Show error message if saving fails
+        logService.log('Failed to save settings: $e', LogLevel.error);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -280,144 +238,197 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
     }
   }
 
-  void _resetApiUrls() {
-    setState(() {
-      final defaultSettings = Settings(
-        prefixDirectory: '', igdbClientId: '', igdbClientSecret: '', categories: [],
-        // Use defaults from Settings constructor
-        dxvkApiUrl: 'https://api.github.com/repos/doitsujin/dxvk/releases/latest',
-        vkd3dApiUrl: 'https://api.github.com/repos/HansKristian-Work/vkd3d-proton/releases/latest',
-        wineBuildsApiUrl: 'https://api.github.com/repos/Kron4ek/Wine-Builds/releases/tags/10.4',
-        protonGeApiUrl: 'https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases',
-        kronekProtonApiUrl: 'https://api.github.com/repos/Kron4ek/Wine-Builds/releases/tags/proton-10.0-1',
-        twitchOAuthUrl: 'https://id.twitch.tv/oauth2/token',
-        igdbApiBaseUrl: 'https://api.igdb.com/v4',
-        igdbImageBaseUrl: 'https://images.igdb.com/igdb/image/upload',
-      );
-
-      _dxvkApiUrlController.text = defaultSettings.dxvkApiUrl;
-      _vkd3dApiUrlController.text = defaultSettings.vkd3dApiUrl;
-      _wineBuildsApiUrlController.text = defaultSettings.wineBuildsApiUrl;
-      _protonGeApiUrlController.text = defaultSettings.protonGeApiUrl;
-      _kronekProtonApiUrlController.text = defaultSettings.kronekProtonApiUrl;
-      _twitchOAuthUrlController.text = defaultSettings.twitchOAuthUrl;
-      _igdbApiBaseUrlController.text = defaultSettings.igdbApiBaseUrl;
-      _igdbImageBaseUrlController.text = defaultSettings.igdbImageBaseUrl;
-    });
-  }
-
-  Widget _buildCategoryManagement() {
-    if (_settings == null) return const SizedBox.shrink();
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Game Categories',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+  Widget _buildGeneralSettingsTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('General Paths', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const Divider(),
+          _buildDirectoryPicker(
+            label: 'Prefix Directory',
+            controller: _prefixDirController,
+            dialogTitle: 'Select Default Prefix Directory',
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Prefix directory cannot be empty';
+              }
+              return null;
+            },
+            onPick: _pickPrefixDirectory,
+          ),
+          _buildDirectoryPicker(
+            label: 'Game Library Path (Optional)',
+            controller: _gameLibraryPathController,
+            dialogTitle: 'Select Game Library Path',
+            onPick: _pickGameLibraryPath,
+          ),
+           _buildDirectoryPicker(
+            label: 'Backup Path (Optional)',
+            controller: _backupPathController,
+            dialogTitle: 'Select Backup Path',
+            onPick: _pickBackupPath,
+          ),
+          const SizedBox(height: 20),
+          const Text('Cover Art Settings', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const Divider(),
+          ListTile(
+            title: const Text('Preferred Cover Size'),
+            trailing: DropdownButton<CoverSize>(
+              value: _selectedCoverSize,
+              items: CoverSize.values.map((CoverSize size) {
+                return DropdownMenuItem<CoverSize>(
+                  value: size,
+                  child: Text(size.name), // Or a more descriptive name
+                );
+              }).toList(),
+              onChanged: (CoverSize? newValue) {
+                if (newValue != null) {
+                  setState(() {
+                    _selectedCoverSize = newValue;
+                  });
+                }
+              },
+            ),
+          ),
+          const SizedBox(height: 20),
+          const Text('Theme Settings', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const Divider(),
+          Consumer<ThemeProvider>(
+            builder: (context, themeProvider, child) {
+              return ListTile(
+                title: const Text('Dark Mode'),
+                trailing: Switch(
+                  value: themeProvider.isDarkMode,
+                  onChanged: (value) {
+                    themeProvider.toggleTheme(); // Removed value argument
+                  },
                 ),
-                ElevatedButton.icon(
-                  icon: const Icon(Icons.add),
-                  label: const Text('Add Category'),
-                  onPressed: () => _showAddCategoryDialog(),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Organize your games with custom categories:',
-              style: TextStyle(fontSize: 14),
-            ),
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: _settings!.categories.isEmpty
-                ? [
-                    const Chip(
-                      label: Text('No categories yet'),
-                      backgroundColor: Colors.grey,
-                    ),
-                  ]
-                : _settings!.categories.map((category) {
-                    return Chip(
-                      label: Text(category),
-                      deleteIcon: const Icon(Icons.close, size: 18),
-                      onDeleted: () {
-                        final updatedCategories =
-                            List<String>.from(_settings!.categories)..remove(category);
-                        setState(() {
-                          _settings = _settings!.copyWith(categories: updatedCategories);
-                        });
-                        _saveSettings();
-                      },
-                    );
-                  }).toList(),
-            ),
-          ],
-        ),
+              );
+            },
+          ),
+        ],
       ),
     );
   }
 
-  void _showAddCategoryDialog() {
-    final controller = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Add Category'),
-          content: TextField(
-            controller: controller,
-            decoration: const InputDecoration(
-              labelText: 'Category Name',
-              hintText: 'e.g., Favorites, Completed, Playing',
-            ),
-            autofocus: true,
+  Widget _buildApiSettingsTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('IGDB API Settings (for Game Information)', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const Divider(),
+          TextFormField(
+            controller: _igdbClientIdController,
+            decoration: const InputDecoration(labelText: 'IGDB Client ID'),
+            validator: (value) {
+              // Optional: Add validation for Client ID format if known
+              return null;
+            },
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
+          const SizedBox(height: 10),
+          TextFormField(
+            controller: _igdbClientSecretController,
+            decoration: const InputDecoration(labelText: 'IGDB Client Secret'),
+            obscureText: true,
+            validator: (value) {
+              // Optional: Add validation for Client Secret format if known
+              return null;
+            },
+          ),
+          const SizedBox(height: 20),
+          const Text('Other API & URL Settings', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const Divider(),
+          _buildUrlSettingField(
+              controller: _twitchOAuthUrlController, 
+              label: 'Twitch OAuth URL',
+              hint: 'e.g., https://id.twitch.tv/oauth2/token'
+          ),
+          _buildUrlSettingField(
+              controller: _igdbApiBaseUrlController, 
+              label: 'IGDB API Base URL',
+              hint: 'e.g., https://api.igdb.com/v4'
+          ),
+          _buildUrlSettingField(
+              controller: _igdbImageBaseUrlController, 
+              label: 'IGDB Image Base URL',
+              hint: 'e.g., https://images.igdb.com/igdb/image/upload'
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUrlSettingField({
+    required TextEditingController controller,
+    required String label,
+    required String hint,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: TextFormField(
+        controller: controller,
+        decoration: InputDecoration(
+          labelText: label,
+          hintText: hint,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8.0),
+          ),
+        ),
+        validator: (value) {
+          if (value != null && value.trim().isNotEmpty) {
+            // Corrected Uri.isAbsolute check
+            if (!(Uri.tryParse(value.trim())?.isAbsolute == true)) {
+              return 'Please enter a valid URL';
+            }
+          }
+          return null; // Allow empty if it's optional, or add specific empty check if required
+        },
+      ),
+    );
+  }
+
+  Widget _buildDirectoryPicker({
+    required String label,
+    required TextEditingController controller,
+    required String dialogTitle,
+    String? Function(String?)? validator,
+    required Future<void> Function() onPick,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextFormField(
+              controller: controller,
+              decoration: InputDecoration(
+                labelText: label,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8.0),
+                ),
+              ),
+              validator: validator,
+              readOnly: true, // Make it read-only to force use of button
+              onTap: onPick, // Also allow tap on field to open picker
             ),
-            TextButton(
-              onPressed: () {
-                if (controller.text.isNotEmpty) {
-                  final newCategory = controller.text.trim();
-                  if (!_settings!.categories.contains(newCategory)) {
-                    final updatedCategories =
-                        List<String>.from(_settings!.categories)..add(newCategory);
-                    setState(() {
-                      _settings = _settings!.copyWith(categories: updatedCategories);
-                    });
-                    _saveSettings();
-                    
-                    // Add logging for category creation
-                    final logService = Provider.of<LogService>(context, listen: false);
-                    logService.log('New category created: $newCategory');
-                  }
-                  Navigator.pop(context);
-                }
-              },
-              child: const Text('Add'),
-            ),
-          ],
-        );
-      },
+          ),
+          const SizedBox(width: 8),
+          IconButton(
+            icon: const Icon(Icons.folder_open),
+            tooltip: 'Browse',
+            onPressed: onPick,
+          ),
+        ],
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final themeProvider = Provider.of<ThemeProvider>(context);
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Settings'),
@@ -448,7 +459,7 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
               labelStyle: const TextStyle(fontWeight: FontWeight.bold),
               tabs: const [
                 Tab(icon: Icon(Icons.settings), text: 'General'),
-                Tab(icon: Icon(Icons.folder), text: 'Directories'),
+                Tab(icon: Icon(Icons.api), text: 'APIs & URLs'),
               ],
             ),
       ),
@@ -459,286 +470,16 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
               child: TabBarView(
                 controller: _tabController,
                 children: [
-                  // GENERAL TAB
-                  SingleChildScrollView(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      children: [
-                        // Appearance Card
-                        Card(
-                          margin: const EdgeInsets.only(bottom: 16),
-                          child: Padding(
-                            padding: const EdgeInsets.all(16.0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Appearance',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-                                SwitchListTile(
-                                  title: const Text('Dark Mode'),
-                                  subtitle: const Text('Enable dark theme'),
-                                  secondary: Icon(
-                                    themeProvider.isDarkMode
-                                        ? Icons.dark_mode
-                                        : Icons.light_mode,
-                                    color: themeProvider.isDarkMode
-                                        ? Colors.amber
-                                        : Colors.deepPurple,
-                                  ),
-                                  value: themeProvider.isDarkMode,
-                                  onChanged: (_) {
-                                    themeProvider.toggleTheme();
-                                  },
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        
-                        // Game Library Card
-                        Card(
-                          margin: const EdgeInsets.only(bottom: 16),
-                          child: Padding(
-                            padding: const EdgeInsets.all(16.0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Game Library',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-                                const Text('Cover Size'),
-                                const SizedBox(height: 8),
-                                SegmentedButton<CoverSize>(
-                                  segments: const [
-                                    ButtonSegment<CoverSize>(
-                                      value: CoverSize.small,
-                                      label: Text('Small'),
-                                      icon: Icon(Icons.photo_size_select_small),
-                                    ),
-                                    ButtonSegment<CoverSize>(
-                                      value: CoverSize.medium,
-                                      label: Text('Medium'),
-                                      icon: Icon(Icons.photo_size_select_actual),
-                                    ),
-                                    ButtonSegment<CoverSize>(
-                                      value: CoverSize.large,
-                                      label: Text('Large'),
-                                      icon: Icon(Icons.photo_size_select_large),
-                                    ),
-                                  ],
-                                  selected: <CoverSize>{_selectedCoverSize},
-                                  onSelectionChanged: (Set<CoverSize> newSelection) {
-                                    setState(() {
-                                      _selectedCoverSize = newSelection.first;
-                                    });
-                                  },
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        
-                        // Save button
-                        ElevatedButton(
-                          onPressed: _saveSettings,
-                          style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            minimumSize: const Size(double.infinity, 50),
-                          ),
-                          child: const Text('Save Settings'),
-                        ),
-                      ],
-                    ),
-                  ),
-                  
-                  // DIRECTORIES TAB
-                  SingleChildScrollView(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      children: [
-                        // Directories Card
-                        Card(
-                          margin: const EdgeInsets.only(bottom: 16),
-                          child: Padding(
-                            padding: const EdgeInsets.all(16.0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Directories & Files',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-                                TextFormField(
-                                  controller: _prefixDirController,
-                                  decoration: InputDecoration(
-                                    labelText: 'Prefix Directory',
-                                    helperText: 'Main directory where prefixes are stored',
-                                    prefixIcon: const Icon(Icons.folder),
-                                    suffixIcon: IconButton(
-                                      icon: const Icon(Icons.more_horiz),
-                                      tooltip: 'Browse',
-                                      onPressed: _pickPrefixDirectory,
-                                    ),
-                                  ),
-                                  validator: (value) {
-                                    if (value == null || value.isEmpty) {
-                                      return 'Please enter a directory path';
-                                    }
-                                    return null;
-                                  },
-                                  readOnly: true,
-                                  onTap: _pickPrefixDirectory,
-                                ),
-                                const SizedBox(height: 16),
-                                TextFormField(
-                                  controller: _gameLibraryPathController,
-                                  decoration: InputDecoration(
-                                    labelText: 'Game Library File Path (Optional)',
-                                    helperText: 'Path to save the game library JSON file. Leave blank for default (~/.wine_prefix_manager.json).',
-                                    prefixIcon: const Icon(Icons.save_alt),
-                                    suffixIcon: IconButton(
-                                      icon: const Icon(Icons.more_horiz),
-                                      tooltip: 'Browse',
-                                      onPressed: _pickGameLibraryPath,
-                                    ),
-                                  ),
-                                  readOnly: true,
-                                  onTap: _pickGameLibraryPath,
-                                ),
-                                const SizedBox(height: 16),
-                                _buildBackupFolderSetting(), // Add backup path setting
-                              ],
-                            ),
-                          ),
-                        ),
-                        
-                        // Image Cache Card
-                        Card(
-                          margin: const EdgeInsets.only(bottom: 16),
-                          child: ListTile(
-                            leading: const Icon(Icons.image),
-                            title: const Text('Image Cache Location'),
-                            subtitle: Text(_imageCachePath),
-                          ),
-                        ),
-                        
-                        // API URLs Card - Moved from being a separate tab child to part of the DIRECTORIES tab
-                        Card(
-                          margin: const EdgeInsets.only(bottom: 16),
-                          child: Padding(
-                            padding: const EdgeInsets.all(16.0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    const Text(
-                                      'API URLs (Advanced)',
-                                      style: TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                    TextButton(
-                                      onPressed: _resetApiUrls,
-                                      child: const Text('Reset Defaults'),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 16),
-                                _buildUrlTextField(_dxvkApiUrlController, 'DXVK API URL'),
-                                _buildUrlTextField(_vkd3dApiUrlController, 'VKD3D-Proton API URL'),
-                                _buildUrlTextField(_wineBuildsApiUrlController, 'Wine Builds API URL'),
-                                _buildUrlTextField(_protonGeApiUrlController, 'Proton-GE API URL'),
-                                _buildUrlTextField(_kronekProtonApiUrlController, 'Kronek Proton API URL'),
-                                _buildUrlTextField(_twitchOAuthUrlController, 'Twitch OAuth URL'),
-                                _buildUrlTextField(_igdbApiBaseUrlController, 'IGDB API Base URL'),
-                                _buildUrlTextField(_igdbImageBaseUrlController, 'IGDB Image Base URL'),
-                              ],
-                            ),
-                          ),
-                        ),
-                        
-                        // Save button
-                        ElevatedButton(
-                          onPressed: _saveSettings,
-                          style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            minimumSize: const Size(double.infinity, 50),
-                          ),
-                          child: const Text('Save Settings'),
-                        ),
-                      ],
-                    ),
-                  ),
+                  _buildGeneralSettingsTab(),
+                  _buildApiSettingsTab(),
                 ],
               ),
             ),
-    );
-  }
-
-  Widget _buildUrlTextField(TextEditingController controller, String label) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16.0),
-      child: TextFormField(
-        controller: controller,
-        decoration: InputDecoration(
-          labelText: label,
-          hintText: 'Enter $label',
-          border: const OutlineInputBorder(),
-        ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _isLoading ? null : _saveSettings,
+        icon: _isLoading ? const SizedBox(width:20, height:20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.save),
+        label: const Text('Save Settings'),
       ),
-    );
-  }
-
-  Widget _buildBackupFolderSetting() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('Backup Folder', style: TextStyle(fontWeight: FontWeight.bold)),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _backupPathController,
-                readOnly: true,
-                decoration: const InputDecoration(
-                  hintText: 'Path for game backups',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.folder_open),
-              label: const Text('Browse'),
-              onPressed: _pickBackupPath,
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        const Text(
-          'This is where game backups will be stored.',
-          style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
-        ),
-      ],
     );
   }
 }

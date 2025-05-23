@@ -12,10 +12,12 @@ import '../widgets/game_card.dart'; // Import GameCard for GameLaunchState
 import '../services/ui_action_service.dart'; // Import UIActionService
 import '../services/process_service.dart'; // Import ProcessService for stop logic
 import '../services/log_service.dart'; // Import LogService
-import '../services/ui_action_service.dart'; // Import UIActionService
-import '../widgets/welcome_screen.dart'; // Import WelcomeScreen
-import '../models/settings.dart'; // Import Settings for welcome screen
+import '../models/settings.dart'; // Import Settings for welcome screen (though welcome screen itself is removed from here)
 import '../providers/settings_provider.dart'; // Import SettingsProvider
+import '../services/igdb_service.dart'; // Import IgdbService
+import '../widgets/game_search_dialog.dart'; // Import GameSearchDialog
+import '../models/igdb_models.dart'; // Import IgdbGame model
+import '../widgets/change_prefix_dialog.dart'; // Import ChangePrefixDialog
 
 class HomePage extends StatefulWidget {
   final Function(int)? onNavigateToTab;
@@ -187,8 +189,8 @@ class _HomePageState extends State<HomePage> with WindowListener {
   }
 
 
-  // Flag to toggle welcome screen
-  bool _showWelcomeScreen = true;
+  // Flag to toggle welcome screen - REMOVED
+  // bool _showWelcomeScreen = true; 
   
   void _navigateToManagePrefixesTab() {
     // Use the callback to navigate to the Manage tab (index 1)
@@ -266,40 +268,160 @@ class _HomePageState extends State<HomePage> with WindowListener {
     }
   }
 
+  Future<void> _changePrefixForGame(BuildContext context, GameEntry game) async {
+    final prefixProvider = Provider.of<PrefixProvider>(context, listen: false);
+    final logService = Provider.of<LogService>(context, listen: false);
+    
+    final selectedDestination = await showDialog<WinePrefix>(
+      context: context,
+      builder: (dialogContext) => ChangePrefixDialog(
+        gameEntry: game,
+        allPrefixes: prefixProvider.prefixes,
+        onPrefixSelected: (destinationPrefix) {
+          Navigator.of(dialogContext).pop(destinationPrefix);
+        },
+      ),
+    );
+
+    if (selectedDestination != null) {
+      try {
+        logService.log('Moving ${game.exe.name} from ${game.prefix.name} to ${selectedDestination.name}');
+        await prefixProvider.moveExecutableToPrefix(game.exe, game.prefix, selectedDestination);
+        
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('${game.exe.name} moved to ${selectedDestination.name}')),
+          );
+        }
+      } catch (e) {
+        logService.log('Error moving game to different prefix: $e', LogLevel.error);
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to move game: $e'),
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _updateGameMetadata(BuildContext context, GameEntry game) async {
+    final igdbService = Provider.of<IgdbService>(context, listen: false);
+    final prefixProvider = Provider.of<PrefixProvider>(context, listen: false);
+    final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
+    final logService = Provider.of<LogService>(context, listen: false);
+    
+    // Import the GameSearchDialog
+    final searchResult = await showDialog<IgdbGame>(
+      context: context,
+      builder: (_) => GameSearchDialog(
+        initialQuery: game.exe.name,
+        onSearch: (query) async {
+          try {
+            final tokenData = await igdbService.getIgdbToken(settingsProvider.settings);
+            if (tokenData == null) return {'error': 'Could not get IGDB token'};
+            final games = await igdbService.searchIgdbGames(query, settingsProvider.settings, tokenData['token']);
+            return {'games': games};
+          } catch (e) {
+            return {'error': 'Search failed: $e'};
+          }
+        },
+      ),
+    );
+
+    if (searchResult != null) {
+      logService.log('Fetching full details for ${searchResult.name} (ID: ${searchResult.id})...');
+      ExeEntry updatedExe = game.exe;
+      
+      try {
+        final tokenData = await igdbService.getIgdbToken(settingsProvider.settings);
+        if (tokenData != null && tokenData['token'] != null) {
+          final token = tokenData['token'] as String;
+          final coverDetails = await igdbService.fetchCoverDetails(searchResult.cover, settingsProvider.settings, token);
+          final screenshotDetails = await igdbService.fetchScreenshotDetails(searchResult.screenshots, settingsProvider.settings, token);
+          final videoIds = await igdbService.fetchGameVideoIds(searchResult.id, settingsProvider.settings, token);
+
+          updatedExe = game.exe.copyWith(
+            igdbId: searchResult.id,
+            description: searchResult.summary,
+            igdbCoverId: searchResult.cover,
+            coverUrl: coverDetails?['url'],
+            coverImageId: coverDetails?['imageId'],
+            igdbScreenshotIds: searchResult.screenshots,
+            screenshotUrls: screenshotDetails.map((s) => s['url']!).toList(),
+            screenshotImageIds: screenshotDetails.map((s) => s['imageId']!).toList(),
+            videoIds: videoIds,
+            isGame: true,
+          );
+          logService.log('Successfully fetched full details for ${searchResult.name}.');
+        } else {
+          logService.log('Could not get IGDB token to fetch full details.', LogLevel.warning);
+          updatedExe = game.exe.copyWith(igdbId: searchResult.id);
+        }
+      } catch (e) {
+        logService.log('Error fetching full IGDB details: $e. Updating ID only.', LogLevel.error);
+        updatedExe = game.exe.copyWith(igdbId: searchResult.id);
+      }
+
+      await prefixProvider.updateExecutable(game.prefix, updatedExe);
+      logService.log('Updated metadata for ${game.exe.name} from search.');
+      
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Metadata updated for ${game.exe.name}')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     // Get providers
     final prefixProvider = context.watch<PrefixProvider>();
     final uiActionService = Provider.of<UIActionService>(context, listen: false);
-    final settingsProvider = context.watch<SettingsProvider>();
-    final settings = settingsProvider.settings;
+    // final settingsProvider = context.watch<SettingsProvider>(); // No longer needed directly here if WelcomeScreen is separate
+    // final settings = settingsProvider.settings; // No longer needed directly here
     
     // Build game list from prefixes
     final prefixes = prefixProvider.prefixes;
     final allGames = _buildGameEntries(prefixes);
     
-    // Determine if we should show the welcome screen
-    // Show welcome if it's a new user (no prefixes) or explicitly toggled
-    final shouldShowWelcome = _showWelcomeScreen || prefixes.isEmpty;
+    // Determine if we should show the welcome screen - REMOVED LOGIC
+    // final shouldShowWelcome = _showWelcomeScreen || prefixes.isEmpty;
 
     return MultiProvider(
       providers: [
-        // Make UIActionService available to the GameLibraryPage and WelcomeScreen
+        // Make UIActionService available to the GameLibraryPage
         Provider.value(value: uiActionService),
       ],
       child: Scaffold(
         // Removed AppBar
-        body: shouldShowWelcome 
-          ? WelcomeScreen(
-              prefixes: prefixes,
-              settings: settings,
-              onNavigateToCreatePrefix: _navigateToManagePrefixesTab,
-              onNavigateToSettings: _navigateToSettingsTab,
-            )
-          : GameLibraryPage(
+        body: GameLibraryPage( // Always show GameLibraryPage
               games: allGames,
-              // Pass the showGameDetails method from UIActionService
-              onShowDetails: uiActionService.showGameDetails,
+              // Pass callback functions for the modals
+              onSaveLaunchOptions: (game, options) async {
+                final prefixProvider = Provider.of<PrefixProvider>(context, listen: false);
+                final updatedExe = game.exe.copyWith(launchOptions: options);
+                await prefixProvider.updateExecutable(game.prefix, updatedExe);
+              },
+              onChangeCategory: (game, category) async {
+                final prefixProvider = Provider.of<PrefixProvider>(context, listen: false);
+                final updatedExe = game.exe.copyWith(category: category);
+                await prefixProvider.updateExecutable(game.prefix, updatedExe);
+              },
+              onToggleWorkingStatus: (game, notWorking) async {
+                final prefixProvider = Provider.of<PrefixProvider>(context, listen: false);
+                final updatedExe = game.exe.copyWith(notWorking: notWorking);
+                await prefixProvider.updateExecutable(game.prefix, updatedExe);
+              },
+              onChangePrefix: (game) async {
+                await _changePrefixForGame(context, game);
+              },
+              onUpdateMetadata: (game) async {
+                await _updateGameMetadata(context, game);
+              },
               // Pass the launchGame method defined above
               onLaunchGame: (prefix, exe) {
                 _launchGame(context, GameEntry(prefix: prefix, exe: exe));
@@ -318,19 +440,18 @@ class _HomePageState extends State<HomePage> with WindowListener {
               onRefresh: () => _refreshGames(context),
               isRefreshing: _isRefreshing,
             ),
-        // Add a button to toggle between welcome screen and game library
-        floatingActionButton: prefixes.isNotEmpty 
-          ? FloatingActionButton(
-              onPressed: () {
-                setState(() {
-                  _showWelcomeScreen = !_showWelcomeScreen;
-                });
-              },
-              child: Icon(_showWelcomeScreen ? Icons.grid_view : Icons.home),
-              tooltip: _showWelcomeScreen ? 'Show Games' : 'Show Welcome',
-            )
-          : null,
-        floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+        // Remove FloatingActionButton that toggled welcome screen
+        // floatingActionButton: prefixes.isNotEmpty 
+        //   ? FloatingActionButton(
+        //       onPressed: () {
+        //         setState(() {
+        //           _showWelcomeScreen = !_showWelcomeScreen;
+        //         });
+        //       },
+        //       child: Icon(_showWelcomeScreen ? Icons.grid_view : Icons.home),
+        //       tooltip: _showWelcomeScreen ? \'Show Games\' : \'Show Welcome\',
+        //     )
+        //   : null,
       ),
     );
   }

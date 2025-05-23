@@ -1,93 +1,158 @@
-# Wine Prefix Manager Scripts
+# Scripts Directory
 
-This directory contains utility scripts for building, packaging, and developing Wine Prefix Manager.
+This directory contains utility scripts for the Wine Prefix Manager project.
 
-## Menu System
+## Version Sync Checker (`check_version_sync.sh`)
 
-For easier access to all build and development functionality, use the interactive menu system:
+A shell script that ensures the version in `pubspec.yaml` stays synchronized with git tags.
 
-```bash
-# Run the interactive menu
-./scripts/menu.sh
-```
-
-This provides a user-friendly interface to all build options, including:
-- Building packages for specific distributions (Arch, Debian, RPM)
-- Building all package types at once
-- Creating a full release with version increment and GitHub publishing
-- Debug building and running
-- Cleaning build directories
-- Installing dependencies
-
-## Available Scripts
-
-### menu.sh
-An interactive menu system that provides easy access to all build and release functionality.
-
-### build_and_release.sh
-The main build and release script that:
-- Builds the application for Linux
-- Creates distribution packages (tarball, Arch PKGBUILD, Debian .deb, RPM)
-- Handles version management
-- Can create GitHub releases
+### Usage
 
 ```bash
-# Examples:
-# Build a patch release
-./scripts/build_and_release.sh --release-type patch
+# Check if versions are in sync
+./scripts/check_version_sync.sh
 
-# Build a specific package type
-./scripts/build_and_release.sh --distro arch
-./scripts/build_and_release.sh --distro debian
-./scripts/build_and_release.sh --distro rpm
-
-# Build all package types if tools are available
-./scripts/build_and_release.sh --distro all
-
-# Skip git operations
-./scripts/build_and_release.sh --skip-git
+# Automatically create git tag if versions are out of sync
+./scripts/check_version_sync.sh --fix
 
 # Show help
-./scripts/build_and_release.sh --help
+./scripts/check_version_sync.sh --help
 ```
 
-### debug_build_run.sh
-Utility script for development that builds and runs the application in debug mode.
+### Via Makefile
 
 ```bash
-# Build and run in debug mode
-./scripts/debug_build_run.sh
+# Check version sync
+make version-check
 
-# Only build
-./scripts/debug_build_run.sh --build-only
+# Auto-fix version sync (creates git tag)
+make version-fix
 
-# Only run
-./scripts/debug_build_run.sh --run-only
-
-# Clean build
-./scripts/debug_build_run.sh --clean
+# Show version information
+make version-info
 ```
 
-### install_dependencies.sh
-Installs required dependencies for building and packaging Wine Prefix Manager on various distributions.
+### Exit Codes
+
+- `0` - Versions are in sync
+- `1` - Versions are out of sync
+- `2` - Error occurred (file not found, git not available, etc.)
+
+### Features
+
+- ✅ Compares `pubspec.yaml` version with latest git tag
+- ✅ Handles version normalization (removes build info after `+`)
+- ✅ Supports both `v1.0.0` and `1.0.0` tag formats
+- ✅ Colorized output for better readability
+- ✅ Provides helpful suggestions when versions are out of sync
+- ✅ Can automatically create git tags with `--fix` option
+- ✅ Integrated with GitHub Actions for CI/CD
+
+### Examples
+
+#### Versions in sync:
+```bash
+$ ./scripts/check_version_sync.sh
+🔍 Checking version synchronization...
+
+📄 Reading pubspec.yaml version...
+   Pubspec version: 1.0.0+1
+   Normalized: 1.0.0
+
+🏷️  Checking latest git tag...
+   Latest git tag: 1.0.0
+   Normalized: 1.0.0
+
+✅ Versions are in sync!
+   Both pubspec.yaml and git tag reference version: 1.0.0
+```
+
+#### Versions out of sync:
+```bash
+$ ./scripts/check_version_sync.sh
+🔍 Checking version synchronization...
+
+📄 Reading pubspec.yaml version...
+   Pubspec version: 1.1.0
+   Normalized: 1.1.0
+
+🏷️  Checking latest git tag...
+   Latest git tag: 1.0.0
+   Normalized: 1.0.0
+
+❌ Versions are out of sync!
+   Pubspec version: 1.1.0
+   Git tag version: 1.0.0
+
+💡 Suggestions:
+   1. Update pubspec.yaml version to match git tag: 1.0.0
+   2. Create new git tag to match pubspec.yaml: v1.1.0
+   3. Run with --fix to automatically create the git tag
+
+Commands:
+   Create tag: git tag -a v1.1.0 -m "Release version 1.1.0"
+   Push tag:   git push origin v1.1.0
+```
+
+#### Auto-fix mode:
+```bash
+$ ./scripts/check_version_sync.sh --fix
+🔍 Checking version synchronization...
+
+📄 Reading pubspec.yaml version...
+   Pubspec version: 1.1.0
+   Normalized: 1.1.0
+
+🏷️  Checking latest git tag...
+   Latest git tag: 1.0.0
+   Normalized: 1.0.0
+
+❌ Versions are out of sync!
+   Pubspec version: 1.1.0
+   Git tag version: 1.0.0
+
+🔧 Fix mode enabled. Creating git tag...
+Creating git tag: v1.1.0
+✓ Git tag 'v1.1.0' created successfully
+Don't forget to push the tag: git push origin v1.1.0
+```
+
+## GitHub Actions Integration
+
+The script is automatically run in CI/CD via `.github/workflows/version_check.yml`:
+
+- ✅ Runs on push to `main` and `develop` branches
+- ✅ Runs on pull requests
+- ✅ Automatically comments on PRs when versions are out of sync
+- ✅ Provides detailed job summaries
+- ✅ Can be triggered manually via workflow dispatch
+
+## Release Management
+
+Use the Makefile for streamlined release management:
 
 ```bash
-# Auto-detect distribution
-./scripts/install_dependencies.sh
-
-# Specify distribution
-./scripts/install_dependencies.sh --distro ubuntu
-./scripts/install_dependencies.sh --distro debian
-./scripts/install_dependencies.sh --distro fedora
-./scripts/install_dependencies.sh --distro arch
+# Create a new release (updates pubspec.yaml, commits, tags, and pushes)
+make tag-release VERSION=1.2.0
 ```
 
-## Package Requirements
+This will:
+1. Update `pubspec.yaml` with the new version
+2. Commit the version change
+3. Create an annotated git tag
+4. Push both the commit and tag to the remote repository
 
-To build the various package types, you need specific tools:
+## Prerequisites
 
-- **Debian (.deb) packages**: `dpkg-dev` and `fakeroot`
-- **RPM packages**: `rpm-build` and `rpmdevtools`
-- **Arch Linux**: `base-devel` package group
+- Git repository with version tags
+- `bash` shell
+- `grep`, `sed`, `tr` commands (standard on Linux/macOS)
+- Flutter project with `pubspec.yaml`
 
-You can install these with the `install_dependencies.sh` script.
+## Best Practices
+
+1. **Always check version sync before releases**
+2. **Use semantic versioning** (MAJOR.MINOR.PATCH)
+3. **Tag releases consistently** with `v` prefix (e.g., `v1.0.0`)
+4. **Run version check in CI/CD** to catch issues early
+5. **Use `--fix` option carefully** - only when you're sure you want to create a new tag 
