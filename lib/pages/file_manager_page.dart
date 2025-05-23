@@ -48,11 +48,6 @@ class _FileManagerPageState extends State<FileManagerPage> {
   int totalFileSize = 0;
   int processedFileSize = 0;
 
-  // State for compressed game installation
-  bool installingCompressedGame = false;
-  double installProgress = 0.0;
-  String installStatus = '';
-
   @override
   void initState() {
     super.initState();
@@ -667,92 +662,6 @@ echo "Backup complete!"
     }
   }
 
-  Future<void> _showAddCompressedGameDialog() async {
-    if (selectedGame == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please select a game/prefix first')),
-        );
-      }
-      return;
-    }
-
-    if (!mounted) return;
-    
-    final result = await showDialog<Map<String, String>>(
-      context: context,
-      builder: (context) => _CompressedGameDialog(selectedGame: selectedGame!),
-    );
-
-    if (result != null && mounted) {
-      await _addCompressedGameToPrefix(
-        result['archivePath']!,
-        result['extractPath']!,
-        result['gameName']!,
-      );
-    }
-  }
-
-  Future<void> _addCompressedGameToPrefix(String archivePath, String extractPath, String gameName) async {
-    setState(() {
-      installingCompressedGame = true;
-      installProgress = 0.0;
-      installStatus = 'Adding compressed game to prefix...';
-    });
-
-    try {
-      final prefix = selectedGame!.prefix;
-      final prefixProvider = Provider.of<PrefixProvider>(context, listen: false);
-      
-      // Create a virtual exe path within the extract directory
-      final virtualExePath = p.join(extractPath, '$gameName.exe');
-      
-      // Create the compressed game entry
-      final compressedExeEntry = ExeEntry(
-        path: virtualExePath,
-        name: gameName,
-        isGame: true,
-        isCompressed: true,
-        compressedArchivePath: archivePath,
-        extractedBasePath: extractPath,
-        saveDataPaths: saveDataPaths, // Include any save data paths that were added
-        lastExtracted: null, // Not extracted yet
-        needsRecompression: false,
-      );
-
-      // Add the game to the prefix
-      await prefixProvider.addExecutable(prefix, compressedExeEntry);
-
-      setState(() {
-        installProgress = 1.0;
-        installStatus = 'Compressed game added successfully!';
-      });
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$gameName added as compressed game. It will be extracted when launched.')),
-        );
-      }
-      
-    } catch (e) {
-      setState(() {
-        installStatus = 'Failed to add compressed game: $e';
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error adding compressed game: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } finally {
-      setState(() {
-        installingCompressedGame = false;
-      });
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -786,11 +695,6 @@ echo "Backup complete!"
             icon: const Icon(Icons.refresh),
             tooltip: 'Refresh',
             onPressed: backupInProgress ? null : _refreshBackupEntries,
-          ),
-          IconButton(
-            icon: const Icon(Icons.archive),
-            tooltip: 'Add Compressed Game',
-            onPressed: backupInProgress ? null : _showAddCompressedGameDialog,
           ),
         ],
       ),
@@ -1076,24 +980,6 @@ echo "Backup complete!"
                       ),
                     ],
                   ),
-
-                // Game installation progress indicator
-                if (installingCompressedGame)
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const SizedBox(height: 16),
-                      Text(
-                        installStatus,
-                        style: theme.textTheme.bodyMedium,
-                      ),
-                      const SizedBox(height: 8),
-                      LinearProgressIndicator(
-                        value: installProgress > 0 ? installProgress : null,
-                        color: Colors.green,
-                      ),
-                    ],
-                  ),
               ],
             ),
           ),
@@ -1109,13 +995,13 @@ echo "Backup complete!"
                 IconButton(
                   icon: const Icon(Icons.arrow_upward),
                   tooltip: 'Parent Directory',
-                  onPressed: (backupInProgress || installingCompressedGame) ? null : _navigateUp, // Disable during operations
+                  onPressed: (backupInProgress) ? null : _navigateUp, // Disable during operations
                 ),
                 if (pathHistory.isNotEmpty)
                   IconButton(
                     icon: const Icon(Icons.arrow_back),
                     tooltip: 'Go Back',
-                    onPressed: (backupInProgress || installingCompressedGame) ? null : _navigateBack, // Disable during operations
+                    onPressed: (backupInProgress) ? null : _navigateBack, // Disable during operations
                   ),
                 Expanded(
                   child: Text(
@@ -1153,7 +1039,7 @@ echo "Backup complete!"
 
           // Bottom half - Backup files listing
           Expanded(
-            child: (backupInProgress || installingCompressedGame) 
+            child: (backupInProgress) 
                 ? Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -1161,7 +1047,7 @@ echo "Backup complete!"
                         const CircularProgressIndicator(),
                         const SizedBox(height: 16),
                         Text(
-                          backupInProgress ? 'Creating backup...' : 'Installing game...',
+                          'Creating backup...',
                           style: Theme.of(context).textTheme.bodyLarge,
                         ),
                       ],
@@ -1219,223 +1105,6 @@ echo "Backup complete!"
           ),
         ],
       ),
-    );
-  }
-}
-
-class _CompressedGameDialog extends StatefulWidget {
-  final GameEntry selectedGame;
-
-  const _CompressedGameDialog({required this.selectedGame});
-
-  @override
-  State<_CompressedGameDialog> createState() => _CompressedGameDialogState();
-}
-
-class _CompressedGameDialogState extends State<_CompressedGameDialog> {
-  String archivePath = '';
-  String extractPath = '';
-  String gameName = '';
-  late TextEditingController gameNameController;
-
-  @override
-  void initState() {
-    super.initState();
-    gameNameController = TextEditingController();
-    
-    // Default extract path to drive_c in the prefix
-    extractPath = p.join(widget.selectedGame.prefix.path, 'drive_c', 'Games');
-  }
-
-  @override
-  void dispose() {
-    gameNameController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _selectArchive() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['tar.zst', 'tar.gz', 'tar.xz', 'tgz', 'zip', '7z'],
-      dialogTitle: 'Select Compressed Game Archive',
-    );
-
-    if (result != null && result.files.single.path != null) {
-      setState(() {
-        archivePath = result.files.single.path!;
-        // Auto-generate game name from filename
-        final baseName = p.basenameWithoutExtension(result.files.single.name);
-        gameName = baseName.replaceAll(RegExp(r'[._-]'), ' ');
-        gameNameController.text = gameName;
-      });
-    }
-  }
-
-  Future<void> _selectExtractPath() async {
-    final selectedDir = await FilePicker.platform.getDirectoryPath(
-      dialogTitle: 'Select Where to Extract Game',
-      initialDirectory: extractPath,
-    );
-
-    if (selectedDir != null) {
-      setState(() {
-        extractPath = selectedDir;
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isValid = archivePath.isNotEmpty && 
-                   extractPath.isNotEmpty && 
-                   gameNameController.text.trim().isNotEmpty;
-
-    return AlertDialog(
-      title: const Text('Add Compressed Game'),
-      content: SizedBox(
-        width: 500,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Extract game to prefix: ${widget.selectedGame.prefix.name}',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Archive selection
-            Text(
-              'Game Archive:',
-              style: theme.textTheme.titleSmall,
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: theme.dividerColor),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      archivePath.isEmpty ? 'No archive selected' : p.basename(archivePath),
-                      style: TextStyle(
-                        fontFamily: 'monospace',
-                        fontWeight: archivePath.isEmpty ? FontWeight.normal : FontWeight.bold,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                ElevatedButton.icon(
-                  icon: const Icon(Icons.archive),
-                  label: const Text('Browse'),
-                  onPressed: _selectArchive,
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-
-            // Game name
-            Text(
-              'Game Name:',
-              style: theme.textTheme.titleSmall,
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: gameNameController,
-              decoration: const InputDecoration(
-                hintText: 'Enter game name',
-                border: OutlineInputBorder(),
-              ),
-              onChanged: (value) {
-                setState(() {
-                  gameName = value.trim();
-                });
-              },
-            ),
-            const SizedBox(height: 16),
-
-            // Extract path
-            Text(
-              'Extract Location:',
-              style: theme.textTheme.titleSmall,
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: theme.dividerColor),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      extractPath,
-                      style: const TextStyle(fontFamily: 'monospace'),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                ElevatedButton.icon(
-                  icon: const Icon(Icons.folder_open),
-                  label: const Text('Browse'),
-                  onPressed: _selectExtractPath,
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-
-            // Supported formats info
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surface,
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: theme.dividerColor),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Supported formats:',
-                    style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '• .tar.zst, .tar.gz, .tar.xz, .tgz\n• .zip, .7z',
-                    style: theme.textTheme.bodySmall,
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton(
-          onPressed: isValid ? () {
-            Navigator.of(context).pop({
-              'archivePath': archivePath,
-              'extractPath': p.join(extractPath, sanitizeFileName(gameName)),
-              'gameName': gameName,
-            });
-          } : null,
-          child: const Text('Extract Game'),
-        ),
-      ],
     );
   }
 }
