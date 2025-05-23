@@ -116,13 +116,8 @@ copy_flutter_app() {
     # Copy the entire bundle
     cp -r "$BUNDLE_DIR"/* "$APPDIR/usr/"
     
-    # Make sure the executable is in usr/bin
-    if [ -f "$APPDIR/usr/$APP_EXEC" ]; then
-        mv "$APPDIR/usr/$APP_EXEC" "$APPDIR/usr/bin/"
-    fi
-    
-    # Make executable
-    chmod +x "$APPDIR/usr/bin/$APP_EXEC"
+    # Make sure the executable is executable
+    chmod +x "$APPDIR/usr/$APP_EXEC"
     
     echo -e "${GREEN}✅ Flutter app copied to AppDir${NC}"
     echo ""
@@ -201,15 +196,23 @@ create_apprun() {
 # Get the directory where this AppImage is located
 APPDIR="\$(dirname "\$(readlink -f "\$0")")"
 
-# Set up environment
-export PATH="\$APPDIR/usr/bin:\$PATH"
+# Set up Flutter environment
+export PATH="\$APPDIR/usr:\$PATH"
 export LD_LIBRARY_PATH="\$APPDIR/usr/lib:\$LD_LIBRARY_PATH"
 
-# Change to a writable directory (user's home)
-cd "\$HOME"
+# Flutter Linux requires these environment variables
+export FLUTTER_LINUX_DATA_DIR="\$APPDIR/usr/data"
+export FLUTTER_LINUX_LIB_DIR="\$APPDIR/usr/lib"
+
+# Ensure GTK theme and display are properly set
+export GTK_THEME="\${GTK_THEME:-Adwaita:dark}"
+export GDK_BACKEND="\${GDK_BACKEND:-x11}"
+
+# Change to the bundle directory (Flutter needs this for AOT data)
+cd "\$APPDIR/usr"
 
 # Launch the application
-exec "\$APPDIR/usr/bin/$APP_EXEC" "\$@"
+exec "./$APP_EXEC" "\$@"
 EOF
 
     chmod +x "$APPDIR/AppRun"
