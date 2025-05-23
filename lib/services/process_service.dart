@@ -160,10 +160,30 @@ class ProcessService {
 
       } else if (prefix.type == PrefixType.proton) {
         final buildPath = prefix.wineBuildPath; // Removed unnecessary '!'
-         String resolvedPath = path.normalize(path.isAbsolute(buildPath)
+        
+        // Check if we're running from an AppImage
+        final currentPath = Directory.current.path;
+        final isAppImage = currentPath.startsWith('/tmp/mount_') || 
+                          Platform.environment.containsKey('APPIMAGE') ||
+                          Platform.environment.containsKey('APPDIR');
+        
+        String basePath;
+        if (isAppImage) {
+          // Use writable directory for AppImage
+          final homeDir = Platform.environment['HOME'];
+          if (homeDir != null) {
+            basePath = path.join(homeDir, '.local', 'share', 'wine_prefix_manager');
+          } else {
+            basePath = path.join('/tmp', 'wine_prefix_manager');
+          }
+        } else {
+          basePath = Directory.current.path;
+        }
+        
+        String resolvedPath = path.normalize(path.isAbsolute(buildPath)
             ? buildPath
-            : path.join(Directory.current.path, buildPath));
-         final protonDir = Directory(resolvedPath);
+            : path.join(basePath, buildPath));
+        final protonDir = Directory(resolvedPath);
 
          if (!await protonDir.exists()) {
            // ERROR: Proton build directory does not exist
@@ -297,10 +317,30 @@ class ProcessService {
 
       } else {
         // Handle standard Wine prefix case (PrefixType.wine)
+        
+        // Check if we're running from an AppImage
+        final currentPath = Directory.current.path;
+        final isAppImage = currentPath.startsWith('/tmp/mount_') || 
+                          Platform.environment.containsKey('APPIMAGE') ||
+                          Platform.environment.containsKey('APPDIR');
+        
+        String basePath;
+        if (isAppImage) {
+          // Use writable directory for AppImage
+          final homeDir = Platform.environment['HOME'];
+          if (homeDir != null) {
+            basePath = path.join(homeDir, '.local', 'share', 'wine_prefix_manager');
+          } else {
+            basePath = path.join('/tmp', 'wine_prefix_manager');
+          }
+        } else {
+          basePath = Directory.current.path;
+        }
+        
         final normalizedBuildPath = path.normalize(
           path.isAbsolute(prefix.wineBuildPath) // Removed '?? '''
               ? prefix.wineBuildPath // Removed '?? '''
-              : path.join(Directory.current.path, 'wine_builds', prefix.wineBuildPath) // Removed '?? '''
+              : path.join(basePath, 'wine_builds', prefix.wineBuildPath) // Removed '?? '''
         );
         wineBinDir = path.join(normalizedBuildPath, 'bin');
         wineLibDir = path.join(normalizedBuildPath, 'lib');

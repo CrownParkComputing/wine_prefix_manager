@@ -197,11 +197,32 @@ class WinePrefixCreationService {
   }
 
   Future<String> _getDownloadDirectory() async {
-    // Use absolute path to avoid relative path issues
+    // Check if we're running from an AppImage (read-only mount)
     final currentPath = Directory.current.absolute.path;
     print('GET_DOWNLOAD_DIR_DEBUG: (PRINT) Directory.current.absolute.path = $currentPath');
-    final resultPath = path.join(currentPath, "wine_builds");
-    print('GET_DOWNLOAD_DIR_DEBUG: (PRINT) resultPath from path.join("$currentPath", "wine_builds") = $resultPath');
+    
+    // Detect AppImage environment by checking if current path is a tmp mount or contains AppImage indicators
+    final isAppImage = currentPath.startsWith('/tmp/mount_') || 
+                      Platform.environment.containsKey('APPIMAGE') ||
+                      Platform.environment.containsKey('APPDIR');
+    
+    String resultPath;
+    if (isAppImage) {
+      // Use writable directory in user's home for AppImage
+      final homeDir = Platform.environment['HOME'];
+      if (homeDir != null) {
+        resultPath = path.join(homeDir, '.local', 'share', 'wine_prefix_manager', 'wine_builds');
+      } else {
+        // Fallback to temp directory if HOME is not available
+        resultPath = path.join('/tmp', 'wine_prefix_manager', 'wine_builds');
+      }
+      print('GET_DOWNLOAD_DIR_DEBUG: (PRINT) AppImage detected, using writable path: $resultPath');
+    } else {
+      // Normal execution - use project directory
+      resultPath = path.join(currentPath, "wine_builds");
+      print('GET_DOWNLOAD_DIR_DEBUG: (PRINT) resultPath from path.join("$currentPath", "wine_builds") = $resultPath');
+    }
+    
     return resultPath;
   }
 
@@ -214,9 +235,20 @@ class WinePrefixCreationService {
       if (homeDir != null) {
         baseDir = path.join(homeDir, '.local', 'share', 'wineprefixes');
       } else {
-        // Use a relative path within the project if HOME is not set
-        baseDir = path.join(Directory.current.absolute.path, 'wineprefixes');
-        _logService.log("Warning: HOME environment variable not set. Using relative path for prefixes: $baseDir", LogLevel.warning);
+        // Check if we're running from an AppImage
+        final currentPath = Directory.current.absolute.path;
+        final isAppImage = currentPath.startsWith('/tmp/mount_') || 
+                          Platform.environment.containsKey('APPIMAGE') ||
+                          Platform.environment.containsKey('APPDIR');
+        
+        if (isAppImage) {
+          // Use writable temp directory for AppImage when HOME is not set
+          baseDir = path.join('/tmp', 'wine_prefix_manager', 'wineprefixes');
+        } else {
+          // Use a relative path within the project if HOME is not set and not in AppImage
+          baseDir = path.join(Directory.current.absolute.path, 'wineprefixes');
+        }
+        _logService.log("Warning: HOME environment variable not set. Using path for prefixes: $baseDir", LogLevel.warning);
       }
       if (settings.prefixDirectory.isNotEmpty) {
         // Log if the specified directory didn't exist and we fell back
