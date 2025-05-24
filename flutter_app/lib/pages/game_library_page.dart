@@ -25,6 +25,10 @@ class GameLibraryPage extends StatelessWidget {
   final Function(GameEntry) onStopGame;
   final VoidCallback? onRefresh;
   final bool isRefreshing;
+  final VoidCallback? onShowSettings;
+  final VoidCallback? onToggleTheme;
+  final VoidCallback? onToggleCoverSize;
+  final bool isDarkMode;
 
   const GameLibraryPage({
     super.key,
@@ -43,6 +47,10 @@ class GameLibraryPage extends StatelessWidget {
     required this.onStopGame,
     this.onRefresh,
     this.isRefreshing = false,
+    this.onShowSettings,
+    this.onToggleTheme,
+    this.onToggleCoverSize,
+    this.isDarkMode = false,
   });
 
   @override
@@ -78,9 +86,39 @@ class GameLibraryPage extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Game Library'),
+        automaticallyImplyLeading: false,
+        elevation: 0,
+        backgroundColor: Theme.of(context).colorScheme.surface,
         actions: [
-          // Add refresh button
-          if (onRefresh != null) // Only show if onRefresh is provided
+          // Cover size toggle button
+          if (onToggleCoverSize != null)
+            IconButton(
+              icon: Icon(
+                coverSize == CoverSize.small
+                    ? Icons.grid_view
+                    : coverSize == CoverSize.medium
+                        ? Icons.view_module
+                        : Icons.view_comfy,
+              ),
+              tooltip: 'Toggle Cover Size (${coverSize.name})',
+              onPressed: onToggleCoverSize,
+            ),
+          // Theme toggle button
+          if (onToggleTheme != null)
+            IconButton(
+              icon: Icon(isDarkMode ? Icons.light_mode : Icons.dark_mode),
+              tooltip: isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode',
+              onPressed: onToggleTheme,
+            ),
+          // Settings button
+          if (onShowSettings != null)
+            IconButton(
+              icon: const Icon(Icons.settings_outlined),
+              tooltip: 'Game Library Settings',
+              onPressed: onShowSettings,
+            ),
+          // Refresh button
+          if (onRefresh != null)
             IconButton(
               icon: isRefreshing 
                 ? const SizedBox(
@@ -181,8 +219,8 @@ class GameLibraryPage extends StatelessWidget {
                             shrinkWrap: true, // Important for GridView inside ListView
                             physics: const NeverScrollableScrollPhysics(), // Disable GridView scrolling
                             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: _getCrossAxisCount(context),
-                              childAspectRatio: 0.7,
+                              crossAxisCount: _getCrossAxisCount(context, coverSize),
+                              childAspectRatio: _getAspectRatio(coverSize),
                               crossAxisSpacing: 16,
                               mainAxisSpacing: 16,
                             ),
@@ -197,6 +235,7 @@ class GameLibraryPage extends StatelessWidget {
                                 clipBehavior: Clip.antiAlias,
                                 child: GameCard(
                                   game: game,
+                                  coverSize: coverSize, // Pass cover size to GameCard
                                   onShowInfo: (g) => _showGameInfo(context, g), // Pass info callback
                                   onShowSettings: (g) => _showGameSettings(context, g), // Pass settings callback
                                   onLaunch: (g) => onLaunchGame(g.prefix, g.exe), // Pass launch callback
@@ -218,13 +257,43 @@ class GameLibraryPage extends StatelessWidget {
     );
   }
 
-  int _getCrossAxisCount(BuildContext context) {
+  int _getCrossAxisCount(BuildContext context, CoverSize coverSize) {
     final width = MediaQuery.of(context).size.width;
-    if (width > 1200) return 6;
-    if (width > 900) return 5;
-    if (width > 600) return 4;
-    if (width > 400) return 3;
-    return 2;
+    
+    // Base counts for each cover size
+    int baseCount;
+    switch (coverSize) {
+      case CoverSize.small:
+        if (width > 1400) return 8;
+        if (width > 1200) return 7;
+        if (width > 900) return 6;
+        if (width > 600) return 5;
+        if (width > 400) return 4;
+        return 3;
+      case CoverSize.medium:
+        if (width > 1200) return 6;
+        if (width > 900) return 5;
+        if (width > 600) return 4;
+        if (width > 400) return 3;
+        return 2;
+      case CoverSize.large:
+        if (width > 1400) return 5;
+        if (width > 1200) return 4;
+        if (width > 900) return 3;
+        if (width > 600) return 2;
+        return 1;
+    }
+  }
+
+  double _getAspectRatio(CoverSize coverSize) {
+    switch (coverSize) {
+      case CoverSize.small:
+        return 0.7;
+      case CoverSize.medium:
+        return 0.8;
+      case CoverSize.large:
+        return 0.9;
+    }
   }
 
   void _showFilterDialog(BuildContext context, String? selectedGenre, Function(String?)? onGenreSelected) {

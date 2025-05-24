@@ -581,163 +581,79 @@ jobs:
           </component>
           EOF
 
-      - name: Build AppImage
+      - name: Create AppImage (with fallback methods)
         run: |
-          # Create AppRun script instead of symlink
+          set +e  # Allow commands to fail
+          
+          # Download AppImageTool
+          if [ ! -f appimagetool ]; then
+            echo "Downloading appimagetool..."
+            wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage -O appimagetool
+            chmod +x appimagetool
+          fi
+          
+          # Set up AppImage environment variables
+          export ARCH="x86_64"
+          export VERSION="${{ steps.version.outputs.version }}"
+          APPIMAGE_NAME="wine_prefix_manager-${{ steps.version.outputs.version }}-x86_64.AppImage"
+          
+          # Create AppDir
+          mkdir -p AppDir/usr/bin AppDir/usr/lib/wine_prefix_manager AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/128x128/apps
+          
+          # Copy the application files
+          cp -r release/wine_prefix_manager-${{ steps.version.outputs.version }}-linux-x64-release/* AppDir/usr/lib/wine_prefix_manager/
+          
+          # Create a simple AppRun script
           cat > AppDir/AppRun << 'EOF'
           #!/bin/bash
-          
-          # Find the directory where the AppRun script is located
-          APPDIR="$(dirname "$(readlink -f "$0")")"
-          
-          # Set environment variables
-          export LD_LIBRARY_PATH="${APPDIR}/usr/lib:${APPDIR}/usr/lib/wine_prefix_manager/lib:${LD_LIBRARY_PATH}"
-          export PATH="${APPDIR}/usr/bin:${PATH}"
-          
-          # Execute the application
-          exec "${APPDIR}/usr/lib/wine_prefix_manager/wine_prefix_manager" "$@"
+          SELF=$(readlink -f "$0")
+          HERE=${SELF%/*}
+          export LD_LIBRARY_PATH="${HERE}/usr/lib:${LD_LIBRARY_PATH}"
+          exec "${HERE}/usr/lib/wine_prefix_manager/wine_prefix_manager" "$@"
           EOF
           chmod +x AppDir/AppRun
           
-          # Create symlinks for icons and desktop file
-          ln -sf usr/share/icons/hicolor/128x128/apps/wine_prefix_manager.png AppDir/wine_prefix_manager.png || cp AppDir/usr/share/icons/hicolor/128x128/apps/wine_prefix_manager.png AppDir/ || true
-          ln -sf usr/share/applications/wine_prefix_manager.desktop AppDir/wine_prefix_manager.desktop
+          # Create desktop file
+          cat > AppDir/usr/share/applications/wine_prefix_manager.desktop << 'EOF'
+          [Desktop Entry]
+          Name=Wine Prefix Manager
+          Comment=Manage Wine prefixes
+          Exec=wine_prefix_manager
+          Icon=wine_prefix_manager
+          Terminal=false
+          Type=Application
+          Categories=Utility;
+          EOF
           
-          # Copy Flutter libs directly from the app bundle
-          echo "Copying required libraries from the bundle..."
-          mkdir -p AppDir/usr/lib
-          
-          # Copy all bundled libraries to usr/lib to ensure they're found
-          cp -L release/wine_prefix_manager-${{ steps.version.outputs.version }}-linux-x64-release/lib/*.so* AppDir/usr/lib/ || true
-          
-          # Add any missing GTK dependencies
-          sudo apt-get install -y libgtk-3-0 libcairo2 libpango-1.0-0 libpangocairo-1.0-0 libgdk-pixbuf2.0-0
-          for lib in libglib-2.0.so libgobject-2.0.so libpango-1.0.so libcairo.so; do
-            find /usr/lib -name "$lib*" -exec cp -L {} AppDir/usr/lib/ \; || true
-          done
-          
-          # Fix library issues by preventing strip from running on .relr.dyn sections
-          echo "Creating wrapper for strip command to handle .relr.dyn sections..."
-          mkdir -p wrapper
-          cat > wrapper/strip << 'EOF'
-          #!/bin/bash
-          
-          # Get the real strip command
-          REAL_STRIP=$(which -a strip | grep -v "$(pwd)/wrapper" | head -n1)
-          
-          # Process all arguments
-          args=()
-          for arg in "$@"; do
-            if [[ -f "$arg" ]]; then
-              # Check if file has .relr.dyn section
-              if readelf -S "$arg" 2>/dev/null | grep -q '\.relr\.dyn'; then
-                echo "Skipping strip for $arg (contains .relr.dyn section)"
-                continue
+          # Copy or create icon
+          if [ -f "release/wine_prefix_manager-${{ steps.version.outputs.version }}-linux-x64-release/data/flutter_assets/assets/icon.png" ]; then
+            cp release/wine_prefix_manager-${{ steps.version.outputs.version }}-linux-x64-release/data/flutter_assets/assets/icon.png AppDir/usr/share/icons/hicolor/128x128/apps/wine_prefix_manager.png
+          else
+            # Create a placeholder icon using ImageMagick if available
+            if command -v convert > /dev/null 2>&1; then
+              convert -size 128x128 xc:lightblue -pointsize 24 -fill black -gravity center -annotate 0 "WPM" AppDir/usr/share/icons/hicolor/128x128/apps/wine_prefix_manager.png
+            else
+              # Fallback approach if ImageMagick fails
+              if [ ! -f "AppDir/wine_prefix_manager.png" ]; then
+                echo "Creating a simple PNG file manually"
+                # Create a simple 16x16 colored box as PNG using hex data
+                printf '\x89\x50\x4E\x47\x0D\x0A\x1A\x0A\x00\x00\x00\x0D\x49\x48\x44\x52\x00\x00\x00\x10\x00\x00\x00\x10\x08\x02\x00\x00\x00\x90\x91\x68\x36\x00\x00\x00\x01\x73\x52\x47\x42\x00\xAE\xCE\x1C\xE9\x00\x00\x00\x30\x49\x44\x41\x54\x38\x11\x63\xF8\x0F\x05\x0C\x0C\x0C\x0C\x44\x00\xA2\x4C\x46\x35\x60\x34\x0C\x46\xC3\x60\x34\x0C\x46\xC3\x60\x34\x0C\x46\xC3\x60\x34\x0C\x46\xC3\x00\x1D\x06\x00\x24\xE5\x04\x88\xFF\xFF\xFF\xFF\x00\x00\x00\x00\x49\x45\x4E\x44\xAE\x42\x60\x82' > AppDir/usr/share/icons/hicolor/128x128/apps/wine_prefix_manager.png
               fi
             fi
-            args+=("$arg")
-          done
-          
-          # Only call strip if we have arguments left
-          if [ ${#args[@]} -gt 0 ]; then
-            "$REAL_STRIP" "${args[@]}"
           fi
-          EOF
-          chmod +x wrapper/strip
-          export PATH="$(pwd)/wrapper:$PATH"
           
-          # Fix any missing libraries in the binary
-          echo "Fixing library paths in binaries..."
-          find AppDir -type f -executable -exec file {} \; | grep ELF | cut -d: -f1 | while read -r binary; do
-            # Try to make binaries more portable
-            patchelf --set-rpath '$ORIGIN:$ORIGIN/../lib:$ORIGIN/../../lib:$ORIGIN/usr/lib:$ORIGIN/../usr/lib' "$binary" 2>/dev/null || true
-          done
+          # Copy icon to the root of AppDir (required by appimagetool)
+          cp AppDir/usr/share/icons/hicolor/128x128/apps/wine_prefix_manager.png AppDir/wine_prefix_manager.png
+          ln -s usr/share/applications/wine_prefix_manager.desktop AppDir/wine_prefix_manager.desktop
           
-          echo "Building AppImage with appimagetool..."
-          
-          # Copy Flutter engine libraries from test build to AppDir
-          echo "Copying Flutter engine libraries from test build..."
-          cp -L /tmp/flutter-test/test_app/build/linux/*/release/lib/*.so* AppDir/usr/lib/ || true
-          
-          # Also copy Flutter engine libraries from Flutter SDK
-          cp -L $HOME/flutter/bin/cache/artifacts/engine/linux-x64/*.so* AppDir/usr/lib/ || true
-          cp -L $HOME/flutter/bin/cache/artifacts/engine/linux-x64/lib/*.so* AppDir/usr/lib/ || true
-          
-          # List libraries to confirm they were copied
-          echo "Libraries in AppDir/usr/lib:"
-          ls -la AppDir/usr/lib/
-          
-          # Set VERSION and ARCH for appimagetool
-          export VERSION="${{ steps.version.outputs.version }}"
-          export ARCH="x86_64"
-          
-          # Build AppImage with better error handling
-          set +e
-          
-          # First try with our strip wrapper
-          APPIMAGE_NAME="wine_prefix_manager-$VERSION-x86_64.AppImage"
+          # Try building AppImage with basic approach
+          export APPIMAGE_EXTRACT_AND_RUN=1
           ./appimagetool AppDir "$APPIMAGE_NAME"
           RESULT=$?
           
-          # If that fails, try with APPIMAGE_EXTRACT_AND_RUN to avoid FUSE issues
           if [ $RESULT -ne 0 ]; then
-            echo "First attempt failed, trying with APPIMAGE_EXTRACT_AND_RUN=1..."
-            export APPIMAGE_EXTRACT_AND_RUN=1
-            ./appimagetool AppDir "$APPIMAGE_NAME"
-            RESULT=$?
-          fi
-          
-          # If that still fails, try bundling only essential components
-          if [ $RESULT -ne 0 ]; then
-            echo "Basic AppImage creation failed, creating minimal AppImage..."
-            # Clean AppDir and reconstruct with minimal dependencies
-            rm -rf AppDir
-            mkdir -p AppDir/usr/bin AppDir/usr/lib/wine_prefix_manager
+            echo "Basic AppImage creation failed, trying alternative approach..."
             
-            # Create a simple icon for AppImage at AppDir root
-            sudo apt-get install -y imagemagick || true
-            convert -size 256x256 xc:transparent -fill '#673AB7' -draw 'circle 128,128 128,20' -fill white -font Arial -pointsize 100 -gravity center -draw "text 0,0 'W'" AppDir/wine_prefix_manager.png || echo "Could not create icon with ImageMagick"
-            
-            # Fallback approach if ImageMagick fails
-            if [ ! -f "AppDir/wine_prefix_manager.png" ]; then
-                echo "Creating a simple PNG file manually"
-                # Create a simple 16x16 colored box as PNG using hex data
-                printf '\x89\x50\x4E\x47\x0D\x0A\x1A\x0A\x00\x00\x00\x0D\x49\x48\x44\x52\x00\x00\x00\x10\x00\x00\x00\x10\x08\x02\x00\x00\x00\x90\x91\x68\x36\x00\x00\x00\x01\x73\x52\x47\x42\x00\xAE\xCE\x1C\xE9\x00\x00\x00\x30\x49\x44\x41\x54\x38\x11\x63\xF8\x0F\x05\x0C\x0C\x0C\x0C\x44\x00\xA2\x4C\x46\x35\x60\x34\x0C\x46\xC3\x60\x34\x0C\x46\xC3\x60\x34\x0C\x46\xC3\x60\x34\x0C\x46\xC3\x00\x1D\x06\x00\x24\xE5\x04\x88\xFF\xFF\xFF\xFF\x00\x00\x00\x00\x49\x45\x4E\x44\xAE\x42\x60\x82' > AppDir/wine_prefix_manager.png
-            fi
-
-            # Copy only essential files
-            cp -r release/wine_prefix_manager-${{ steps.version.outputs.version }}-linux-x64-release/* AppDir/usr/lib/wine_prefix_manager/
-
-            # Simplified AppRun
-            cat > AppDir/AppRun << 'EOF'
-#!/bin/bash
-SELF=$(readlink -f "$0")
-HERE=${SELF%/*}
-export LD_LIBRARY_PATH="${HERE}/usr/lib:${LD_LIBRARY_PATH}"
-exec "${HERE}/usr/lib/wine_prefix_manager/wine_prefix_manager" "$@"
-EOF
-            chmod +x AppDir/AppRun
-
-            # Desktop file and icon
-            mkdir -p AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/128x128/apps
-            cp release/wine_prefix_manager-${{ steps.version.outputs.version }}-linux-x64-release/data/flutter_assets/assets/icon.png AppDir/usr/share/icons/hicolor/128x128/apps/wine_prefix_manager.png
-            
-            cat > AppDir/usr/share/applications/wine_prefix_manager.desktop << EOF
-[Desktop Entry]
-Name=Wine Prefix Manager
-Comment=Manage Wine prefixes
-Exec=wine_prefix_manager
-Icon=wine_prefix_manager
-Terminal=false
-Type=Application
-Categories=Utility;
-EOF
-
-            # Create symlinks 
-            # Copy icon to the root of AppDir (required by appimagetool)
-            cp AppDir/usr/share/icons/hicolor/128x128/apps/wine_prefix_manager.png AppDir/wine_prefix_manager.png
-            ln -s usr/share/applications/wine_prefix_manager.desktop AppDir/wine_prefix_manager.desktop
-
             # Try building again with minimal approach and disable strip
             export NO_STRIP=1
             ./appimagetool AppDir "$APPIMAGE_NAME"
@@ -754,58 +670,59 @@ EOF
             export NO_STRIP=1
             
             # If nothing else works, create a self-extracting AppImage manually
-          if [ $RESULT -ne 0 ]; then
-            echo "Creating self-extracting AppImage manually..."
-            
-            # Create a clean AppDir with minimal dependencies
-            rm -rf AppDir
-            mkdir -p AppDir/usr/bin AppDir/usr/lib/wine_prefix_manager AppDir/usr/share/applications
-            
-            # Copy only the essential files
-            cp -r release/wine_prefix_manager-${{ steps.version.outputs.version }}-linux-x64-release/* AppDir/usr/lib/wine_prefix_manager/
-            
-            # Create a simple AppRun that sets up everything
-            cat > AppDir/AppRun << 'EOF'
-#!/bin/bash
-SELF=$(readlink -f "$0")
-HERE=${SELF%/*}
-
-# Set up environment
-export LD_LIBRARY_PATH="${HERE}/usr/lib:${HERE}/usr/lib/wine_prefix_manager/lib:${LD_LIBRARY_PATH}"
-export PATH="${HERE}/usr/bin:${PATH}"
-export XDG_DATA_DIRS="${HERE}/usr/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
-export FONTCONFIG_PATH="${HERE}/etc/fonts"
-export GSETTINGS_SCHEMA_DIR="${HERE}/usr/share/glib-2.0/schemas"
-
-# Run the application
-exec "${HERE}/usr/lib/wine_prefix_manager/wine_prefix_manager" "$@"
-EOF
-            chmod +x AppDir/AppRun
-            
-            # Create necessary desktop file and icon
-            cp -f release/wine_prefix_manager-${{ steps.version.outputs.version }}-linux-x64-release/data/flutter_assets/assets/icon.png AppDir/ || true
-            
-            # If icon extraction failed, create a placeholder icon
-            if [ ! -f "AppDir/icon.png" ]; then
-              printf '\x89\x50\x4E\x47\x0D\x0A\x1A\x0A\x00\x00\x00\x0D\x49\x48\x44\x52\x00\x00\x00\x20\x00\x00\x00\x20\x08\x02\x00\x00\x00\xFC\x18\xED\xA3\x00\x00\x00\x01\x73\x52\x47\x42\x00\xAE\xCE\x1C\xE9\x00\x00\x00\x30\x49\x44\x41\x54\x48\x89\xED\x96\x31\x0A\x00\x20\x0C\xC3\x34\xFF\xFD\xBC\x16\x41\x10\x14\x77\xC9\x98\x0D\xA9\xC5\x9E\x99\x5B\xB5\x67\xF6\x13\x58\x23\xC0\x95\x0D\x24\x6D\xDF\x3E\xE5\xE7\x02\x19\x54\x7C\x3A\x52\x68\xA5\x02\x00\x00\x00\x00\x49\x45\x4E\x44\xAE\x42\x60\x82' > AppDir/wine_prefix_manager.png
+            if [ $RESULT -ne 0 ]; then
+              echo "Creating self-extracting AppImage manually..."
+              
+              # Create a clean AppDir with minimal dependencies
+              rm -rf AppDir
+              mkdir -p AppDir/usr/bin AppDir/usr/lib/wine_prefix_manager AppDir/usr/share/applications
+              
+              # Copy only the essential files
+              cp -r release/wine_prefix_manager-${{ steps.version.outputs.version }}-linux-x64-release/* AppDir/usr/lib/wine_prefix_manager/
+              
+              # Create a simple AppRun that sets up everything
+              cat > AppDir/AppRun << 'EOF'
+              #!/bin/bash
+              SELF=$(readlink -f "$0")
+              HERE=${SELF%/*}
+              
+              # Set up environment
+              export LD_LIBRARY_PATH="${HERE}/usr/lib:${HERE}/usr/lib/wine_prefix_manager/lib:${LD_LIBRARY_PATH}"
+              export PATH="${HERE}/usr/bin:${PATH}"
+              export XDG_DATA_DIRS="${HERE}/usr/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+              export FONTCONFIG_PATH="${HERE}/etc/fonts"
+              export GSETTINGS_SCHEMA_DIR="${HERE}/usr/share/glib-2.0/schemas"
+              
+              # Run the application
+              exec "${HERE}/usr/lib/wine_prefix_manager/wine_prefix_manager" "$@"
+              EOF
+              chmod +x AppDir/AppRun
+              
+              # Create necessary desktop file and icon
+              cp -f release/wine_prefix_manager-${{ steps.version.outputs.version }}-linux-x64-release/data/flutter_assets/assets/icon.png AppDir/ || true
+              
+              # If icon extraction failed, create a placeholder icon
+              if [ ! -f "AppDir/icon.png" ]; then
+                printf '\x89\x50\x4E\x47\x0D\x0A\x1A\x0A\x00\x00\x00\x0D\x49\x48\x44\x52\x00\x00\x00\x20\x00\x00\x00\x20\x08\x02\x00\x00\x00\xFC\x18\xED\xA3\x00\x00\x00\x01\x73\x52\x47\x42\x00\xAE\xCE\x1C\xE9\x00\x00\x00\x30\x49\x44\x41\x54\x48\x89\xED\x96\x31\x0A\x00\x20\x0C\xC3\x34\xFF\xFD\xBC\x16\x41\x10\x14\x77\xC9\x98\x0D\xA9\xC5\x9E\x99\x5B\xB5\x67\xF6\x13\x58\x23\xC0\x95\x0D\x24\x6D\xDF\x3E\xE5\xE7\x02\x19\x54\x7C\x3A\x52\x68\xA5\x02\x00\x00\x00\x00\x49\x45\x4E\x44\xAE\x42\x60\x82' > AppDir/wine_prefix_manager.png
+              fi
+              
+              cat > AppDir/wine_prefix_manager.desktop << 'EOF'
+              [Desktop Entry]
+              Name=Wine Prefix Manager
+              Comment=Manage Wine prefixes
+              Exec=wine_prefix_manager
+              Icon=wine_prefix_manager
+              Terminal=false
+              Type=Application
+              Categories=Utility;
+              EOF
+              
+              # Try using appimagetool one last time with most permissive options
+              export APPIMAGE_EXTRACT_AND_RUN=1
+              export NO_STRIP=1
+              ./appimagetool --comp gzip AppDir "$APPIMAGE_NAME"
+              RESULT=$?
             fi
-            
-            cat > AppDir/wine_prefix_manager.desktop << EOF
-[Desktop Entry]
-Name=Wine Prefix Manager
-Comment=Manage Wine prefixes
-Exec=wine_prefix_manager
-Icon=wine_prefix_manager
-Terminal=false
-Type=Application
-Categories=Utility;
-EOF
-            
-            # Try using appimagetool one last time with most permissive options
-            export APPIMAGE_EXTRACT_AND_RUN=1
-            export NO_STRIP=1
-            ./appimagetool --comp gzip AppDir "$APPIMAGE_NAME"
-            RESULT=$?
           fi
           
           set -e
@@ -832,18 +749,18 @@ EOF
 
             # Create a self-extracting installer
             cat > "wine_prefix_manager-${{ steps.version.outputs.version }}-x86_64.AppImage" << 'EOF'
-#!/bin/bash
-# Self-extracting installer for Wine Prefix Manager
-SELF=$(readlink -f "$0")
-TMPDIR=$(mktemp -d)
-ARCHIVE=$(awk '/^__ARCHIVE_BELOW__/ {print NR + 1; exit 0; }' "$SELF")
-tail -n+$ARCHIVE "$SELF" | tar xzf - -C "$TMPDIR"
-cd "$TMPDIR"
-"$TMPDIR"/wine_prefix_manager-*/wine_prefix_manager
-rm -rf "$TMPDIR"
-exit 0
-__ARCHIVE_BELOW__
-EOF
+            #!/bin/bash
+            # Self-extracting installer for Wine Prefix Manager
+            SELF=$(readlink -f "$0")
+            TMPDIR=$(mktemp -d)
+            ARCHIVE=$(awk '/^__ARCHIVE_BELOW__/ {print NR + 1; exit 0; }' "$SELF")
+            tail -n+$ARCHIVE "$SELF" | tar xzf - -C "$TMPDIR"
+            cd "$TMPDIR"
+            "$TMPDIR"/wine_prefix_manager-*/wine_prefix_manager
+            rm -rf "$TMPDIR"
+            exit 0
+            __ARCHIVE_BELOW__
+            EOF
             cat wine_prefix_manager-${{ steps.version.outputs.version }}-x86_64.tar.gz >> "wine_prefix_manager-${{ steps.version.outputs.version }}-x86_64.AppImage"
             chmod +x "wine_prefix_manager-${{ steps.version.outputs.version }}-x86_64.AppImage"
             
@@ -934,22 +851,27 @@ EOF
           fi
           
           # Create release notes with version and commits
-          cat << EOF > release_notes.md
-# Wine Prefix Manager ${DISPLAY_VERSION}
-
-Released on $(date '+%Y-%m-%d')
-
-## Changes in this version:
-
-${COMMITS}
-
-## Download Options
-
-* **Debian/Ubuntu**: Download the .deb file
-* **RPM-based distros**: Download the .rpm file
-* **Other Linux distros**: Download the AppImage file
-* **Source code**: Download the .tar.gz file
-EOF
+          cat > release_notes.md << 'EOF'
+          # Wine Prefix Manager ${DISPLAY_VERSION}
+          
+          Released on $(date '+%Y-%m-%d')
+          
+          ## Changes in this version:
+          
+          ${COMMITS}
+          
+          ## Download Options
+          
+          * **Debian/Ubuntu**: Download the .deb file
+          * **RPM-based distros**: Download the .rpm file
+          * **Other Linux distros**: Download the AppImage file
+          * **Source code**: Download the .tar.gz file
+          EOF
+          
+          # Replace variables in the file
+          sed -i "s/\${DISPLAY_VERSION}/$DISPLAY_VERSION/g" release_notes.md
+          sed -i "s/\$(date '+%Y-%m-%d')/$(date '+%Y-%m-%d')/g" release_notes.md
+          sed -i "s|\${COMMITS}|$COMMITS|g" release_notes.md
           
           # Display release notes for debugging
           echo "Generated release notes:"

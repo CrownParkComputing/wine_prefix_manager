@@ -2,6 +2,7 @@ import 'dart:io'; // Import dart:io for File class
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:provider/provider.dart'; // Import Provider
+import 'package:file_picker/file_picker.dart'; // Import file_picker
 import '../models/prefix_models.dart'; // Import the prefix models
 import '../providers/prefix_provider.dart'; // Import the PrefixProvider
 // import '../services/wine_component_installer.dart'; // Not directly used here
@@ -17,6 +18,7 @@ import '../providers/settings_provider.dart'; // Import SettingsProvider
 import '../services/igdb_service.dart'; // Import IgdbService
 import '../widgets/game_search_dialog.dart'; // Import GameSearchDialog
 import '../models/igdb_models.dart'; // Import IgdbGame model
+import '../theme/theme_provider.dart'; // Import ThemeProvider
 
 class HomePage extends StatefulWidget {
   final Function(int)? onNavigateToTab;
@@ -386,68 +388,371 @@ class _HomePageState extends State<HomePage> with WindowListener {
     final prefixProvider = context.watch<PrefixProvider>();
     final uiActionService = Provider.of<UIActionService>(context, listen: false);
     final settingsProvider = context.watch<SettingsProvider>();
+    final themeProvider = context.watch<ThemeProvider>();
     
     // Build game list from prefixes
     final prefixes = prefixProvider.prefixes;
     final allGames = _buildGameEntries(prefixes);
     
-    // Determine if we should show the welcome screen - REMOVED LOGIC
-    // final shouldShowWelcome = _showWelcomeScreen || prefixes.isEmpty;
-
     return MultiProvider(
       providers: [
         // Make UIActionService available to the GameLibraryPage
         Provider.value(value: uiActionService),
       ],
-      child: Scaffold(
-        // Removed AppBar
-        body: GameLibraryPage( // Always show GameLibraryPage
-              games: allGames,
-              // Pass callback functions for the modals
-              onUpdateMetadata: (game) => _updateGameMetadata(context, game),
-              onSaveLaunchOptions: (game, options) async {
-                final prefixProvider = Provider.of<PrefixProvider>(context, listen: false);
-                final updatedExe = game.exe.copyWith(launchOptions: options);
-                await prefixProvider.updateExecutable(game.prefix, updatedExe);
-              },
-              onChangeCategory: (game, category) async {
-                final prefixProvider = Provider.of<PrefixProvider>(context, listen: false);
-                final updatedExe = game.exe.copyWith(category: category);
-                await prefixProvider.updateExecutable(game.prefix, updatedExe);
-              },
-              onToggleWorkingStatus: (game, notWorking) async {
-                final prefixProvider = Provider.of<PrefixProvider>(context, listen: false);
-                final updatedExe = game.exe.copyWith(notWorking: notWorking);
-                await prefixProvider.updateExecutable(game.prefix, updatedExe);
-              },
-              onDelete: (game) => _deleteGame(context, game),
-              onUpdateCompressedGame: (game, updatedExe) => _updateCompressedGame(context, game, updatedExe),
-              onLaunchGame: (prefix, exe) => _launchGame(context, GameEntry(prefix: prefix, exe: exe)),
-              onGenreSelected: (genre) {
-                setState(() {
-                  _selectedGenre = genre;
-                });
-              },
-              selectedGenre: _selectedGenre,
-              coverSize: settingsProvider.settings.coverSize,
-              gameLaunchStates: _gameLaunchStates,
-              onStopGame: (game) => _stopGame(context, game),
-              onRefresh: () => _refreshGames(context),
-              isRefreshing: _isRefreshing,
-            ),
-        // Remove FloatingActionButton that toggled welcome screen
-        // floatingActionButton: prefixes.isNotEmpty 
-        //   ? FloatingActionButton(
-        //       onPressed: () {
-        //         setState(() {
-        //           _showWelcomeScreen = !_showWelcomeScreen;
-        //         });
-        //       },
-        //       child: Icon(_showWelcomeScreen ? Icons.grid_view : Icons.home),
-        //       tooltip: _showWelcomeScreen ? \'Show Games\' : \'Show Welcome\',
-        //     )
-        //   : null,
+      child: GameLibraryPage(
+        games: allGames,
+        // Pass callback functions for the modals
+        onUpdateMetadata: (game) => _updateGameMetadata(context, game),
+        onSaveLaunchOptions: (game, options) async {
+          final prefixProvider = Provider.of<PrefixProvider>(context, listen: false);
+          final updatedExe = game.exe.copyWith(launchOptions: options);
+          await prefixProvider.updateExecutable(game.prefix, updatedExe);
+        },
+        onChangeCategory: (game, category) async {
+          final prefixProvider = Provider.of<PrefixProvider>(context, listen: false);
+          final updatedExe = game.exe.copyWith(category: category);
+          await prefixProvider.updateExecutable(game.prefix, updatedExe);
+        },
+        onToggleWorkingStatus: (game, notWorking) async {
+          final prefixProvider = Provider.of<PrefixProvider>(context, listen: false);
+          final updatedExe = game.exe.copyWith(notWorking: notWorking);
+          await prefixProvider.updateExecutable(game.prefix, updatedExe);
+        },
+        onDelete: (game) => _deleteGame(context, game),
+        onUpdateCompressedGame: (game, updatedExe) => _updateCompressedGame(context, game, updatedExe),
+        onLaunchGame: (prefix, exe) => _launchGame(context, GameEntry(prefix: prefix, exe: exe)),
+        onGenreSelected: (genre) {
+          setState(() {
+            _selectedGenre = genre;
+          });
+        },
+        selectedGenre: _selectedGenre,
+        coverSize: settingsProvider.settings.coverSize,
+        gameLaunchStates: _gameLaunchStates,
+        onStopGame: (game) => _stopGame(context, game),
+        onRefresh: () => _refreshGames(context),
+        isRefreshing: _isRefreshing,
+        // Pass additional callbacks for the header actions
+        onShowSettings: () => _showGameLibrarySettings(context),
+        onToggleTheme: () => themeProvider.toggleTheme(),
+        onToggleCoverSize: () => _toggleCoverSize(context, settingsProvider),
+        isDarkMode: themeProvider.isDarkMode,
       ),
+    );
+  }
+
+  void _toggleCoverSize(BuildContext context, SettingsProvider settingsProvider) async {
+    final currentSize = settingsProvider.settings.coverSize;
+    CoverSize newSize;
+    
+    switch (currentSize) {
+      case CoverSize.small:
+        newSize = CoverSize.medium;
+        break;
+      case CoverSize.medium:
+        newSize = CoverSize.large;
+        break;
+      case CoverSize.large:
+        newSize = CoverSize.small;
+        break;
+    }
+    
+    final updatedSettings = settingsProvider.settings.copyWith(coverSize: newSize);
+    await settingsProvider.updateSettings(updatedSettings);
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Cover size changed to ${newSize.name}'),
+        duration: const Duration(seconds: 1),
+      ),
+    );
+  }
+
+  void _showGameLibrarySettings(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => _GameLibrarySettingsDialog(),
+    );
+  }
+}
+
+class _GameLibrarySettingsDialog extends StatefulWidget {
+  @override
+  State<_GameLibrarySettingsDialog> createState() => _GameLibrarySettingsDialogState();
+}
+
+class _GameLibrarySettingsDialogState extends State<_GameLibrarySettingsDialog> {
+  final _formKey = GlobalKey<FormState>();
+  late TextEditingController _igdbClientIdController;
+  late TextEditingController _igdbClientSecretController;
+  late TextEditingController _gameLibraryPathController;
+  late TextEditingController _igdbImageBaseUrlController;
+  late TextEditingController _igdbApiBaseUrlController;
+  late TextEditingController _twitchOAuthUrlController;
+  
+  CoverSize _selectedCoverSize = CoverSize.medium;
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _igdbClientIdController = TextEditingController();
+    _igdbClientSecretController = TextEditingController();
+    _gameLibraryPathController = TextEditingController();
+    _igdbImageBaseUrlController = TextEditingController();
+    _igdbApiBaseUrlController = TextEditingController();
+    _twitchOAuthUrlController = TextEditingController();
+    
+    _loadSettings();
+  }
+
+  @override
+  void dispose() {
+    _igdbClientIdController.dispose();
+    _igdbClientSecretController.dispose();
+    _gameLibraryPathController.dispose();
+    _igdbImageBaseUrlController.dispose();
+    _igdbApiBaseUrlController.dispose();
+    _twitchOAuthUrlController.dispose();
+    super.dispose();
+  }
+
+  void _loadSettings() {
+    final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
+    final settings = settingsProvider.settings;
+    
+    setState(() {
+      _igdbClientIdController.text = settings.igdbClientId;
+      _igdbClientSecretController.text = settings.igdbClientSecret;
+      _gameLibraryPathController.text = settings.gameLibraryPath ?? '';
+      _selectedCoverSize = settings.coverSize;
+      _igdbImageBaseUrlController.text = settings.igdbImageBaseUrl;
+      _igdbApiBaseUrlController.text = settings.igdbApiBaseUrl;
+      _twitchOAuthUrlController.text = settings.twitchOAuthUrl;
+    });
+  }
+
+  Future<void> _saveSettings() async {
+    if (_formKey.currentState!.validate()) {
+      setState(() {
+        _isLoading = true;
+      });
+
+      final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
+      final currentSettings = settingsProvider.settings;
+      final logService = Provider.of<LogService>(context, listen: false);
+
+      try {
+        final settingsToSave = currentSettings.copyWith(
+          igdbClientId: _igdbClientIdController.text.trim(),
+          igdbClientSecret: _igdbClientSecretController.text.trim(),
+          gameLibraryPath: _gameLibraryPathController.text.trim().isEmpty
+              ? null
+              : _gameLibraryPathController.text.trim(),
+          coverSize: _selectedCoverSize,
+          igdbImageBaseUrl: _igdbImageBaseUrlController.text.trim(),
+          igdbApiBaseUrl: _igdbApiBaseUrlController.text.trim(),
+          twitchOAuthUrl: _twitchOAuthUrlController.text.trim(),
+        );
+
+        await settingsProvider.updateSettings(settingsToSave);
+        logService.log('Game library settings updated successfully');
+
+        if (mounted) {
+          Navigator.of(context).pop();
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Row(
+                children: [
+                  Icon(Icons.check_circle, color: Colors.white),
+                  SizedBox(width: 10),
+                  Text('Game library settings saved successfully'),
+                ],
+              ),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      } catch (e) {
+        logService.log('Failed to save game library settings: $e', LogLevel.error);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.error, color: Colors.white),
+                  const SizedBox(width: 10),
+                  Text('Failed to save settings: $e'),
+                ],
+              ),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      } finally {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
+      }
+    }
+  }
+
+  Future<void> _selectGameLibraryPath() async {
+    try {
+      String? selectedDirectory = await FilePicker.platform.getDirectoryPath(
+        dialogTitle: 'Select Game Library Path',
+        initialDirectory: _gameLibraryPathController.text,
+      );
+
+      if (selectedDirectory != null) {
+        setState(() {
+          _gameLibraryPathController.text = selectedDirectory;
+        });
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error selecting directory: $e')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Game Library Settings'),
+      content: SizedBox(
+        width: 500,
+        child: Form(
+          key: _formKey,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Game Library',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: _gameLibraryPathController,
+                  decoration: InputDecoration(
+                    labelText: 'Game Library Path (optional)',
+                    hintText: 'Path to your games directory',
+                    suffixIcon: IconButton(
+                      icon: const Icon(Icons.folder_open),
+                      onPressed: _selectGameLibraryPath,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                
+                Text(
+                  'Cover Art Size',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<CoverSize>(
+                  value: _selectedCoverSize,
+                  decoration: const InputDecoration(
+                    labelText: 'Cover Size',
+                  ),
+                  items: CoverSize.values.map((size) {
+                    return DropdownMenuItem(
+                      value: size,
+                      child: Text(size.name.toUpperCase()),
+                    );
+                  }).toList(),
+                  onChanged: (CoverSize? newValue) {
+                    if (newValue != null) {
+                      setState(() {
+                        _selectedCoverSize = newValue;
+                      });
+                    }
+                  },
+                ),
+                const SizedBox(height: 24),
+                
+                Text(
+                  'IGDB Integration',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: _igdbClientIdController,
+                  decoration: const InputDecoration(
+                    labelText: 'IGDB Client ID',
+                    hintText: 'Enter your Twitch Client ID',
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _igdbClientSecretController,
+                  decoration: const InputDecoration(
+                    labelText: 'IGDB Client Secret',
+                    hintText: 'Enter your Twitch Client Secret',
+                  ),
+                  obscureText: true,
+                ),
+                const SizedBox(height: 24),
+                
+                Text(
+                  'Advanced IGDB Settings',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: _igdbApiBaseUrlController,
+                  decoration: const InputDecoration(
+                    labelText: 'IGDB API Base URL',
+                    hintText: 'https://api.igdb.com/v4',
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _igdbImageBaseUrlController,
+                  decoration: const InputDecoration(
+                    labelText: 'IGDB Image Base URL',
+                    hintText: 'https://images.igdb.com/igdb/image/upload',
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _twitchOAuthUrlController,
+                  decoration: const InputDecoration(
+                    labelText: 'Twitch OAuth URL',
+                    hintText: 'https://id.twitch.tv/oauth2/token',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isLoading ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _isLoading ? null : _saveSettings,
+          child: _isLoading
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Save'),
+        ),
+      ],
     );
   }
 }

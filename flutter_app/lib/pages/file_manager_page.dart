@@ -32,11 +32,6 @@ class _FileManagerPageState extends State<FileManagerPage> {
   List<GameEntry> availableGames = [];
   GameEntry? selectedGame;
 
-  // Backup folder navigation
-  List<String> pathHistory = [];
-  List<FileSystemEntity> backupEntries = [];
-  bool loadingBackups = false;
-
   // Backup options
   int compressionLevel = 3;
   int compressionThreads = 0; // 0 means auto (use all available)
@@ -89,7 +84,6 @@ class _FileManagerPageState extends State<FileManagerPage> {
     backupFolderPath = p.join(settings.backupPath ?? settings.prefixDirectory, 'game_backups');
 
     setState(() => loading = false);
-    _refreshBackupEntries();
   }
 
   void _autoDiscoverSaveDataFolders() {
@@ -140,55 +134,57 @@ class _FileManagerPageState extends State<FileManagerPage> {
   }
 
   Future<void> _selectSourceFolder() async {
-    if (selectedGame == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please select a game first')),
-        );
-      }
-      return;
-    }
-
-    // Default to the parent directory of the game executable
-    String initialDir = p.dirname(selectedGame!.exe.path);
+    // Default to home directory or current source folder
+    String initialDir = sourceFolderPath.isNotEmpty 
+        ? sourceFolderPath 
+        : selectedGame != null 
+            ? p.dirname(selectedGame!.exe.path)
+            : '/home';
 
     final String? selectedDir = await FilePicker.platform.getDirectoryPath(
-      dialogTitle: 'Select Game Folder to Backup',
+      dialogTitle: 'Select Folder to Backup',
       initialDirectory: initialDir,
     );
 
     if (selectedDir != null) {
       setState(() {
         sourceFolderPath = selectedDir;
+        // Clear save data paths when manually selecting a new folder
+        // unless we have a selected game that we can use for auto-discovery
+        if (selectedGame == null) {
+          saveDataPaths.clear();
+        }
       });
     }
   }
 
   Future<void> _addSaveDataFolder() async {
-    if (selectedGame == null) return;
-
-    // Default to Documents folder in the wine prefix
-    final prefix = selectedGame!.prefix;
-    String initialDir = p.join(prefix.path, 'drive_c/users');
+    // Default to Documents folder if we have a selected game, otherwise home
+    String initialDir = '/home';
     
-    // Try to find the first user directory
-    try {
-      final usersDir = Directory(initialDir);
-      if (usersDir.existsSync()) {
-        final userDirs = usersDir.listSync().whereType<Directory>().toList();
-        if (userDirs.isNotEmpty) {
-          final firstUser = userDirs.firstWhere(
-            (dir) => p.basename(dir.path) != 'Public',
-            orElse: () => userDirs.first,
-          );
-          final documentsDir = p.join(firstUser.path, 'Documents');
-          if (Directory(documentsDir).existsSync()) {
-            initialDir = documentsDir;
+    if (selectedGame != null) {
+      final prefix = selectedGame!.prefix;
+      String prefixInitialDir = p.join(prefix.path, 'drive_c/users');
+      
+      // Try to find the first user directory
+      try {
+        final usersDir = Directory(prefixInitialDir);
+        if (usersDir.existsSync()) {
+          final userDirs = usersDir.listSync().whereType<Directory>().toList();
+          if (userDirs.isNotEmpty) {
+            final firstUser = userDirs.firstWhere(
+              (dir) => p.basename(dir.path) != 'Public',
+              orElse: () => userDirs.first,
+            );
+            final documentsDir = p.join(firstUser.path, 'Documents');
+            if (Directory(documentsDir).existsSync()) {
+              initialDir = documentsDir;
+            }
           }
         }
+      } catch (e) {
+        // Use default if there's an error
       }
-    } catch (e) {
-      // Use default if there's an error
     }
 
     final String? selectedDir = await FilePicker.platform.getDirectoryPath(
@@ -239,80 +235,6 @@ class _FileManagerPageState extends State<FileManagerPage> {
     }
     
     return size;
-  }
-
-  Future<void> _refreshBackupEntries() async {
-    if (backupFolderPath.isEmpty) return;
-
-    setState(() {
-      loadingBackups = true;
-      error = '';
-    });
-
-    try {
-      final dir = Directory(backupFolderPath);
-
-      // Create directory if it doesn't exist
-      if (!await dir.exists()) {
-        await dir.create(recursive: true);
-      }
-
-      final entitiesList = await dir.list().toList();
-
-      // Filter and sort entries
-      backupEntries = entitiesList.where((e) {
-        final name = p.basename(e.path);
-        return !name.startsWith('.');
-      }).toList();
-
-      // Sort: directories first, then files
-      backupEntries.sort((a, b) {
-        bool aIsDir = FileSystemEntity.isDirectorySync(a.path);
-        bool bIsDir = FileSystemEntity.isDirectorySync(b.path);
-
-        if (aIsDir && !bIsDir) return -1;
-        if (!aIsDir && bIsDir) return 1;
-
-        return p.basename(a.path).compareTo(p.basename(b.path));
-      });
-    } catch (e) {
-      setState(() {
-        error = 'Error accessing directory: $e';
-      });
-    } finally {
-      setState(() {
-        loadingBackups = false;
-      });
-    }
-  }
-
-  Future<void> _navigateToDirectory(String path) async {
-    pathHistory.add(backupFolderPath);
-    setState(() {
-      backupFolderPath = path;
-    });
-    await _refreshBackupEntries();
-  }
-
-  Future<void> _navigateUp() async {
-    final parentDir = p.dirname(backupFolderPath);
-    if (parentDir != backupFolderPath) {
-      pathHistory.add(backupFolderPath);
-      setState(() {
-        backupFolderPath = parentDir;
-      });
-      await _refreshBackupEntries();
-    }
-  }
-
-  Future<void> _navigateBack() async {
-    if (pathHistory.isNotEmpty) {
-      final previousPath = pathHistory.removeLast();
-      setState(() {
-        backupFolderPath = previousPath;
-      });
-      await _refreshBackupEntries();
-    }
   }
 
   Future<void> _createBackup() async {
@@ -473,7 +395,6 @@ echo "Backup complete!"
 
       // Cleanup temp directory
       await tempDir.delete(recursive: true);
-      await _refreshBackupEntries();
 
     } catch (e) {
       setState(() {
@@ -561,105 +482,11 @@ echo "Backup complete!"
     }
   }
 
-  Future<void> _deleteEntry(String path) async {
-    final fileName = p.basename(path);
-    final isDirectory = FileSystemEntity.isDirectorySync(path);
-
-    // Confirm deletion
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Delete ${isDirectory ? 'Folder' : 'File'}'),
-        content: Text('Are you sure you want to delete "$fileName"?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm != true) return;
-
-    try {
-      if (isDirectory) {
-        await Directory(path).delete(recursive: true);
-      } else {
-        await File(path).delete();
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Deleted $fileName')),
-      );
-
-      await _refreshBackupEntries();
-    } catch (e) {
-      setState(() {
-        error = 'Delete error: $e';
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error deleting $fileName: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-
-  String _getFileInfo(FileSystemEntity entity) {
-    try {
-      if (FileSystemEntity.isDirectorySync(entity.path)) {
-        return 'Directory';
-      } else {
-        final file = File(entity.path);
-        final size = file.lengthSync();
-
-        if (size < 1024) {
-          return '$size bytes';
-        } else if (size < 1024 * 1024) {
-          return '${(size / 1024).toStringAsFixed(1)} KB';
-        } else if (size < 1024 * 1024 * 1024) {
-          return '${(size / (1024 * 1024)).toStringAsFixed(1)} MB';
-        } else {
-          return '${(size / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
-        }
-      }
-    } catch (e) {
-      return 'Error: $e';
-    }
-  }
-
-  IconData _getFileIcon(String path) {
-    final extension = p.extension(path).toLowerCase();
-
-    switch (extension) {
-      case '.exe':
-        return Icons.videogame_asset;
-      case '.dll':
-        return Icons.integration_instructions;
-      case '.txt':
-      case '.log':
-        return Icons.description;
-      case '.png':
-      case '.jpg':
-      case '.jpeg':
-      case '.gif':
-        return Icons.image;
-      case '.ini':
-      case '.cfg':
-      case '.conf':
-        return Icons.settings;
-      case '.zst':
-        return Icons.archive;
-      default:
-        return Icons.insert_drive_file;
-    }
+  String _formatFileSize(int bytes) {
+    if (bytes < 1024) return '${bytes}B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)}KB';
+    if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)}MB';
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)}GB';
   }
 
   @override
@@ -668,11 +495,14 @@ echo "Backup complete!"
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Backup Manager${selectedGame != null ? ' - ${selectedGame!.exe.name}' : ''}'),
+        title: Text('Create Backup${selectedGame != null ? ' - ${selectedGame!.exe.name}' : ''}'),
+        automaticallyImplyLeading: false,
+        elevation: 0,
+        backgroundColor: theme.colorScheme.surface,
         actions: [
           if (availableGames.isNotEmpty)
             PopupMenuButton<GameEntry>(
-              tooltip: 'Select Game',
+              tooltip: 'Quick Select from Registered Games',
               icon: const Icon(Icons.sports_esports),
               enabled: !backupInProgress,
               onSelected: (game) {
@@ -683,19 +513,29 @@ echo "Backup complete!"
                 });
               },
               itemBuilder: (context) {
-                return availableGames.map((game) {
-                  return PopupMenuItem<GameEntry>(
-                    value: game,
-                    child: Text(game.exe.name),
-                  );
-                }).toList();
+                return [
+                  const PopupMenuItem<GameEntry>(
+                    enabled: false,
+                    child: Text(
+                      'Select a registered game:',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  ...availableGames.map((game) {
+                    return PopupMenuItem<GameEntry>(
+                      value: game,
+                      child: Row(
+                        children: [
+                          const Icon(Icons.videogame_asset, size: 16),
+                          const SizedBox(width: 8),
+                          Expanded(child: Text(game.exe.name)),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ];
               },
             ),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh',
-            onPressed: backupInProgress ? null : _refreshBackupEntries,
-          ),
         ],
       ),
       body: Column(
@@ -716,20 +556,40 @@ echo "Backup complete!"
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Game selection
-                if (selectedGame != null)
-                  Text(
-                    'Game: ${selectedGame!.exe.name}',
-                    style: theme.textTheme.titleMedium,
-                  )
-                else
-                  const Text(
-                    'Select a game to begin',
-                    style: TextStyle(fontStyle: FontStyle.italic),
+                // Main instruction
+                Text(
+                  'Select a folder to backup:',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
                   ),
-                const SizedBox(height: 16),
+                ),
+                const SizedBox(height: 8),
 
-                // Source folder selection
+                // Optional game selection for convenience
+                if (availableGames.isNotEmpty) ...[
+                  Row(
+                    children: [
+                      Text(
+                        'Quick select from games: ',
+                        style: theme.textTheme.bodyMedium,
+                      ),
+                      if (selectedGame != null)
+                        Chip(
+                          label: Text(selectedGame!.exe.name),
+                          onDeleted: () {
+                            setState(() {
+                              selectedGame = null;
+                              saveDataPaths.clear();
+                            });
+                          },
+                          deleteIcon: const Icon(Icons.clear, size: 18),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                ],
+
+                // Source folder selection - now the primary action
                 Row(
                   children: [
                     Expanded(
@@ -743,14 +603,15 @@ echo "Backup complete!"
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Source Folder:',
+                              'Folder to backup:',
                               style: theme.textTheme.bodySmall,
                             ),
                             Text(
-                              sourceFolderPath.isEmpty ? 'No folder selected' : sourceFolderPath,
+                              sourceFolderPath.isEmpty ? 'Click "Browse" to select a folder' : sourceFolderPath,
                               style: TextStyle(
                                 fontFamily: 'monospace',
                                 fontWeight: sourceFolderPath.isEmpty ? FontWeight.normal : FontWeight.bold,
+                                fontStyle: sourceFolderPath.isEmpty ? FontStyle.italic : FontStyle.normal,
                               ),
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -763,6 +624,10 @@ echo "Backup complete!"
                       icon: const Icon(Icons.folder_open),
                       label: const Text('Browse'),
                       onPressed: backupInProgress ? null : _selectSourceFolder,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: theme.colorScheme.primary,
+                        foregroundColor: theme.colorScheme.onPrimary,
+                      ),
                     ),
                   ],
                 ),
@@ -773,13 +638,13 @@ echo "Backup complete!"
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      'Save Data Folders:',
+                      'Additional Save Data Folders:',
                       style: theme.textTheme.titleSmall,
                     ),
                     ElevatedButton.icon(
                       icon: const Icon(Icons.add),
-                      label: const Text('Add Save Folder'),
-                      onPressed: (selectedGame != null && !backupInProgress) ? _addSaveDataFolder : null,
+                      label: const Text('Add Folder'),
+                      onPressed: backupInProgress ? null : _addSaveDataFolder,
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       ),
@@ -803,7 +668,7 @@ echo "Backup complete!"
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            'No save data folders selected. Use "Add Save Folder" to include save files in the backup.',
+                            'Optional: Add additional folders (like save files) to include in the backup.',
                             style: theme.textTheme.bodySmall?.copyWith(fontStyle: FontStyle.italic),
                           ),
                         ),
@@ -984,36 +849,6 @@ echo "Backup complete!"
             ),
           ),
 
-          // Divider between sections
-          const Divider(height: 1),
-
-          // Backup folder navigation
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Row(
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.arrow_upward),
-                  tooltip: 'Parent Directory',
-                  onPressed: (backupInProgress) ? null : _navigateUp, // Disable during operations
-                ),
-                if (pathHistory.isNotEmpty)
-                  IconButton(
-                    icon: const Icon(Icons.arrow_back),
-                    tooltip: 'Go Back',
-                    onPressed: (backupInProgress) ? null : _navigateBack, // Disable during operations
-                  ),
-                Expanded(
-                  child: Text(
-                    backupFolderPath,
-                    style: const TextStyle(fontFamily: 'monospace'),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-          ),
-
           // Error display
           if (error.isNotEmpty)
             Container(
@@ -1036,73 +871,6 @@ echo "Backup complete!"
                 ],
               ),
             ),
-
-          // Bottom half - Backup files listing
-          Expanded(
-            child: (backupInProgress) 
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const CircularProgressIndicator(),
-                        const SizedBox(height: 16),
-                        Text(
-                          'Creating backup...',
-                          style: Theme.of(context).textTheme.bodyLarge,
-                        ),
-                      ],
-                    ),
-                  )
-                : loadingBackups
-                    ? const Center(child: CircularProgressIndicator())
-                    : backupEntries.isEmpty
-                        ? const Center(
-                            child: Text('No backups found'),
-                          )
-                        : ListView.builder(
-                            itemCount: backupEntries.length,
-                            itemBuilder: (context, index) {
-                              final entry = backupEntries[index];
-                              final name = p.basename(entry.path);
-                              final isDir = FileSystemEntity.isDirectorySync(entry.path);
-                              final isZst = name.endsWith('.zst') || name.endsWith('.tar.zst');
-
-                              return ListTile(
-                                leading: Icon(
-                                  isDir
-                                      ? Icons.folder
-                                      : isZst
-                                          ? Icons.archive
-                                          : _getFileIcon(entry.path),
-                                  color: isDir
-                                      ? Colors.amber
-                                      : isZst
-                                          ? Colors.teal
-                                          : null,
-                                ),
-                                title: Text(name),
-                                subtitle: Text(_getFileInfo(entry)),
-                                onTap: isDir ? () => _navigateToDirectory(entry.path) : null,
-                                trailing: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    if (isZst)
-                                      IconButton(
-                                        icon: const Icon(Icons.folder_zip),
-                                        tooltip: 'Extract',
-                                        onPressed: () => _decompressFile(entry.path),
-                                      ),
-                                    IconButton(
-                                      icon: const Icon(Icons.delete),
-                                      tooltip: 'Delete',
-                                      onPressed: () => _deleteEntry(entry.path),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            },
-                          ),
-          ),
         ],
       ),
     );

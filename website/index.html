@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wine Prefix Manager - Simplify Your Windows Apps on Linux</title>
+    <meta name="description" content="The ultimate Wine prefix management tool for Linux. Easily manage Windows applications, create isolated environments, and organize your Wine installations with a beautiful, modern interface.">
+    <meta name="keywords" content="wine, linux, windows applications, prefix manager, gaming, emulation">
+    <meta name="author" content="Jon Whittingham - CrownParkComputing">
+    
+    <!-- Open Graph / Social Media Meta Tags -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Wine Prefix Manager - Simplify Your Windows Apps on Linux">
+    <meta property="og:description" content="The ultimate Wine prefix management tool for Linux. Easily manage Windows applications with a beautiful, modern interface.">
+    <meta property="og:image" content="https://your-username.github.io/wine_prefix_manager/website/images/hero-screenshot.png">
+    <meta property="og:url" content="https://your-username.github.io/wine_prefix_manager">
+    
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Wine Prefix Manager">
+    <meta name="twitter:description" content="The ultimate Wine prefix management tool for Linux">
+    <meta name="twitter:image" content="https://your-username.github.io/wine_prefix_manager/website/images/hero-screenshot.png">
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="assets/favicon.ico">
+    
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    
+    <!-- Styles -->
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-logo">
+                <i class="fas fa-wine-bottle"></i>
+                <span>Wine Prefix Manager</span>
+            </div>
+            <ul class="nav-menu">
+                <li class="nav-item">
+                    <a href="#features" class="nav-link">Features</a>
+                </li>
+                <li class="nav-item">
+                    <a href="#prefix-types" class="nav-link">Prefix Types</a>
+                </li>
+                <li class="nav-item">
+                    <a href="twitch-setup.html" class="nav-link">IGDB Setup</a>
+                </li>
+                <li class="nav-item">
+                    <a href="#download" class="nav-link">Download</a>
+                </li>
+                <li class="nav-item">
+                    <a href="https://github.com/your-username/wine_prefix_manager" class="nav-link" target="_blank">
+                        <i class="fab fa-github"></i>
+                    </a>
+                </li>
+            </ul>
+            <div class="hamburger">
+                <span class="bar"></span>
+                <span class="bar"></span>
+                <span class="bar"></span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="container">
+            <div class="hero-content">
+                <div class="hero-text">
+                    <h1 class="hero-title">
+                        Simplify Your <span class="highlight">Windows Apps</span> on Linux
+                    </h1>
+                    <p class="hero-description">
+                        Wine Prefix Manager is the ultimate tool for managing Windows applications on Linux. 
+                        Create isolated environments, organize your Wine installations, and launch your favorite 
+                        Windows software with ease.
+                    </p>
+                    <div class="hero-buttons">
+                        <a href="#download" class="btn btn-primary">
+                            <i class="fas fa-download"></i>
+                            Download for Linux
+                        </a>
+                        <a href="#features" class="btn btn-secondary">
+                            <i class="fas fa-play"></i>
+                            See Features
+                        </a>
+                    </div>
+                    <div class="hero-stats">
+                        <div class="stat">
+                            <span class="stat-number">Free</span>
+                            <span class="stat-label">Open Source</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-number">Easy</span>
+                            <span class="stat-label">One-Click Install</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-number">Modern</span>
+                            <span class="stat-label">Flutter UI</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="hero-image">
+                    <div class="hero-carousel">
+                        <div class="carousel-container">
+                            <div class="carousel-slide active">
+                                <img src="images/prefixmanager.png" alt="Prefix Manager Interface" class="hero-screenshot">
+                                <div class="slide-caption">Prefix Management</div>
+                            </div>
+                            <div class="carousel-slide">
+                                <img src="images/gamelibrary.png" alt="Game Library Interface" class="hero-screenshot">
+                                <div class="slide-caption">Game Library</div>
+                            </div>
+                            <div class="carousel-slide">
+                                <img src="images/Screenshot_20250327_181806.png" alt="Main Dashboard" class="hero-screenshot">
+                                <div class="slide-caption">Main Dashboard</div>
+                            </div>
+                            <div class="carousel-slide">
+                                <img src="images/backup-manager.png" alt="Backup Manager" class="hero-screenshot">
+                                <div class="slide-caption">Backup & Restore</div>
+                            </div>
+                            <div class="carousel-slide">
+                                <img src="images/protonprefixes.png" alt="Proton Prefixes" class="hero-screenshot">
+                                <div class="slide-caption">Proton Integration</div>
+                            </div>
+                        </div>
+                        <div class="carousel-indicators">
+                            <button class="indicator active" data-slide="0"></button>
+                            <button class="indicator" data-slide="1"></button>
+                            <button class="indicator" data-slide="2"></button>
+                            <button class="indicator" data-slide="3"></button>
+                            <button class="indicator" data-slide="4"></button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section id="features" class="features">
+        <div class="container">
+            <div class="section-header">
+                <h2 class="section-title">Powerful Features</h2>
+                <p class="section-description">
+                    Everything you need to manage Windows applications on Linux efficiently
+                </p>
+            </div>
+            
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-layer-group"></i>
+                    </div>
+                    <h3 class="feature-title">Prefix Management</h3>
+                    <p class="feature-description">
+                        Create, delete, and organize Wine prefixes with ease. Keep your Windows applications 
+                        isolated and organized in separate environments.
+                    </p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-gamepad"></i>
+                    </div>
+                    <h3 class="feature-title">Game Library</h3>
+                    <p class="feature-description">
+                        Beautiful game library with customizable cover sizes, search functionality, 
+                        and one-click launching. Perfect for managing your Windows games.
+                    </p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-backup"></i>
+                    </div>
+                    <h3 class="feature-title">Backup & Restore</h3>
+                    <p class="feature-description">
+                        Create compressed backups of your games and prefixes. Restore with ease 
+                        using our integrated file management system.
+                    </p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-folder-open"></i>
+                    </div>
+                    <h3 class="feature-title">File Management</h3>
+                    <p class="feature-description">
+                        Browse prefix files, manage save data, and organize your Windows application 
+                        data directly from the app.
+                    </p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-wine-bottle"></i>
+                    </div>
+                    <h3 class="feature-title">Wine Integration</h3>
+                    <p class="feature-description">
+                        Seamless integration with Wine and Proton. Automatically detect installations 
+                        and configure optimal settings for your applications.
+                    </p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fab fa-twitch"></i>
+                    </div>
+                    <h3 class="feature-title">IGDB Integration</h3>
+                    <p class="feature-description">
+                        Automatically fetch game metadata, cover art, screenshots, and detailed 
+                        information from Twitch's Internet Game Database for your game library.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Prefix Types Section -->
+    <section id="prefix-types" class="prefix-types">
+        <div class="container">
+            <div class="section-header">
+                <h2 class="section-title">Create Any Type of Prefix</h2>
+                <p class="section-description">
+                    Wine Prefix Manager supports all major Wine and Proton prefix types for maximum compatibility
+                </p>
+            </div>
+            
+            <div class="prefix-types-grid">
+                <div class="prefix-type-card">
+                    <div class="prefix-type-icon">
+                        <i class="fas fa-wine-bottle"></i>
+                    </div>
+                    <h3 class="prefix-type-title">Standard Wine Prefixes</h3>
+                    <p class="prefix-type-description">
+                        Create clean Wine prefixes for Windows applications and productivity software. 
+                        Perfect for office suites, utilities, and general Windows programs.
+                    </p>
+                    <div class="prefix-type-examples">
+                        <span class="example-tag">Office Apps</span>
+                        <span class="example-tag">PDF Readers</span>
+                        <span class="example-tag">Utilities</span>
+                    </div>
+                </div>
+                
+                <div class="prefix-type-card">
+                    <div class="prefix-type-icon">
+                        <i class="fas fa-gamepad"></i>
+                    </div>
+                    <h3 class="prefix-type-title">Gaming Prefixes</h3>
+                    <p class="prefix-type-description">
+                        Optimized prefixes for Windows games with pre-configured settings for 
+                        DirectX, Visual C++ runtimes, and gaming-specific libraries.
+                    </p>
+                    <div class="prefix-type-examples">
+                        <span class="example-tag">Steam Games</span>
+                        <span class="example-tag">GOG Games</span>
+                        <span class="example-tag">Indie Games</span>
+                    </div>
+                </div>
+                
+                <div class="prefix-type-card">
+                    <div class="prefix-type-icon">
+                        <i class="fab fa-steam"></i>
+                    </div>
+                    <h3 class="prefix-type-title">Proton Prefixes</h3>
+                    <p class="prefix-type-description">
+                        Seamlessly integrate with Steam's Proton for enhanced gaming compatibility. 
+                        Automatically detect and manage existing Proton installations.
+                    </p>
+                    <div class="prefix-type-examples">
+                        <span class="example-tag">Steam Proton</span>
+                        <span class="example-tag">Proton-GE</span>
+                        <span class="example-tag">Custom Proton</span>
+                    </div>
+                </div>
+                
+                <div class="prefix-type-card">
+                    <div class="prefix-type-icon">
+                        <i class="fas fa-cogs"></i>
+                    </div>
+                    <h3 class="prefix-type-title">Custom Prefixes</h3>
+                    <p class="prefix-type-description">
+                        Advanced prefix creation with custom Wine versions, DXVK configurations, 
+                        and specialized settings for specific applications or use cases.
+                    </p>
+                    <div class="prefix-type-examples">
+                        <span class="example-tag">Wine-Staging</span>
+                        <span class="example-tag">DXVK</span>
+                        <span class="example-tag">VKD3D</span>
+                    </div>
+                </div>
+                
+                <div class="prefix-type-card">
+                    <div class="prefix-type-icon">
+                        <i class="fas fa-code"></i>
+                    </div>
+                    <h3 class="prefix-type-title">Development Prefixes</h3>
+                    <p class="prefix-type-description">
+                        Specialized environments for Windows development tools, IDEs, and 
+                        programming software with proper debugging and development libraries.
+                    </p>
+                    <div class="prefix-type-examples">
+                        <span class="example-tag">Visual Studio</span>
+                        <span class="example-tag">Dev Tools</span>
+                        <span class="example-tag">Compilers</span>
+                    </div>
+                </div>
+                
+                <div class="prefix-type-card">
+                    <div class="prefix-type-icon">
+                        <i class="fas fa-copy"></i>
+                    </div>
+                    <h3 class="prefix-type-title">Template Prefixes</h3>
+                    <p class="prefix-type-description">
+                        Create reusable prefix templates with pre-installed dependencies. 
+                        Clone and customize existing prefixes for rapid deployment.
+                    </p>
+                    <div class="prefix-type-examples">
+                        <span class="example-tag">Base Templates</span>
+                        <span class="example-tag">Game Templates</span>
+                        <span class="example-tag">App Templates</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Download Section -->
+    <section id="download" class="download">
+        <div class="container">
+            <div class="download-content">
+                <div class="download-text">
+                    <h2 class="download-title">Ready to Get Started?</h2>
+                    <p class="download-description">
+                        Download Wine Prefix Manager for Linux and start managing your Windows 
+                        applications like a pro. No installation required - just download and run!
+                    </p>
+                    
+                    <div class="system-requirements">
+                        <h3>System Requirements</h3>
+                        <ul>
+                            <li><i class="fas fa-check"></i> Linux x86_64</li>
+                            <li><i class="fas fa-check"></i> FUSE (for AppImage support)</li>
+                            <li><i class="fas fa-check"></i> Wine or Proton installed</li>
+                            <li><i class="fas fa-check"></i> 50MB free disk space</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <div class="download-box">
+                    <div class="download-info">
+                        <div class="download-version">
+                            <span class="version-label">Latest Version</span>
+                            <span class="version-number" id="latest-version">v3.1.4</span>
+                        </div>
+                        <div class="download-size">
+                            <span class="size-label">File Size</span>
+                            <span class="size-number">~10MB</span>
+                        </div>
+                    </div>
+                    
+                    <a href="#" id="download-btn" class="btn btn-download">
+                        <i class="fas fa-download"></i>
+                        Download AppImage
+                    </a>
+                    
+                    <div class="installation-steps">
+                        <h4>Quick Install</h4>
+                        <ol>
+                            <li>Download the AppImage file</li>
+                            <li>Make it executable: <code>chmod +x WinePrefixManager-*.AppImage</code></li>
+                            <li>Run: <code>./WinePrefixManager-*.AppImage</code></li>
+                        </ol>
+                    </div>
+                    
+                    <div class="download-links">
+                        <a href="https://github.com/your-username/wine_prefix_manager/releases" class="download-link" target="_blank">
+                            <i class="fab fa-github"></i> View All Releases
+                        </a>
+                        <a href="https://github.com/your-username/wine_prefix_manager" class="download-link" target="_blank">
+                            <i class="fas fa-code"></i> Source Code
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <div class="footer-logo">
+                        <i class="fas fa-wine-bottle"></i>
+                        <span>Wine Prefix Manager</span>
+                    </div>
+                    <p class="footer-description">
+                        The ultimate Wine prefix management tool for Linux enthusiasts.
+                    </p>
+                </div>
+                
+                <div class="footer-section">
+                    <h3>Quick Links</h3>
+                    <ul class="footer-links">
+                        <li><a href="#features">Features</a></li>
+                        <li><a href="#prefix-types">Prefix Types</a></li>
+                        <li><a href="twitch-setup.html">IGDB Setup</a></li>
+                        <li><a href="#download">Download</a></li>
+                        <li><a href="https://github.com/your-username/wine_prefix_manager">GitHub</a></li>
+                    </ul>
+                </div>
+                
+                <div class="footer-section">
+                    <h3>Support</h3>
+                    <ul class="footer-links">
+                        <li><a href="https://github.com/your-username/wine_prefix_manager/issues">Bug Reports</a></li>
+                        <li><a href="https://github.com/your-username/wine_prefix_manager/discussions">Community</a></li>
+                        <li><a href="https://github.com/your-username/wine_prefix_manager/wiki">Documentation</a></li>
+                    </ul>
+                </div>
+                
+                <div class="footer-section">
+                    <h3>Connect</h3>
+                    <div class="social-links">
+                        <a href="https://github.com/your-username" class="social-link">
+                            <i class="fab fa-github"></i>
+                        </a>
+                        <a href="https://twitter.com/your-username" class="social-link">
+                            <i class="fab fa-twitter"></i>
+                        </a>
+                        <a href="https://linkedin.com/in/your-username" class="social-link">
+                            <i class="fab fa-linkedin"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="footer-bottom">
+                <p>&copy; 2024 Jon Whittingham - CrownParkComputing. Released under MIT License.</p>
+            </div>
+        </div>
+    </footer>
+
+    <!-- JavaScript -->
+    <script src="js/script.js"></script>
+</body>
+</html> 

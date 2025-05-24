@@ -79,6 +79,49 @@ class _LogsPageState extends State<LogsPage> {
     }
   }
 
+  void _showLogSettings(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Log Settings'),
+        content: const SizedBox(
+          width: 400,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Log Management',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              SizedBox(height: 8),
+              Text('• Use the filter dropdown to show logs by level'),
+              Text('• Use the search box to find specific log entries'),
+              Text('• Export logs to save them to a file'),
+              Text('• Clear logs to remove all entries'),
+              SizedBox(height: 16),
+              Text(
+                'Log Levels:',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              SizedBox(height: 8),
+              Text('• Debug: Detailed debugging information'),
+              Text('• Info: General information messages'),
+              Text('• Warning: Warning messages'),
+              Text('• Error: Error messages'),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -86,7 +129,15 @@ class _LogsPageState extends State<LogsPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Logs'),
+        automaticallyImplyLeading: false,
+        elevation: 0,
+        backgroundColor: Theme.of(context).colorScheme.surface,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.settings_outlined),
+            tooltip: 'Log Settings',
+            onPressed: () => _showLogSettings(context),
+          ),
           IconButton(
             icon: const Icon(Icons.delete),
             tooltip: 'Clear Logs',

@@ -27,7 +27,7 @@ import 'services/power_management_service.dart';
 // import 'widgets/custom_title_bar.dart'; // Removed import
 import 'pages/home_page.dart';
 import 'pages/manage_prefixes_page.dart';
-import 'pages/settings_page.dart';
+import 'pages/prefix_management_page.dart';
 import 'pages/logs_page.dart';
 import 'pages/file_manager_page.dart';
 import 'pages/backup_manager_page.dart';
@@ -36,6 +36,7 @@ import 'widgets/env_variables_dialog.dart'; // Add import for environment variab
 import 'pages/game_library_page.dart';
 import 'pages/game_details_page.dart'; // Add import for GameDetailsPage
 import 'widgets/about_screen.dart'; // Correct import for AboutScreen
+import 'pages/files_and_backup_page.dart'; // Add import for FilesAndBackupPage
 
 // Constants
 // const String appTitle = 'Wine Prefix Manager'; // Removed
@@ -176,8 +177,6 @@ class _MyAppState extends State<MyApp> {
             switch (settings.name) {
               case '/':
                 return MaterialPageRoute(builder: (context) => const MainScaffold());
-              case '/settings':
-                return MaterialPageRoute(builder: (context) => const SettingsPage());
               case '/game_details':
                 if (settings.arguments is GameEntry) {
                   final game = settings.arguments as GameEntry;
@@ -229,61 +228,8 @@ class _MyAppState extends State<MyApp> {
             }
           },
           routes: {
-            '/manage_prefixes': (context) => ManagePrefixesPage(
-              settings: _settings,
-              onAddExecutable: (prefix) async {
-                // Implementation needed
-              },
-              onShowCommonComponents: (context, prefix) async {
-                // Implementation needed
-              },
-              onDeletePrefix: (context, prefix) {
-                // Implementation needed
-              },
-              onDeleteExecutable: (context, prefix, exe) {
-                // Implementation needed
-              },
-              onRunExe: (prefix, exe) async {
-                // Implementation needed
-              },
-              onKillProcess: (prefix, exe) async {
-                // Implementation needed
-              },
-              runningProcesses: {},
-              onRunWinetricksGui: (prefix) async {
-                // Implementation needed
-              },
-              onRunInstaller: (prefix) async {
-                // Implementation needed
-              },
-              onExploreHostFiles: (prefix) async {
-                // Implementation needed
-              },
-              onRunWinecfg: (context, prefix) async {
-                // Implementation needed
-              },
-              onRenamePrefix: (context, prefix, newName) async {
-                // Implementation needed
-              },
-              onApplyControllerFix: (context, prefix) async {
-                // Implementation needed
-              },
-              onEditEnvVariables: (context, prefix) async {
-                // Implementation needed
-              },
-            ),
-            '/game_library': (context) => GameLibraryPage(
-              games: [], // Provide empty list for now
-              onLaunchGame: (prefix, exe) async {}, // Default empty function
-              onSaveLaunchOptions: (game, options) async {}, // Default empty function
-              onChangeCategory: (game, category) async {}, // Default empty function
-              onToggleWorkingStatus: (game, notWorking) async {}, // Default empty function
-              gameLaunchStates: {}, // Default empty map
-              onStopGame: (game) {}, // Default empty function
-            ),
-            '/logs': (context) => LogsPage(),
-            '/file_manager': (context) => FileManagerPage(game: null),
-            '/backup_manager': (context) => const BackupManagerPage(),
+            // Routes are now handled through main scaffold navigation
+            // Keeping only essential routes if needed by other parts of the app
           },
         );
       },
@@ -452,32 +398,17 @@ class _MainScaffoldState extends State<MainScaffold> {
           },
         );
       case 2:
-        // SettingsPage uses SettingsProvider, no need to pass settings
-        return SettingsPage(); 
+        return const PrefixManagementPage();
       case 3:
-        return LogsPage();
+        // Combined Files & Backup Manager - tabbed interface
+        return const FilesAndBackupPage();
       case 4:
-        return _buildFileManagerPage(context);
+        return LogsPage();
       case 5:
-        // About page (uses WelcomeScreen widget for now)
         return const AboutScreen();
-      case 6:
-        return const BackupManagerPage();
       default:
-        // Adjust default to reflect removed item, or ensure all valid indices are handled.
-        // If _selectedIndex can go beyond 4, this needs a valid default.
-        return HomePage(onNavigateToTab: navigateToTab); // Default to HomePage
+        return HomePage(onNavigateToTab: navigateToTab);
     }
-  }
-
-  Widget _buildFileManagerPage(BuildContext context) {
-    final prefixProvider = Provider.of<PrefixProvider>(context, listen: false);
-    // Use getAllGamesFromPrefixes() directly
-    final allGames = prefixProvider.getAllGamesFromPrefixes();
-    
-    // Even if no games are available, we still want to show the FileManagerPage
-    // to allow users to see any in-progress backup operations
-    return FileManagerPage(game: allGames.isNotEmpty ? allGames.first : null);
   }
 
   @override
@@ -520,9 +451,14 @@ class _MainScaffoldState extends State<MainScaffold> {
                       label: Text('Manage'),
                     ),
                     NavigationRailDestination(
-                      icon: Icon(Icons.settings_outlined),
-                      selectedIcon: Icon(Icons.settings),
-                      label: Text('Settings'),
+                      icon: Icon(Icons.create_new_folder_outlined),
+                      selectedIcon: Icon(Icons.create_new_folder),
+                      label: Text('Create/Manage'),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.folder_copy_outlined),
+                      selectedIcon: Icon(Icons.folder_copy),
+                      label: Text('Files & Backup'),
                     ),
                     NavigationRailDestination(
                       icon: Icon(Icons.article_outlined),
@@ -530,19 +466,9 @@ class _MainScaffoldState extends State<MainScaffold> {
                       label: Text('Logs'),
                     ),
                     NavigationRailDestination(
-                      icon: Icon(Icons.folder_copy_outlined),
-                      selectedIcon: Icon(Icons.folder_copy),
-                      label: Text('Files'),
-                    ),
-                    NavigationRailDestination(
                       icon: Icon(Icons.info_outline),
                       selectedIcon: Icon(Icons.info),
                       label: Text('About'),
-                    ),
-                    NavigationRailDestination(
-                      icon: Icon(Icons.backup_outlined),
-                      selectedIcon: Icon(Icons.backup),
-                      label: Text('Backup'),
                     ),
                   ],
                 ),

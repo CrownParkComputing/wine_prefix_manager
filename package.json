@@ -1,0 +1,17 @@
+{
+  "name": "wine-prefix-manager-website",
+  "version": "1.0.0",
+  "description": "Wine Prefix Manager Website",
+  "main": "website/index.html",
+  "scripts": {
+    "start": "serve website -p $PORT",
+    "build": "echo 'Static site - no build needed'",
+    "dev": "serve website -p 3000"
+  },
+  "dependencies": {
+    "serve": "^14.2.1"
+  },
+  "engines": {
+    "node": ">=16"
+  }
+} 
