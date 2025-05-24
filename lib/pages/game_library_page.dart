@@ -8,7 +8,6 @@ import '../widgets/game_info_modal.dart'; // Import GameInfoModal
 import '../widgets/game_settings_modal.dart'; // Import GameSettingsModal
 import '../services/ui_action_service.dart'; // Import UIActionService for addExecutableToPrefix
 import 'package:provider/provider.dart'; // Import Provider to access UIActionService
-import 'package:path/path.dart' as p; // Import for path manipulation
 
 class GameLibraryPage extends StatelessWidget {
   final List<GameEntry> games;

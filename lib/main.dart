@@ -30,6 +30,7 @@ import 'pages/manage_prefixes_page.dart';
 import 'pages/settings_page.dart';
 import 'pages/logs_page.dart';
 import 'pages/file_manager_page.dart';
+import 'pages/backup_manager_page.dart';
 import 'widgets/rename_prefix_dialog.dart'; // Import RenamePrefixDialog
 import 'widgets/env_variables_dialog.dart'; // Add import for environment variables dialog
 import 'pages/game_library_page.dart';
@@ -282,6 +283,7 @@ class _MyAppState extends State<MyApp> {
             ),
             '/logs': (context) => LogsPage(),
             '/file_manager': (context) => FileManagerPage(game: null),
+            '/backup_manager': (context) => const BackupManagerPage(),
           },
         );
       },
@@ -459,6 +461,8 @@ class _MainScaffoldState extends State<MainScaffold> {
       case 5:
         // About page (uses WelcomeScreen widget for now)
         return const AboutScreen();
+      case 6:
+        return const BackupManagerPage();
       default:
         // Adjust default to reflect removed item, or ensure all valid indices are handled.
         // If _selectedIndex can go beyond 4, this needs a valid default.
@@ -534,6 +538,11 @@ class _MainScaffoldState extends State<MainScaffold> {
                       icon: Icon(Icons.info_outline),
                       selectedIcon: Icon(Icons.info),
                       label: Text('About'),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.backup_outlined),
+                      selectedIcon: Icon(Icons.backup),
+                      label: Text('Backup'),
                     ),
                   ],
                 ),
