@@ -46,16 +46,27 @@ app.*.map.json
 
 # Wine builds and installations (should not be in source control)
 wine_builds/
+**/wine_builds/
 proton_builds/
+**/proton_builds/
 .wine_prefixes/
+**/wine_prefixes/
 
-# Build and release artifacts
+# Build and release artifacts (AppImages should only exist in GitHub releases)
 *.AppImage
 appimage_temp/
+appimage/
+**/appimage/
 *.tar.gz
+*.tar.xz
 *.zip
 *.deb
 *.rpm
+
+# Wine build archives and extracted files
+GE-Proton*.tar.gz
+wine-*.tar.xz
+wine-proton-*.tar.xz
 
 # Development files
 *.tmp

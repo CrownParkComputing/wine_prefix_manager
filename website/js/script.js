@@ -44,7 +44,7 @@ window.addEventListener('scroll', () => {
 async function fetchLatestRelease() {
     try {
         // Replace 'your-username' with actual GitHub username
-        const response = await fetch('https://api.github.com/repos/your-username/wine_prefix_manager/releases/latest');
+        const response = await fetch('https://api.github.com/repos/CrownParkComputing/wine_prefix_manager/releases/latest');
         const release = await response.json();
         
         if (release && release.tag_name && release.assets) {
@@ -77,25 +77,25 @@ async function fetchLatestRelease() {
         }
     } catch (error) {
         console.log('Could not fetch latest release info:', error);
-        // Fallback to local AppImage if available
+        // Fallback to GitHub releases page if API fails
         setFallbackDownload();
     }
 }
 
-// Fallback download function for local AppImage
+// Fallback download function - direct to GitHub releases
 function setFallbackDownload() {
     const downloadBtn = document.getElementById('download-btn');
     if (downloadBtn) {
-        // Try to find local AppImage file
-        const localAppImages = [
-            '../WinePrefixManager-3.1.4-x86_64.AppImage',
-            '../WinePrefixManager-3.1.3-x86_64.AppImage',
-            '../WinePrefixManager-3.1.2-x86_64.AppImage'
-        ];
+        // Direct users to GitHub releases page if API fails
+        downloadBtn.href = 'https://github.com/CrownParkComputing/wine_prefix_manager/releases/latest';
+        downloadBtn.innerHTML = '<i class="fab fa-github"></i> View Latest Release';
+        downloadBtn.target = '_blank';
         
-        // Use the first one as fallback
-        downloadBtn.href = localAppImages[0];
-        downloadBtn.setAttribute('download', 'WinePrefixManager-3.1.4-x86_64.AppImage');
+        // Update version to show it's a fallback
+        const versionElement = document.getElementById('latest-version');
+        if (versionElement) {
+            versionElement.textContent = 'Latest';
+        }
     }
 }
 
