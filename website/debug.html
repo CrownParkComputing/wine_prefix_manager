@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Download</title>
+</head>
+<body>
+    <h1>Debug Download Functionality</h1>
+    <button id="test-api">Test GitHub API</button>
+    <button id="test-download">Test Download Button</button>
+    <div id="results"></div>
+    
+    <script>
+        document.getElementById('test-api').addEventListener('click', async () => {
+            const results = document.getElementById('results');
+            results.innerHTML = 'Testing GitHub API...';
+            
+            try {
+                const response = await fetch('https://api.github.com/repos/CrownParkComputing/wine_prefix_manager/releases/latest');
+                const release = await response.json();
+                
+                results.innerHTML = `
+                    <h3>API Response:</h3>
+                    <p>Tag: ${release.tag_name}</p>
+                    <p>Assets: ${release.assets.length}</p>
+                    <p>AppImage: ${release.assets.find(a => a.name.includes('.AppImage'))?.name || 'Not found'}</p>
+                    <p>Download URL: ${release.assets.find(a => a.name.includes('.AppImage'))?.browser_download_url || 'Not found'}</p>
+                `;
+            } catch (error) {
+                results.innerHTML = `<p>Error: ${error.message}</p>`;
+            }
+        });
+        
+        document.getElementById('test-download').addEventListener('click', () => {
+            const downloadBtn = document.getElementById('download-btn');
+            const results = document.getElementById('results');
+            
+            if (downloadBtn) {
+                results.innerHTML = `
+                    <h3>Download Button State:</h3>
+                    <p>Href: ${downloadBtn.href}</p>
+                    <p>Download attr: ${downloadBtn.getAttribute('download')}</p>
+                `;
+            } else {
+                results.innerHTML = '<p>Download button not found!</p>';
+            }
+        });
+    </script>
+</body>
+</html> 

@@ -43,15 +43,25 @@ window.addEventListener('scroll', () => {
 // Get latest release info from GitHub API and update download button
 async function fetchLatestRelease() {
     try {
+        console.log('Fetching latest release...');
         // Replace 'your-username' with actual GitHub username
         const response = await fetch('https://api.github.com/repos/CrownParkComputing/wine_prefix_manager/releases/latest');
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
         const release = await response.json();
         
+        console.log('Release data:', release);
+        
         if (release && release.tag_name && release.assets) {
+            console.log('Release found:', release.tag_name);
             // Update version number
             const versionElement = document.getElementById('latest-version');
             if (versionElement) {
                 versionElement.textContent = release.tag_name;
+                console.log('Updated version to:', release.tag_name);
             }
             
             // Find AppImage asset
@@ -59,12 +69,19 @@ async function fetchLatestRelease() {
                 asset.name.includes('.AppImage') && asset.name.includes('x86_64')
             );
             
+            console.log('AppImage asset:', appImageAsset);
+            
             if (appImageAsset) {
                 // Update download button
                 const downloadBtn = document.getElementById('download-btn');
                 if (downloadBtn) {
                     downloadBtn.href = appImageAsset.browser_download_url;
                     downloadBtn.setAttribute('download', appImageAsset.name);
+                    downloadBtn.removeAttribute('target'); // Remove target=_blank for direct download
+                    console.log('Updated download button:', {
+                        href: downloadBtn.href,
+                        download: downloadBtn.getAttribute('download')
+                    });
                 }
                 
                 // Update file size
@@ -72,11 +89,18 @@ async function fetchLatestRelease() {
                 if (sizeElement && appImageAsset.size) {
                     const sizeInMB = (appImageAsset.size / (1024 * 1024)).toFixed(1);
                     sizeElement.textContent = `~${sizeInMB}MB`;
+                    console.log('Updated file size to:', sizeInMB + 'MB');
                 }
+            } else {
+                console.error('No AppImage asset found');
+                setFallbackDownload();
             }
+        } else {
+            console.error('Invalid release data');
+            setFallbackDownload();
         }
     } catch (error) {
-        console.log('Could not fetch latest release info:', error);
+        console.error('Error fetching latest release:', error);
         // Fallback to GitHub releases page if API fails
         setFallbackDownload();
     }
@@ -84,18 +108,22 @@ async function fetchLatestRelease() {
 
 // Fallback download function - direct to GitHub releases
 function setFallbackDownload() {
+    console.log('Setting fallback download');
     const downloadBtn = document.getElementById('download-btn');
     if (downloadBtn) {
         // Direct users to GitHub releases page if API fails
         downloadBtn.href = 'https://github.com/CrownParkComputing/wine_prefix_manager/releases/latest';
         downloadBtn.innerHTML = '<i class="fab fa-github"></i> View Latest Release';
         downloadBtn.target = '_blank';
+        downloadBtn.removeAttribute('download');
         
         // Update version to show it's a fallback
         const versionElement = document.getElementById('latest-version');
         if (versionElement) {
             versionElement.textContent = 'Latest';
         }
+        
+        console.log('Fallback download set:', downloadBtn.href);
     }
 }
 
@@ -116,6 +144,8 @@ const observer = new IntersectionObserver((entries) => {
 
 // Apply animation to elements
 document.addEventListener('DOMContentLoaded', () => {
+    console.log('DOM loaded, initializing...');
+    
     const animatedElements = document.querySelectorAll('.feature-card, .screenshot-item, .download-box, .credit-card');
     
     animatedElements.forEach(el => {
@@ -126,6 +156,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     
     // Fetch latest release info
+    console.log('Fetching latest release info...');
     fetchLatestRelease();
     
     // Initialize hero carousel
@@ -164,7 +195,27 @@ document.addEventListener('DOMContentLoaded', () => {
     
     if (downloadBtn) {
         downloadBtn.addEventListener('click', (e) => {
-            if (!downloadBtn.href || downloadBtn.href === '#') {
+            console.log('Download button clicked');
+            console.log('Current href:', downloadBtn.href);
+            console.log('Download attribute:', downloadBtn.getAttribute('download'));
+            
+            // Check if we have a valid GitHub download URL
+            if (downloadBtn.href && downloadBtn.href.includes('github.com') && downloadBtn.href.includes('releases/download')) {
+                console.log('Valid GitHub download URL found, proceeding with download');
+                // Add download tracking
+                downloadBtn.innerHTML = '<i class="fas fa-download"></i> Downloading...';
+                
+                setTimeout(() => {
+                    downloadBtn.innerHTML = '<i class="fas fa-check"></i> Download Started';
+                    setTimeout(() => {
+                        downloadBtn.innerHTML = '<i class="fas fa-download"></i> Download AppImage';
+                    }, 2000);
+                }, 500);
+                
+                // Let the browser handle the download
+                return true;
+            } else {
+                console.log('No valid download URL, preventing default and fetching...');
                 e.preventDefault();
                 downloadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading...';
                 
@@ -174,25 +225,17 @@ document.addEventListener('DOMContentLoaded', () => {
                         downloadBtn.innerHTML = '<i class="fas fa-download"></i> Download AppImage';
                     }, 1000);
                 });
-                return;
+                return false;
             }
-            
-            // Add download tracking
-            downloadBtn.innerHTML = '<i class="fas fa-download"></i> Downloading...';
-            
-            setTimeout(() => {
-                downloadBtn.innerHTML = '<i class="fas fa-check"></i> Download Started';
-                setTimeout(() => {
-                    downloadBtn.innerHTML = '<i class="fas fa-download"></i> Download AppImage';
-                }, 2000);
-            }, 500);
         });
+    } else {
+        console.error('Download button not found!');
     }
 });
 
 // Add smooth reveal animation for hero elements
 document.addEventListener('DOMContentLoaded', () => {
-    const heroElements = document.querySelectorAll('.hero-title, .hero-description, .hero-buttons, .hero-stats');
+    const heroElements = document.querySelectorAll('.hero-title, .hero-description, .hero-buttons, .hero-stats, .product-hunt-badge');
     
     heroElements.forEach((el, index) => {
         el.style.opacity = '0';

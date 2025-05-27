@@ -275,6 +275,32 @@ body {
     color: var(--text-muted);
 }
 
+/* ProductHunt Badge */
+.product-hunt-badge {
+    margin-top: var(--spacing-xl);
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+}
+
+.product-hunt-badge a {
+    display: inline-block;
+    transition: var(--transition-normal);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+
+.product-hunt-badge a:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+}
+
+.product-hunt-badge img {
+    display: block;
+    border-radius: var(--radius-md);
+    transition: var(--transition-normal);
+}
+
 .hero-image {
     flex: 1;
     display: flex;
@@ -876,6 +902,16 @@ body {
         justify-content: center;
     }
     
+    .product-hunt-badge {
+        justify-content: center;
+        margin-top: var(--spacing-lg);
+    }
+    
+    .product-hunt-badge img {
+        max-width: 200px;
+        height: auto;
+    }
+    
     .features-grid {
         grid-template-columns: 1fr;
     }
@@ -963,6 +999,11 @@ body {
     .indicator {
         width: 6px;
         height: 6px;
+    }
+    
+    .product-hunt-badge img {
+        max-width: 180px;
+        height: auto;
     }
 }
 
