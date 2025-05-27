@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart'; // Import file_picker
+import 'dart:io'; // Added for Platform.environment
+import 'package:path/path.dart' as path; // Added for path.join
 import '../models/settings.dart';
 import '../services/cover_art_service.dart'; // Import CoverArtService
 import '../services/log_service.dart'; // Import LogService
 import '../services/power_management_service.dart'; // Import PowerManagementService
 import '../theme/theme_provider.dart';
 import '../providers/settings_provider.dart';
+import '../widgets/json_viewer_page.dart'; // Import the JSON viewer
 
 class SettingsPage extends StatefulWidget {
   final Function? onSettingsChanged;
@@ -211,16 +214,20 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
   }
 
   Future<void> _pickGameLibraryPath() async {
-    final outputFile = await FilePicker.platform.getDirectoryPath(
-      dialogTitle: 'Select Game Library Path',
+    // Corrected to pick a file, not a directory, for the game library path
+    String? selectedFile = await FilePicker.platform.saveFile(
+      dialogTitle: 'Select Game Library JSON File',
+      fileName: '.wine_prefix_manager.json',
+      allowedExtensions: ['json'],
+      type: FileType.custom,
       initialDirectory: _gameLibraryPathController.text.isNotEmpty
-          ? _gameLibraryPathController.text
-          : _settings?.prefixDirectory,
+          ? path.dirname(_gameLibraryPathController.text) // Use parent directory if path exists
+          : (_settings?.prefixDirectory ?? Platform.environment['HOME']), // Default to prefix or home
     );
 
-    if (outputFile != null) {
+    if (selectedFile != null) {
       setState(() {
-        _gameLibraryPathController.text = outputFile;
+        _gameLibraryPathController.text = selectedFile;
       });
     }
   }
@@ -240,6 +247,18 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
   }
 
   Widget _buildGeneralSettingsTab() {
+    String defaultGameLibPath = 'Loading...';
+    try {
+      final homeDir = Platform.environment['HOME'];
+      if (homeDir != null) {
+        defaultGameLibPath = path.join(homeDir, '.wine_prefix_manager.json');
+      } else {
+        defaultGameLibPath = '.wine_prefix_manager.json (HOME not found)';
+      }
+    } catch (e) {
+        defaultGameLibPath = 'Error getting default path';
+    }
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
       child: Column(
@@ -258,18 +277,67 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
               return null;
             },
             onPick: _pickPrefixDirectory,
+            isFilePicker: false,
           ),
           _buildDirectoryPicker(
             label: 'Game Library Path (Optional)',
             controller: _gameLibraryPathController,
-            dialogTitle: 'Select Game Library Path',
+            dialogTitle: 'Select Game Library JSON File',
             onPick: _pickGameLibraryPath,
+            helperText: 'Defaults to: $defaultGameLibPath',
+            isFilePicker: true, // Specify this is for a file
+            trailingWidget: IconButton(
+              icon: const Icon(Icons.visibility),
+              tooltip: 'View Game Library JSON',
+              onPressed: () async {
+                final settings = Provider.of<SettingsProvider>(context, listen: false).settings;
+                String gameLibPath;
+
+                if (settings.gameLibraryPath != null && settings.gameLibraryPath!.isNotEmpty) {
+                  gameLibPath = settings.gameLibraryPath!;
+                } else {
+                  final homeDir = Platform.environment['HOME'];
+                  if (homeDir == null) {
+                    if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Error: HOME environment variable not set.')),
+                        );
+                    }
+                    return;
+                  }
+                  gameLibPath = path.join(homeDir, '.wine_prefix_manager.json');
+                }
+                
+                // Ensure the directory for the game library path exists if it's custom and path is set
+                // This logic is more for safety, as the viewer itself checks for file existence.
+                if (settings.gameLibraryPath != null && settings.gameLibraryPath!.isNotEmpty) {
+                  try {
+                    final dir = Directory(path.dirname(settings.gameLibraryPath!));
+                    if (!await dir.exists()) {
+                      // We generally shouldn't create the directory here if the file doesn't exist.
+                      // The PrefixStorageService handles directory creation when saving.
+                      // The viewer will report if the file isn't found.
+                    }
+                  } catch (e) {
+                    print('Error accessing directory for game library path: $e');
+                  }
+                }
+
+                if (mounted) {
+                    showDialog(
+                        context: context,
+                        builder: (_) => JsonViewerPage(filePath: gameLibPath),
+                    );
+                }
+              },
+            ),
           ),
            _buildDirectoryPicker(
             label: 'Backup Path (Optional)',
             controller: _backupPathController,
             dialogTitle: 'Select Backup Path',
             onPick: _pickBackupPath,
+            isFilePicker: false,
           ),
           const SizedBox(height: 20),
           const Text('Cover Art Settings', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
@@ -467,6 +535,9 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
     required String dialogTitle,
     String? Function(String?)? validator,
     required Future<void> Function() onPick,
+    String? helperText,
+    Widget? trailingWidget,
+    bool isFilePicker = false, // Added to distinguish file from directory
   }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
@@ -477,21 +548,26 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
               controller: controller,
               decoration: InputDecoration(
                 labelText: label,
+                helperText: helperText,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8.0),
                 ),
               ),
               validator: validator,
-              readOnly: true, // Make it read-only to force use of button
-              onTap: onPick, // Also allow tap on field to open picker
+              readOnly: true, 
+              onTap: onPick, 
             ),
           ),
           const SizedBox(width: 8),
           IconButton(
-            icon: const Icon(Icons.folder_open),
-            tooltip: 'Browse',
+            icon: Icon(isFilePicker ? Icons.attach_file : Icons.folder_open), // Change icon based on type
+            tooltip: isFilePicker ? 'Select File' : 'Browse Directory',
             onPressed: onPick,
           ),
+          if (trailingWidget != null) ...[
+            const SizedBox(width: 4),
+            trailingWidget,
+          ],
         ],
       ),
     );
