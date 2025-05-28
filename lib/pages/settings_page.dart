@@ -23,8 +23,6 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _prefixDirController;
-  late TextEditingController _igdbClientIdController;
-  late TextEditingController _igdbClientSecretController;
   late TextEditingController _gameLibraryPathController;
   late TextEditingController _backupPathController; // Add a controller for the backup path
   Settings? _settings;
@@ -41,8 +39,6 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
   // Create a dummy settings instance to access default URL values
   final _defaultSettingsInstance = Settings(
     prefixDirectory: '', // Dummy value, not used for defaults here
-    igdbClientId: '', // Dummy value
-    igdbClientSecret: '', // Dummy value
     categories: [], // Dummy value
     igdbImageBaseUrl: '' // Dummy value, actual default taken from constructor if needed elsewhere
   );
@@ -53,8 +49,6 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
     _tabController = TabController(length: 2, vsync: this);
     // Initialize controllers with empty strings
     _prefixDirController = TextEditingController();
-    _igdbClientIdController = TextEditingController();
-    _igdbClientSecretController = TextEditingController();
     _gameLibraryPathController = TextEditingController();
     _backupPathController = TextEditingController();
     // URL settings controllers
@@ -70,8 +64,6 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
   void dispose() {
     // Dispose controllers
     _prefixDirController.dispose();
-    _igdbClientIdController.dispose();
-    _igdbClientSecretController.dispose();
     _gameLibraryPathController.dispose();
     _backupPathController.dispose();
     // URL settings controllers
@@ -102,8 +94,6 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
     setState(() {
       _settings = settings;
       _prefixDirController.text = settings.prefixDirectory;
-      _igdbClientIdController.text = settings.igdbClientId;
-      _igdbClientSecretController.text = settings.igdbClientSecret;
       _selectedCoverSize = settings.coverSize;
       _gameLibraryPathController.text = settings.gameLibraryPath ?? '';
       _backupPathController.text = settings.backupPath ?? ''; // Add backup path to the initialization
@@ -130,8 +120,6 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
       // Create new settings object, only updating fields managed by this page
       final settingsToSave = currentSettings.copyWith(
         prefixDirectory: _prefixDirController.text.trim(),
-        igdbClientId: _igdbClientIdController.text.trim(),
-        igdbClientSecret: _igdbClientSecretController.text.trim(),
         coverSize: _selectedCoverSize,
         gameLibraryPath: _gameLibraryPathController.text.trim().isEmpty
             ? null
@@ -459,42 +447,12 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
         children: [
           const Text('IGDB API Settings (for Game Information)', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const Divider(),
-          TextFormField(
-            controller: _igdbClientIdController,
-            decoration: const InputDecoration(labelText: 'IGDB Client ID'),
-            validator: (value) {
-              // Optional: Add validation for Client ID format if known
-              return null;
-            },
-          ),
-          const SizedBox(height: 10),
-          TextFormField(
-            controller: _igdbClientSecretController,
-            decoration: const InputDecoration(labelText: 'IGDB Client Secret'),
-            obscureText: true,
-            validator: (value) {
-              // Optional: Add validation for Client Secret format if known
-              return null;
-            },
-          ),
+          const Text('IGDB Client ID and Secret are now configured globally in the application.'),
           const SizedBox(height: 20),
-          const Text('Other API & URL Settings', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          const Divider(),
-          _buildUrlSettingField(
-              controller: _twitchOAuthUrlController, 
-              label: 'Twitch OAuth URL',
-              hint: 'e.g., https://id.twitch.tv/oauth2/token'
-          ),
-          _buildUrlSettingField(
-              controller: _igdbApiBaseUrlController, 
-              label: 'IGDB API Base URL',
-              hint: 'e.g., https://api.igdb.com/v4'
-          ),
-          _buildUrlSettingField(
-              controller: _igdbImageBaseUrlController, 
-              label: 'IGDB Image Base URL',
-              hint: 'e.g., https://images.igdb.com/igdb/image/upload'
-          ),
+          const Text('All IGDB API URLs are now configured globally for optimal performance.'),
+          const SizedBox(height: 16),
+          const Text('No additional configuration is required for IGDB integration.', 
+                     style: TextStyle(fontStyle: FontStyle.italic)),
         ],
       ),
     );

@@ -197,69 +197,106 @@ class WinePrefixCreationService {
   }
 
   Future<String> _getDownloadDirectory() async {
-    // Check if we're running from an AppImage (read-only mount)
-    final currentPath = Directory.current.absolute.path;
-    print('GET_DOWNLOAD_DIR_DEBUG: (PRINT) Directory.current.absolute.path = $currentPath');
-    
-    // Detect AppImage environment by checking if current path is a tmp mount or contains AppImage indicators
-    final isAppImage = currentPath.startsWith('/tmp/mount_') || 
-                      Platform.environment.containsKey('APPIMAGE') ||
-                      Platform.environment.containsKey('APPDIR');
-    
-    String resultPath;
-    if (isAppImage) {
-      // Use writable directory in user's home for AppImage
-      final homeDir = Platform.environment['HOME'];
-      if (homeDir != null) {
-        resultPath = path.join(homeDir, '.local', 'share', 'wine_prefix_manager', 'wine_builds');
-      } else {
-        // Fallback to temp directory if HOME is not available
-        resultPath = path.join('/tmp', 'wine_prefix_manager', 'wine_builds');
-      }
-      print('GET_DOWNLOAD_DIR_DEBUG: (PRINT) AppImage detected, using writable path: $resultPath');
+    final String appName = 'wine_prefix_manager';
+    final String buildsSubDir = 'downloaded_builds';
+    final homeDir = Platform.environment['HOME'];
+
+    String baseDir;
+
+    if (homeDir != null && homeDir.isNotEmpty) {
+      // Preferred: User's local share directory
+      baseDir = path.join(homeDir, '.local', 'share', appName, buildsSubDir);
     } else {
-      // Normal execution - use project directory
-      resultPath = path.join(currentPath, "wine_builds");
-      print('GET_DOWNLOAD_DIR_DEBUG: (PRINT) resultPath from path.join("$currentPath", "wine_builds") = $resultPath');
+      // Fallback: System's temporary directory (less ideal for persistence)
+      // Consider logging a warning if this happens.
+      _logService.log('HOME environment variable not set. Using temporary directory for downloads.', LogLevel.warning);
+      final tempDir = await Directory.systemTemp.createTemp('${appName}_downloads_');
+      baseDir = tempDir.path; 
+      // Note: Builds in temp might not persist across reboots or sessions.
+      // This is a fallback; the primary expectation is HOME is available.
     }
     
-    return resultPath;
+    // Ensure the directory exists
+    try {
+      final dir = Directory(baseDir);
+      if (!await dir.exists()) {
+        await dir.create(recursive: true);
+        _logService.log('Created download directory: $baseDir');
+      }
+    } catch (e) {
+      _logService.log('Error creating download directory $baseDir: $e', LogLevel.error);
+      // If creation fails, fall back to a truly temporary system dir as a last resort for this session
+      final tempDir = await Directory.systemTemp.createTemp('wpm_dl_fallback_');
+      return tempDir.path;
+    }
+
+    _logService.log('Using download directory: $baseDir');
+    return baseDir;
   }
 
   String _getPrefixPath(Settings settings, String prefixName) {
-    String baseDir;
-    if (settings.prefixDirectory.isNotEmpty && Directory(settings.prefixDirectory).existsSync()) {
-      baseDir = settings.prefixDirectory;
-    } else {
-      final homeDir = Platform.environment['HOME'];
-      if (homeDir != null) {
-        baseDir = path.join(homeDir, '.local', 'share', 'wineprefixes');
-      } else {
-        // Check if we're running from an AppImage
-        final currentPath = Directory.current.absolute.path;
-        final isAppImage = currentPath.startsWith('/tmp/mount_') || 
-                          Platform.environment.containsKey('APPIMAGE') ||
-                          Platform.environment.containsKey('APPDIR');
-        
-        if (isAppImage) {
-          // Use writable temp directory for AppImage when HOME is not set
-          baseDir = path.join('/tmp', 'wine_prefix_manager', 'wineprefixes');
-        } else {
-          // Use a relative path within the project if HOME is not set and not in AppImage
-          baseDir = path.join(Directory.current.absolute.path, 'wineprefixes');
+    final homeDir = Platform.environment['HOME'];
+    // Initialize with a fallback to ensure it's always assigned.
+    String baseDirToUse = path.join(Directory.systemTemp.path, 'wine_prefix_manager', 'prefixes');
+    _logService.log('Initial fallback for baseDirToUse: $baseDirToUse (will be overridden by preferred paths if available)', LogLevel.debug);
+
+    bool useCustomPath = false;
+
+    // Priority 1: User-defined absolute path in settings
+    if (settings.prefixDirectory.isNotEmpty) {
+      if (path.isAbsolute(settings.prefixDirectory)) {
+        String userDefinedPath = settings.prefixDirectory;
+        try {
+          final dir = Directory(userDefinedPath);
+          if (!dir.existsSync()) {
+            dir.createSync(recursive: true);
+            _logService.log('Created user-specified absolute prefix directory: $userDefinedPath');
+          }
+          baseDirToUse = userDefinedPath; // Assign if valid and created/exists
+          useCustomPath = true;
+          _logService.log('Using user-defined absolute prefix directory: $baseDirToUse');
+        } catch (e) {
+          _logService.log('Error creating/accessing user-specified absolute prefix directory $userDefinedPath: $e. Falling back.', LogLevel.error);
+          // useCustomPath remains false, will fall back to default logic below
         }
-        _logService.log("Warning: HOME environment variable not set. Using path for prefixes: $baseDir", LogLevel.warning);
-      }
-      if (settings.prefixDirectory.isNotEmpty) {
-        // Log if the specified directory didn't exist and we fell back
-        _logService.log("Warning: Specified prefix directory '${settings.prefixDirectory}' does not exist or is invalid. Falling back to '$baseDir'.", LogLevel.warning);
+      } else {
+         _logService.log('Warning: settings.prefixDirectory ("${settings.prefixDirectory}") is relative. Ignoring and using default app data location.', LogLevel.warning);
       }
     }
+
+    // Priority 2: Default app data path if custom path not used or failed
+    if (!useCustomPath) {
+        if (homeDir != null && homeDir.isNotEmpty) {
+            baseDirToUse = path.join(homeDir, '.local', 'share', 'wine_prefix_manager', 'prefixes');
+            _logService.log('Using default app data directory for Wine prefixes: $baseDirToUse');
+        } else {
+            _logService.log('Warning: HOME environment variable not set. Using temporary directory for Wine prefixes (already set as initial fallback): $baseDirToUse', LogLevel.warning);
+            // baseDirToUse is already set to the temp path as an initial fallback
+        }
+    }
     
-    // Create the type-specific subfolder
-    final typeDir = path.join(baseDir, 'wine');
-    Directory(typeDir).createSync(recursive: true);
+    // Ensure the final chosen base directory exists
+    try {
+      final dir = Directory(baseDirToUse);
+      if (!dir.existsSync()) {
+        dir.createSync(recursive: true);
+        _logService.log('Ensured final base Wine prefix directory exists: $baseDirToUse');
+      }
+    } catch (e) {
+      _logService.log('Critical Error: Could not create final base Wine prefix directory $baseDirToUse: $e.', LogLevel.error);
+      throw Exception('Failed to create final base Wine prefix directory: $baseDirToUse. Error: $e');
+    }
     
+    // Create the type-specific subfolder (e.g., .../prefixes/wine/)
+    final typeDir = path.join(baseDirToUse, 'wine');
+    try {
+        Directory(typeDir).createSync(recursive: true);
+    } catch (e) {
+        _logService.log('Critical Error: Could not create type-specific Wine prefix directory $typeDir: $e.', LogLevel.error);
+        throw Exception('Failed to create type-specific Wine prefix directory: $typeDir. Error: $e');
+    }
+    
+    _logService.log('Final Wine prefix path for "$prefixName" will be under: $typeDir');
     return path.join(typeDir, prefixName);
   }
 

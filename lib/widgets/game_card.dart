@@ -168,7 +168,7 @@ class GameCard extends StatelessWidget {
               icon: Icon(
                 Icons.info_outline,
                 color: Colors.white,
-                size: _getRegularIconSize(),
+                size: 16,
               ),
               tooltip: 'Game Details',
               padding: EdgeInsets.all(_getSmallPadding() - 2),
@@ -201,7 +201,7 @@ class GameCard extends StatelessWidget {
               icon: Icon(
                 Icons.settings,
                 color: Colors.white,
-                size: _getRegularIconSize(),
+                size: 16,
               ),
               tooltip: 'Game Settings',
               padding: EdgeInsets.all(_getSmallPadding() - 2),
@@ -235,7 +235,7 @@ class GameCard extends StatelessWidget {
                 icon: Icon(
                   Icons.delete_outline,
                   color: Colors.white,
-                  size: _getRegularIconSize(),
+                  size: 16,
                 ),
                 tooltip: 'Delete Game',
                 padding: EdgeInsets.all(_getSmallPadding() - 2),

@@ -65,6 +65,7 @@ class PrefixProvider with ChangeNotifier {
     if (_isLoading && !forceReload) return;
     
     _setLoading(true, forceReload ? "Refreshing prefixes..." : "Loading prefixes...");
+    print('[DEBUG PrefixProvider] Starting loadPrefixes');
     try {
       if (_settings == null) throw Exception("Settings not loaded before loading prefixes.");
       
@@ -72,12 +73,17 @@ class PrefixProvider with ChangeNotifier {
       // await _cleanupInvalidPrefixes();
       
       List<WinePrefix> loadedPrefixes = await _storageService.loadPrefixes(_settings!);
+      print('[DEBUG PrefixProvider] Loaded ${loadedPrefixes.length} prefixes from storage');
+      for (final prefix in loadedPrefixes) {
+        print('[DEBUG PrefixProvider] - Storage: ${prefix.name} (${prefix.type.name}) at ${prefix.path}');
+      }
 
       // Clean up orphaned JSON entries (prefixes that no longer have directories)
       await _cleanupOrphanedJsonEntries(loadedPrefixes);
       
       // Reload after cleanup
       loadedPrefixes = await _storageService.loadPrefixes(_settings!);
+      print('[DEBUG PrefixProvider] After cleanup: ${loadedPrefixes.length} prefixes');
 
       bool prefixesUpdated = false;
       List<WinePrefix> checkedPrefixes = [];
@@ -103,6 +109,10 @@ class PrefixProvider with ChangeNotifier {
       }
 
       _prefixes = checkedPrefixes;
+      print('[DEBUG PrefixProvider] Set _prefixes to ${_prefixes.length} items');
+      for (final prefix in _prefixes) {
+        print('[DEBUG PrefixProvider] - Final: ${prefix.name} (${prefix.type.name}) with ${prefix.exeEntries.length} executables');
+      }
 
       if (prefixesUpdated) {
         _updateStatus('Prefixes loaded. Some executables marked as not working (file not found).');
@@ -112,11 +122,16 @@ class PrefixProvider with ChangeNotifier {
       }
 
       await checkAndDownloadMissingImages(); // Check images after loading
+      print('[DEBUG PrefixProvider] About to call notifyListeners()');
+      notifyListeners();
+      print('[DEBUG PrefixProvider] Called notifyListeners()');
     } catch (e) {
       _updateStatus('Error loading prefixes: $e');
+      print('[DEBUG PrefixProvider] Error loading prefixes: $e');
       // debugPrint('Error loading prefixes: $e');
     } finally {
       _setLoading(false);
+      print('[DEBUG PrefixProvider] loadPrefixes completed');
     }
   }
 
@@ -186,6 +201,7 @@ class PrefixProvider with ChangeNotifier {
     _setLoading(true, "Scanning for prefixes...");
     try {
       final scannedPrefixes = await _managementService.scanForPrefixes(_settings!);
+      
       bool updated = false;
       int addedCount = 0;
       List<WinePrefix> currentPrefixes = List.from(_prefixes); // Makes a copy

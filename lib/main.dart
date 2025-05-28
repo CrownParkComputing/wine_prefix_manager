@@ -153,8 +153,7 @@ class _MyAppState extends State<MyApp> {
     _logService.log('Wine Builds API URL: ${_settings.wineBuildsApiUrl}'); // FIX: Use wineBuildsApiUrl
     _logService.log('Proton GE API URL: ${_settings.protonGeApiUrl}'); // FIX: Use protonGeApiUrl (example)
     _logService.log('Game Library Path: ${_settings.gameLibraryPath ?? 'Default'}');
-    _logService.log('IGDB Client ID Set: ${_settings.igdbClientId.isNotEmpty}');
-    _logService.log('IGDB Client Secret Set: ${_settings.igdbClientSecret.isNotEmpty}');
+    _logService.log('Using global IGDB Client ID and Secret.');
     _logService.log('IGDB Image Base URL: ${_settings.igdbImageBaseUrl}');
     _logService.log('Twitch OAuth URL: ${_settings.twitchOAuthUrl}');
     _logService.log('IGDB API Base URL: ${_settings.igdbApiBaseUrl}');

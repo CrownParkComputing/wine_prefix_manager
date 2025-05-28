@@ -483,12 +483,7 @@ class _GameLibrarySettingsDialog extends StatefulWidget {
 
 class _GameLibrarySettingsDialogState extends State<_GameLibrarySettingsDialog> {
   final _formKey = GlobalKey<FormState>();
-  late TextEditingController _igdbClientIdController;
-  late TextEditingController _igdbClientSecretController;
   late TextEditingController _gameLibraryPathController;
-  late TextEditingController _igdbImageBaseUrlController;
-  late TextEditingController _igdbApiBaseUrlController;
-  late TextEditingController _twitchOAuthUrlController;
   
   CoverSize _selectedCoverSize = CoverSize.medium;
   bool _isLoading = false;
@@ -496,24 +491,14 @@ class _GameLibrarySettingsDialogState extends State<_GameLibrarySettingsDialog> 
   @override
   void initState() {
     super.initState();
-    _igdbClientIdController = TextEditingController();
-    _igdbClientSecretController = TextEditingController();
     _gameLibraryPathController = TextEditingController();
-    _igdbImageBaseUrlController = TextEditingController();
-    _igdbApiBaseUrlController = TextEditingController();
-    _twitchOAuthUrlController = TextEditingController();
     
     _loadSettings();
   }
 
   @override
   void dispose() {
-    _igdbClientIdController.dispose();
-    _igdbClientSecretController.dispose();
     _gameLibraryPathController.dispose();
-    _igdbImageBaseUrlController.dispose();
-    _igdbApiBaseUrlController.dispose();
-    _twitchOAuthUrlController.dispose();
     super.dispose();
   }
 
@@ -522,13 +507,8 @@ class _GameLibrarySettingsDialogState extends State<_GameLibrarySettingsDialog> 
     final settings = settingsProvider.settings;
     
     setState(() {
-      _igdbClientIdController.text = settings.igdbClientId;
-      _igdbClientSecretController.text = settings.igdbClientSecret;
       _gameLibraryPathController.text = settings.gameLibraryPath ?? '';
       _selectedCoverSize = settings.coverSize;
-      _igdbImageBaseUrlController.text = settings.igdbImageBaseUrl;
-      _igdbApiBaseUrlController.text = settings.igdbApiBaseUrl;
-      _twitchOAuthUrlController.text = settings.twitchOAuthUrl;
     });
   }
 
@@ -544,15 +524,10 @@ class _GameLibrarySettingsDialogState extends State<_GameLibrarySettingsDialog> 
 
       try {
         final settingsToSave = currentSettings.copyWith(
-          igdbClientId: _igdbClientIdController.text.trim(),
-          igdbClientSecret: _igdbClientSecretController.text.trim(),
           gameLibraryPath: _gameLibraryPathController.text.trim().isEmpty
               ? null
               : _gameLibraryPathController.text.trim(),
           coverSize: _selectedCoverSize,
-          igdbImageBaseUrl: _igdbImageBaseUrlController.text.trim(),
-          igdbApiBaseUrl: _igdbApiBaseUrlController.text.trim(),
-          twitchOAuthUrl: _twitchOAuthUrlController.text.trim(),
         );
 
         await settingsProvider.updateSettings(settingsToSave);
@@ -686,52 +661,12 @@ class _GameLibrarySettingsDialogState extends State<_GameLibrarySettingsDialog> 
                   ),
                 ),
                 const SizedBox(height: 8),
-                TextFormField(
-                  controller: _igdbClientIdController,
-                  decoration: const InputDecoration(
-                    labelText: 'IGDB Client ID',
-                    hintText: 'Enter your Twitch Client ID',
-                  ),
-                ),
+                const Text('IGDB Client ID and Secret are now configured globally in the application.'),
                 const SizedBox(height: 16),
-                TextFormField(
-                  controller: _igdbClientSecretController,
-                  decoration: const InputDecoration(
-                    labelText: 'IGDB Client Secret',
-                    hintText: 'Enter your Twitch Client Secret',
-                  ),
-                  obscureText: true,
-                ),
-                const SizedBox(height: 24),
-                
-                Text(
-                  'Advanced IGDB Settings',
-                  style: Theme.of(context).textTheme.titleSmall,
-                ),
+                const Text('All IGDB API URLs are configured globally for optimal performance.'),
                 const SizedBox(height: 8),
-                TextFormField(
-                  controller: _igdbApiBaseUrlController,
-                  decoration: const InputDecoration(
-                    labelText: 'IGDB API Base URL',
-                    hintText: 'https://api.igdb.com/v4',
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _igdbImageBaseUrlController,
-                  decoration: const InputDecoration(
-                    labelText: 'IGDB Image Base URL',
-                    hintText: 'https://images.igdb.com/igdb/image/upload',
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _twitchOAuthUrlController,
-                  decoration: const InputDecoration(
-                    labelText: 'Twitch OAuth URL',
-                    hintText: 'https://id.twitch.tv/oauth2/token',
-                  ),
-                ),
+                const Text('No additional IGDB configuration is required.', 
+                           style: TextStyle(fontStyle: FontStyle.italic)),
               ],
             ),
           ),

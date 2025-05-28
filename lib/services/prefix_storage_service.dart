@@ -3,41 +3,48 @@ import 'dart:io';
 import 'package:path/path.dart' as path; // Import path package
 import '../models/prefix_models.dart';
 import '../models/settings.dart'; // Import Settings model
+import '../utils/path_utils.dart'; // Import the new utility
 
 class PrefixStorageService {
-  final String _defaultConfigFileName = '.wine_prefix_manager.json';
+  static const String _appName = 'wine_prefix_manager'; // Match AppSettings
+  static const String _defaultGameLibraryFileName = 'game_library.json'; // Match AppSettings
 
   /// Determines the path for the prefix data file.
-  /// Uses the path from settings if provided, otherwise defaults to the home directory.
+  /// Uses the path from settings if provided, otherwise defaults to the app data directory.
   Future<String> _getConfigPath(Settings settings) async {
     // Use custom path if provided and not empty
     if (settings.gameLibraryPath != null && settings.gameLibraryPath!.isNotEmpty) {
-      // Ensure the directory exists for the custom path
       try {
         final dir = Directory(path.dirname(settings.gameLibraryPath!));
         if (!await dir.exists()) {
           await dir.create(recursive: true);
-          // Created directory for custom game library path
         }
+        return settings.gameLibraryPath!;
       } catch (e) {
-        // Warning: Could not create directory for custom game library path
-        // Fallback to default path if directory creation fails
+        print('Warning: Could not create directory for custom game library path: ${settings.gameLibraryPath}. Error: $e');
+        // Fallback to default path if directory creation for custom path fails
         return _getDefaultConfigPath();
       }
-      return settings.gameLibraryPath!;
     }
-
     // Fallback to default path
     return _getDefaultConfigPath();
   }
 
-  /// Gets the default configuration path in the user's home directory.
+  /// Gets the default configuration path in the application's data directory.
   Future<String> _getDefaultConfigPath() async {
-    final homeDir = Platform.environment['HOME'];
-    if (homeDir == null) {
-      throw Exception('HOME environment variable not set.');
+    final baseAppDataPath = await getBaseAppDataPath(); // Use imported function
+    final gameLibPath = path.join(baseAppDataPath, _defaultGameLibraryFileName);
+    // Ensure the directory exists when getting the default path too
+    try {
+      final dir = Directory(path.dirname(gameLibPath));
+      if (!await dir.exists()) {
+        await dir.create(recursive: true);
+      }
+    } catch (e) {
+       print('Warning: Could not create directory for default game library path: $gameLibPath. Error: $e');
+       // If it fails, it will likely fail on write later, but we try to be proactive.
     }
-    return path.join(homeDir, _defaultConfigFileName); // Use path.join
+    return gameLibPath;
   }
 
   /// Loads prefixes from the configured path.

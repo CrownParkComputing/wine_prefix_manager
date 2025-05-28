@@ -273,83 +273,114 @@ class ProtonPrefixCreationService {
   }
 
   Future<String> _getDownloadDirectory() async {
-    // Check if we're running from an AppImage (read-only mount)
-    // Changed from "proton_builds" to "wine_builds" to match Wine service
-    final currentPath = Directory.current.absolute.path;
-    print('GET_DOWNLOAD_DIR_DEBUG: (PRINT) [PROTON] Directory.current.absolute.path = $currentPath');
-    
-    // Detect AppImage environment by checking if current path is a tmp mount or contains AppImage indicators
-    final isAppImage = currentPath.startsWith('/tmp/mount_') || 
-                      Platform.environment.containsKey('APPIMAGE') ||
-                      Platform.environment.containsKey('APPDIR');
-    
-    String resultPath;
-    if (isAppImage) {
-      // Use writable directory in user's home for AppImage
-      final homeDir = Platform.environment['HOME'];
-      if (homeDir != null) {
-        resultPath = path.join(homeDir, '.local', 'share', 'wine_prefix_manager', 'wine_builds');
-      } else {
-        // Fallback to temp directory if HOME is not available
-        resultPath = path.join('/tmp', 'wine_prefix_manager', 'wine_builds');
-      }
-      print('GET_DOWNLOAD_DIR_DEBUG: (PRINT) [PROTON] AppImage detected, using writable path: $resultPath');
+    final String appName = 'wine_prefix_manager';
+    final String buildsSubDir = 'downloaded_builds'; // Consistent subdirectory
+    final homeDir = Platform.environment['HOME'];
+
+    String baseDir;
+
+    if (homeDir != null && homeDir.isNotEmpty) {
+      // Preferred: User's local share directory
+      baseDir = path.join(homeDir, '.local', 'share', appName, buildsSubDir);
     } else {
-      // Normal execution - use project directory
-      resultPath = path.join(currentPath, "wine_builds");
-      print('GET_DOWNLOAD_DIR_DEBUG: (PRINT) [PROTON] resultPath from path.join("$currentPath", "wine_builds") = $resultPath');
+      // Fallback: System's temporary directory
+      _logService.log('HOME environment variable not set. Using temporary directory for Proton downloads.', LogLevel.warning);
+      final tempDir = await Directory.systemTemp.createTemp('${appName}_proton_downloads_');
+      baseDir = tempDir.path;
     }
     
-    return resultPath;
+    // Ensure the directory exists
+    try {
+      final dir = Directory(baseDir);
+      if (!await dir.exists()) {
+        await dir.create(recursive: true);
+        _logService.log('Created Proton download directory: $baseDir');
+      }
+    } catch (e) {
+      _logService.log('Error creating Proton download directory $baseDir: $e', LogLevel.error);
+      final tempDir = await Directory.systemTemp.createTemp('wpm_proton_dl_fallback_');
+      return tempDir.path;
+    }
+
+    _logService.log('Using Proton download directory: $baseDir');
+    return baseDir;
   }
 
   String _getPrefixPath(Settings settings, String prefixName) {
-    String baseDir;
-    if (settings.prefixDirectory.isNotEmpty && Directory(settings.prefixDirectory).existsSync()) {
-      baseDir = settings.prefixDirectory;
-    } else {
-      final homeDir = Platform.environment['HOME'];
-      if (homeDir != null) {
-        baseDir = path.join(homeDir, '.local', 'share', 'wineprefixes');
-      } else {
-        // Check if we're running from an AppImage
-        final currentPath = Directory.current.absolute.path;
-        final isAppImage = currentPath.startsWith('/tmp/mount_') || 
-                          Platform.environment.containsKey('APPIMAGE') ||
-                          Platform.environment.containsKey('APPDIR');
-        
-        if (isAppImage) {
-          // Use writable temp directory for AppImage when HOME is not set
-          baseDir = path.join('/tmp', 'wine_prefix_manager', 'wineprefixes');
-        } else {
-          // Use a relative path within the project if HOME is not set and not in AppImage
-          baseDir = path.join(Directory.current.absolute.path, 'wineprefixes');
+    final homeDir = Platform.environment['HOME'];
+    // Initialize with a fallback to ensure it's always assigned.
+    String baseDirToUse = path.join(Directory.systemTemp.path, 'wine_prefix_manager', 'prefixes');
+    _logService.log('Initial fallback for Proton baseDirToUse: $baseDirToUse (will be overridden by preferred paths if available)', LogLevel.debug);
+
+    bool useCustomPath = false;
+
+    // Priority 1: User-defined absolute path in settings
+    if (settings.prefixDirectory.isNotEmpty) {
+      if (path.isAbsolute(settings.prefixDirectory)) {
+        String userDefinedPath = settings.prefixDirectory;
+        try {
+          final dir = Directory(userDefinedPath);
+          if (!dir.existsSync()) {
+            dir.createSync(recursive: true);
+            _logService.log('Created user-specified absolute prefix directory for Proton: $userDefinedPath');
+          }
+          baseDirToUse = userDefinedPath;
+          useCustomPath = true;
+          _logService.log('Using user-defined absolute prefix directory for Proton: $baseDirToUse');
+        } catch (e) {
+          _logService.log('Error creating/accessing user-specified absolute prefix directory $userDefinedPath for Proton: $e. Falling back.', LogLevel.error);
+          // useCustomPath remains false
         }
-        _logService.log("Warning: HOME environment variable not set. Using path for prefixes: $baseDir", LogLevel.warning);
-      }
-      if (settings.prefixDirectory.isNotEmpty) {
-        // Log if the specified directory didn't exist and we fell back
-        _logService.log("Warning: Specified prefix directory '${settings.prefixDirectory}' does not exist or is invalid. Falling back to '$baseDir'.", LogLevel.warning);
+      } else {
+        _logService.log('Warning: settings.prefixDirectory ("${settings.prefixDirectory}") is not absolute. Using default app data location for Proton prefixes.', LogLevel.warning);
       }
     }
+
+    // Priority 2: Fallback to default if custom path not used or failed
+    if (!useCustomPath) {
+        if (homeDir != null && homeDir.isNotEmpty) {
+            baseDirToUse = path.join(homeDir, '.local', 'share', 'wine_prefix_manager', 'prefixes');
+            _logService.log('Using default app data directory for Proton prefixes: $baseDirToUse');
+        } else {
+            _logService.log('Warning: HOME environment variable not set. Using temporary directory for Proton prefixes (already set as initial fallback): $baseDirToUse', LogLevel.warning);
+             // baseDirToUse is already set to the temp path
+        }
+    }
     
+    // Ensure the final chosen base directory exists
+    try {
+      final dir = Directory(baseDirToUse);
+      if (!dir.existsSync()) {
+        dir.createSync(recursive: true);
+        _logService.log('Ensured final base Proton prefix directory exists: $baseDirToUse');
+      }
+    } catch (e) {
+      _logService.log('Critical Error: Could not create final base Proton prefix directory $baseDirToUse: $e.', LogLevel.error);
+      throw Exception('Failed to create final base Proton prefix directory: $baseDirToUse. Error: $e');
+    }
+
     // Create the type-specific subfolder based on the specific Proton build source
     String typeDir;
     if (_lastSelectedBuild != null) {
       if (_lastSelectedBuild!.name.contains('GE-Proton')) {
-        typeDir = path.join(baseDir, 'proton-ge');
+        typeDir = path.join(baseDirToUse, 'proton-ge');
       } else if (_lastSelectedBuild!.name.contains('Kronek') || _lastSelectedBuild!.name.contains('wine-proton')) {
-        typeDir = path.join(baseDir, 'proton-kronek');
+        typeDir = path.join(baseDirToUse, 'proton-kronek');
       } else {
-        // For other Proton builds or when source can't be determined
-        typeDir = path.join(baseDir, 'proton');
+        typeDir = path.join(baseDirToUse, 'proton'); // Generic proton
       }
     } else {
-      // Fallback if build not known
-      typeDir = path.join(baseDir, 'proton');
+      typeDir = path.join(baseDirToUse, 'proton'); // Fallback if build not known
     }
     
-    Directory(typeDir).createSync(recursive: true);
+    try {
+        Directory(typeDir).createSync(recursive: true);
+    } catch (e) {
+        _logService.log('Critical Error: Could not create type-specific Proton prefix directory $typeDir: $e.', LogLevel.error);
+        throw Exception('Failed to create type-specific Proton prefix directory: $typeDir. Error: $e');
+    }
+
+    _logService.log('Final Proton prefix path for "$prefixName" will be under: $typeDir');
     return path.join(typeDir, prefixName);
   }
 

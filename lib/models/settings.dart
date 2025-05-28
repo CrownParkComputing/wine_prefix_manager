@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:path/path.dart' as path;
+import '../utils/path_utils.dart';
 
 enum CoverSize {
   small,
@@ -10,8 +11,6 @@ enum CoverSize {
 
 class Settings {
   final String prefixDirectory;
-  final String igdbClientId;
-  final String igdbClientSecret;
   final String? igdbAccessToken;
   final DateTime? igdbTokenExpiry;
   final CoverSize coverSize;
@@ -32,8 +31,6 @@ class Settings {
 
   Settings({
     required this.prefixDirectory,
-    required this.igdbClientId,
-    required this.igdbClientSecret,
     this.igdbAccessToken,
     this.igdbTokenExpiry,
     this.coverSize = CoverSize.medium,
@@ -53,8 +50,6 @@ class Settings {
 
   Map<String, dynamic> toJson() => {
         'prefixDirectory': prefixDirectory,
-        'igdbClientId': igdbClientId,
-        'igdbClientSecret': igdbClientSecret,
         'igdbAccessToken': igdbAccessToken,
         'igdbTokenExpiry': igdbTokenExpiry?.toIso8601String(),
         'coverSize': coverSize.toString(),
@@ -74,8 +69,6 @@ class Settings {
 
   factory Settings.fromJson(Map<String, dynamic> json) => Settings(
         prefixDirectory: json['prefixDirectory'] ?? '',
-        igdbClientId: json['igdbClientId'] ?? '',
-        igdbClientSecret: json['igdbClientSecret'] ?? '',
         igdbAccessToken: json['igdbAccessToken'],
         igdbTokenExpiry: json['igdbTokenExpiry'] != null
             ? DateTime.parse(json['igdbTokenExpiry'])
@@ -113,8 +106,6 @@ class Settings {
 
   Settings copyWith({
     String? prefixDirectory,
-    String? igdbClientId,
-    String? igdbClientSecret,
     String? igdbAccessToken,
     DateTime? igdbTokenExpiry,
     CoverSize? coverSize,
@@ -133,8 +124,6 @@ class Settings {
   }) {
     return Settings(
       prefixDirectory: prefixDirectory ?? this.prefixDirectory,
-      igdbClientId: igdbClientId ?? this.igdbClientId,
-      igdbClientSecret: igdbClientSecret ?? this.igdbClientSecret,
       igdbAccessToken: igdbAccessToken ?? this.igdbAccessToken,
       igdbTokenExpiry: igdbTokenExpiry ?? this.igdbTokenExpiry,
       coverSize: coverSize ?? this.coverSize,
@@ -158,23 +147,35 @@ class Settings {
 }
 
 class AppSettings {
+  static const String _appName = 'wine_prefix_manager';
+  static const String _settingsFileName = 'settings.json';
+  static const String _defaultPrefixesSubDir = 'prefixes';
+  static const String _defaultGameLibraryFileName = 'game_library.json';
+
   static Future<Settings> load() async {
+    final baseAppDataPath = await getBaseAppDataPath();
+    final settingsFilePath = path.join(baseAppDataPath, _settingsFileName);
+
     try {
-      final homeDir = Platform.environment['HOME']!;
-      final file = File('$homeDir/.wine_prefix_manager_settings.json');
+      final file = File(settingsFilePath);
       if (await file.exists()) {
         final content = await file.readAsString();
-        return Settings.fromJson(jsonDecode(content));
+        if (content.isNotEmpty) {
+          return Settings.fromJson(jsonDecode(content));
+        }
       }
-    } catch (e) {}
+    } catch (e) {
+      print('Error loading settings from $settingsFilePath: $e');
+    }
 
-    final homeDir = Platform.environment['HOME']!;
+    // Fallback to default settings
     return Settings(
-      prefixDirectory: path.join(homeDir, '.wine_prefixes'),
-      igdbClientId: '',
-      igdbClientSecret: '',
+      prefixDirectory: path.join(baseAppDataPath, _defaultPrefixesSubDir),
+      gameLibraryPath: path.join(baseAppDataPath, _defaultGameLibraryFileName),
+      igdbAccessToken: null,
+      igdbTokenExpiry: null,
+      coverSize: CoverSize.medium,
       categories: ['Favorites', 'Currently Playing', 'Completed', 'Backlog'],
-      gameLibraryPath: null,
       backupPath: null,
       dxvkApiUrl: 'https://api.github.com/repos/doitsujin/dxvk/releases/latest',
       vkd3dApiUrl:
@@ -192,19 +193,99 @@ class AppSettings {
   }
 
   static Future<void> save(Settings settings) async {
+    final baseAppDataPath = await getBaseAppDataPath();
+    final settingsFilePath = path.join(baseAppDataPath, _settingsFileName);
+
     try {
-      final homeDir = Platform.environment['HOME']!;
-      final file = File('$homeDir/.wine_prefix_manager_settings.json');
-      await file.writeAsString(jsonEncode(settings.toJson()));
-    } catch (e) {}
+      final dir = Directory(baseAppDataPath);
+      if (!await dir.exists()) {
+        await dir.create(recursive: true);
+        print('Created base app data directory: $baseAppDataPath');
+      }
+
+      final file = File(settingsFilePath);
+      Settings settingsToSave = settings;
+
+      if (settings.gameLibraryPath == null || settings.gameLibraryPath!.isEmpty) {
+        // Ensure default gameLibraryPath is set if null/empty when saving
+         settingsToSave = settings.copyWith(gameLibraryPath: path.join(baseAppDataPath, _defaultGameLibraryFileName));
+      }
+      if (settings.prefixDirectory.isEmpty) {
+        // Ensure default prefixDirectory is set if empty when saving
+        settingsToSave = settingsToSave.copyWith(prefixDirectory: path.join(baseAppDataPath, _defaultPrefixesSubDir));
+      }
+      
+      // If the current settings object has a null gameLibraryPath (even after above default),
+      // try to preserve an existing one from the file on disk. This is more of a safety net.
+      if (settingsToSave.gameLibraryPath == path.join(baseAppDataPath, _defaultGameLibraryFileName) && await file.exists()) {
+         // This logic was to preserve an old path, with new defaults this might need rethinking
+         // For now, if it's the default path, we assume it's okay or it's a fresh save.
+      }
+
+
+      // Preserve existing gameLibraryPath if current one is null (original logic)
+      // This might conflict with setting a new default above, so reviewing.
+      // The goal: if settings.gameLibraryPath is truly unset by user, use new default.
+      // If it *was* set, but somehow became null in memory, try to keep the old one.
+      // The copyWith above should handle setting new defaults if they were empty/null.
+      
+      // Simplified: The copyWith should ensure paths are non-null using new defaults if they were originally null/empty.
+      // The preservation logic for gameLibraryPath from disk if current is null might be redundant
+      // if we are already defaulting it. Let's ensure the defaults are robustly applied.
+
+      if (settings.gameLibraryPath == null && await file.exists()) {
+        try {
+          final existingContent = await file.readAsString();
+          if (existingContent.isNotEmpty) {
+            final existingJson = jsonDecode(existingContent);
+            final existingGameLibraryPath = existingJson['gameLibraryPath'] as String?;
+            if (existingGameLibraryPath != null && existingGameLibraryPath.isNotEmpty) {
+              // If an old valid path exists and current settings has it null, preserve it.
+              // This might be for settings loaded before path consolidation.
+              print('Preserving existing gameLibraryPath from file: $existingGameLibraryPath over current null value.');
+              settingsToSave = settingsToSave.copyWith(gameLibraryPath: existingGameLibraryPath);
+            }
+          }
+        } catch (e) {
+          print('Error trying to preserve gameLibraryPath from disk: $e');
+        }
+      }
+
+
+      await file.writeAsString(jsonEncode(settingsToSave.toJson()));
+    } catch (e) {
+      print('Error saving settings to $settingsFilePath: $e');
+    }
   }
 
   static Future<Settings> updateToken(
       Settings settings, String token, Duration expiry) async {
     final updatedSettings = Settings(
       prefixDirectory: settings.prefixDirectory,
-      igdbClientId: settings.igdbClientId,
-      igdbClientSecret: settings.igdbClientSecret,
+      igdbAccessToken: token,
+      igdbTokenExpiry: DateTime.now().add(expiry),
+      coverSize: settings.coverSize,
+      categories: settings.categories,
+      gameLibraryPath: settings.gameLibraryPath,
+      backupPath: settings.backupPath,
+      dxvkApiUrl: settings.dxvkApiUrl,
+      vkd3dApiUrl: settings.vkd3dApiUrl,
+      wineBuildsApiUrl: settings.wineBuildsApiUrl,
+      protonGeApiUrl: settings.protonGeApiUrl,
+      kronekProtonApiUrl: settings.kronekProtonApiUrl,
+      protonExperimentalApiUrl: settings.protonExperimentalApiUrl,
+      twitchOAuthUrl: settings.twitchOAuthUrl,
+      igdbApiBaseUrl: settings.igdbApiBaseUrl,
+      igdbImageBaseUrl: settings.igdbImageBaseUrl,
+    );
+
+    await save(updatedSettings);
+    return updatedSettings;
+  }
+
+  static Future<Settings> updateIgdbToken(Settings settings, String token, Duration expiry) async {
+    final updatedSettings = Settings(
+      prefixDirectory: settings.prefixDirectory,
       igdbAccessToken: token,
       igdbTokenExpiry: DateTime.now().add(expiry),
       coverSize: settings.coverSize,

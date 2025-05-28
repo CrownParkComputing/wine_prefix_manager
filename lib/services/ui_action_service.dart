@@ -2,8 +2,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
-import 'package:provider/provider.dart'; // Add Provider import
-import 'dart:io' show Process;
+import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 // Models
 import '../models/prefix_models.dart';
@@ -13,19 +13,30 @@ import '../models/igdb_models.dart';
 // Providers
 import '../providers/prefix_provider.dart';
 import '../providers/settings_provider.dart';
+// Removed: import '../providers/game_provider.dart'; // Does not exist
+// Removed: import '../providers/log_provider.dart'; // Does not exist
+// Removed: duplicate import '../providers/prefix_provider.dart';
 
 // Services
 import 'log_service.dart';
 import 'igdb_service.dart';
 import 'process_service.dart';
-import 'prefix_management_service.dart'; // Import PrefixManagementService
+import 'prefix_management_service.dart';
+import 'backup_service.dart';
+import '../config/api_keys.dart';
 
-// Widgets (Import dialogs needed)
+// Widgets & Dialogs
+// Corrected paths to ../widgets/ for dialogs that exist there.
+// Removed ../pages/ imports for dialogs as they are mostly widgets or handled by navigation to pages.
 import '../widgets/game_details_dialog.dart';
-import '../widgets/game_search_dialog.dart';
+import '../widgets/game_search_dialog.dart'; // Corrected from pages
 import '../widgets/common_components_dialog.dart';
-import '../widgets/change_prefix_dialog.dart';
-import '../widgets/text_input_dialog.dart'; // Import TextInputDialog
+import '../widgets/change_prefix_dialog.dart'; // This was likely prefix_selection_dialog
+import '../widgets/text_input_dialog.dart';
+// Other dialogs like edit_game_dialog, prefix_creation_dialog, confirmation_dialog, message_dialog
+// might be specific widgets or part of page navigation logic, not direct imports here unless they are generic dialog widgets.
+// For now, keeping only the ones that are clearly generic dialog widgets used by this service.
+// If specific page-based dialogs are needed, they are usually invoked via Navigator.push with the page route.
 
 // TODO: Create a Winetricks Verbs Dialog widget
 // import '../widgets/winetricks_verbs_dialog.dart';
@@ -251,11 +262,12 @@ class UIActionService {
   /// Shows the Game Details Dialog and handles its actions.
   Future<void> showGameDetails(BuildContext scaffoldContext, GameEntry entry) async {
     // Get the latest settings by directly accessing the field
-    final Settings currentSettings = _settings;
+    // final Settings currentSettings = _settings; // No longer need to get settings for this check
     
     // Ensure settings are loaded before showing details that might need IGDB
-    if (currentSettings.igdbClientId.isEmpty || currentSettings.igdbClientSecret.isEmpty) {
-       _logService.log('IGDB credentials not set. Cannot fetch full details.', LogLevel.warning); // FIX: Use positional level
+    // Check global API keys instead of settings
+    if (globalIgdbClientId.isEmpty || globalIgdbClientSecret.isEmpty) {
+       _logService.log('Global IGDB credentials not set. Cannot fetch full details.', LogLevel.warning);
        // Optionally show the dialog with limited info or prevent opening
     }
 

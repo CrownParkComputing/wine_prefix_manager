@@ -164,11 +164,23 @@ class _ManagePrefixesPageState extends State<ManagePrefixesPage> with SingleTick
   Widget _buildPrefixList(PrefixType type) {
     return Consumer<PrefixProvider>(
       builder: (context, prefixProvider, child) {
+        print('[DEBUG ManagePrefixesPage] _buildPrefixList called for type: ${type.name}');
+        print('[DEBUG ManagePrefixesPage] PrefixProvider has ${prefixProvider.prefixes.length} total prefixes');
+        for (final prefix in prefixProvider.prefixes) {
+          print('[DEBUG ManagePrefixesPage] - Available: ${prefix.name} (${prefix.type.name})');
+        }
+        
         final prefixes = prefixProvider.prefixes
             .where((prefix) => prefix.type == type)
             .toList();
+            
+        print('[DEBUG ManagePrefixesPage] After filtering for ${type.name}: ${prefixes.length} prefixes');
+        for (final prefix in prefixes) {
+          print('[DEBUG ManagePrefixesPage] - Filtered: ${prefix.name}');
+        }
 
         if (prefixes.isEmpty) {
+          print('[DEBUG ManagePrefixesPage] Showing empty state for ${type.name}');
           return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -194,6 +206,7 @@ class _ManagePrefixesPageState extends State<ManagePrefixesPage> with SingleTick
           );
         }
 
+        print('[DEBUG ManagePrefixesPage] Building ListView with ${prefixes.length} prefixes');
         return ListView.builder(
           padding: const EdgeInsets.all(8.0),
           itemCount: prefixes.length,

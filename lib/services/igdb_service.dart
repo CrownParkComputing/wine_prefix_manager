@@ -6,12 +6,14 @@ import 'package:provider/provider.dart';
 import '../models/settings.dart';
 import '../models/igdb_models.dart';
 import '../providers/settings_provider.dart';
+import '../config/api_keys.dart'; // Import the new api_keys file
 
 class IgdbService {
 
   Future<Map<String, dynamic>?> getIgdbToken(Settings settings) async {
-    if (settings.igdbClientId.isEmpty || settings.igdbClientSecret.isEmpty) {
-      // debugPrint('[IgdbService] IGDB credentials not set.');
+    // Use global constants for Client ID and Secret
+    if (globalIgdbClientId.isEmpty || globalIgdbClientSecret.isEmpty) {
+      // debugPrint('[IgdbService] Global IGDB credentials not set.');
       return null;
     }
 
@@ -31,8 +33,8 @@ class IgdbService {
       final response = await http.post(
         Uri.parse(settings.twitchOAuthUrl), // Use settings URL
         body: {
-          'client_id': settings.igdbClientId,
-          'client_secret': settings.igdbClientSecret,
+          'client_id': globalIgdbClientId, // Use global constant
+          'client_secret': globalIgdbClientSecret, // Use global constant
           'grant_type': 'client_credentials',
         },
       );
@@ -66,7 +68,7 @@ class IgdbService {
         Uri.parse(settings.igdbApiBaseUrl).replace(path: '/v4/games'), // Use replace
         headers: {
           'Accept': 'application/json',
-          'Client-ID': settings.igdbClientId,
+          'Client-ID': globalIgdbClientId, // Use global constant
           'Authorization': 'Bearer $token',
         },
         body: requestBody,
@@ -104,7 +106,7 @@ class IgdbService {
         Uri.parse(settings.igdbApiBaseUrl).replace(path: '/v4/covers'), // Use replace
         headers: {
           'Accept': 'application/json',
-          'Client-ID': settings.igdbClientId,
+          'Client-ID': globalIgdbClientId, // Use global constant
           'Authorization': 'Bearer $token',
         },
         body: 'fields image_id, url; where id = $coverId;', // Request URL field too
@@ -153,7 +155,7 @@ class IgdbService {
         Uri.parse(settings.igdbApiBaseUrl).replace(path: '/v4/screenshots'), // Use replace
         headers: {
           'Accept': 'application/json',
-          'Client-ID': settings.igdbClientId,
+          'Client-ID': globalIgdbClientId, // Use global constant
           'Authorization': 'Bearer $token',
         },
         body: requestBody,
@@ -199,7 +201,7 @@ class IgdbService {
         Uri.parse(settings.igdbApiBaseUrl).replace(path: '/v4/game_videos'), // Use replace
         headers: {
           'Accept': 'application/json',
-          'Client-ID': settings.igdbClientId,
+          'Client-ID': globalIgdbClientId, // Use global constant
           'Authorization': 'Bearer $token',
         },
         body: 'fields video_id; where game = $gameId;',
@@ -221,10 +223,10 @@ class IgdbService {
   // Method to check and validate IGDB credentials
   Future<bool> validateCredentials(BuildContext context) async {
     final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
-    final settings = settingsProvider.settings;
+    final settings = settingsProvider.settings; // Settings object no longer has clientID/secret
     
-    // Check if credentials are set
-    if (settings.igdbClientId.isEmpty || settings.igdbClientSecret.isEmpty) {
+    // Check if global credentials are set (they should be, but good for robustness)
+    if (globalIgdbClientId.isEmpty || globalIgdbClientSecret.isEmpty) {
       return false;
     }
     
