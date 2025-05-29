@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 // Models
 import 'models/settings.dart';
@@ -44,6 +45,15 @@ import 'pages/files_and_backup_page.dart'; // Add import for FilesAndBackupPage
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await windowManager.ensureInitialized();
+
+  // Initialize environment variables
+  try {
+    await dotenv.load(fileName: ".env");
+  } catch (e) {
+    // .env file not found or couldn't be loaded - this is fine for production
+    // where environment variables are set directly
+    print('Note: .env file not found or could not be loaded. Using system environment variables.');
+  }
 
   // Configure window options
   WindowOptions windowOptions = const WindowOptions(
