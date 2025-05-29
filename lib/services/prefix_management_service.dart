@@ -32,6 +32,7 @@ class PrefixManagementService {
   Future<List<WinePrefix>> scanForPrefixes(Settings settings) async {
     final List<WinePrefix> prefixes = [];
     List<WinePrefix> invalidPrefixes = []; // Track invalid prefixes for cleanup
+    final Set<String> processedPaths = {}; // Track processed paths to avoid duplicates
 
     String effectivePrefixBaseDir;
     // final homeDir = Platform.environment['HOME']; // No longer directly needed here for default path
@@ -97,12 +98,48 @@ class PrefixManagementService {
 
       print('[DEBUG] Scanning subdirectory: $typeDirPath');
       _logService.log('Scanning subdirectory: $typeDirPath');
+      
+      // Get all directories in this type subdirectory
+      final directories = <Directory>[];
       await for (final entity in Directory(typeDirPath).list()) {
         if (entity is Directory) {
-          print('[DEBUG] Found directory: ${entity.path}');
-          _logService.log('Checking directory: ${entity.path}');
+          directories.add(entity);
+        }
+      }
+      
+      // Process directories, but check for pfx relationships first
+      for (final directory in directories) {
+        final dirPath = directory.path;
+        
+        // Skip if we've already processed this path
+        if (processedPaths.contains(dirPath)) {
+          print('[DEBUG] Already processed: $dirPath');
+          continue;
+        }
+        
+        print('[DEBUG] Found directory: $dirPath');
+        _logService.log('Checking directory: $dirPath');
+        
+        // Check if this directory has a pfx subdirectory with Wine files
+        final pfxDir = path.join(dirPath, 'pfx');
+        final pfxSystemReg = File(path.join(pfxDir, 'system.reg'));
+        final pfxUserReg = File(path.join(pfxDir, 'user.reg'));
+        final pfxDriveC = Directory(path.join(pfxDir, 'drive_c'));
+        final hasPfxWineFiles = pfxSystemReg.existsSync() || pfxUserReg.existsSync() || pfxDriveC.existsSync();
+        
+        // If this directory has a pfx subdirectory with Wine files, 
+        // mark both the parent and pfx paths as processed and only process the parent
+        if (hasPfxWineFiles && Directory(pfxDir).existsSync()) {
+          print('[DEBUG] Found Proton prefix structure: $dirPath with pfx subdirectory');
+          _logService.log('Found Proton prefix structure with pfx subdirectory: $dirPath');
+          
+          // Mark both paths as processed to avoid duplicate detection
+          processedPaths.add(dirPath);
+          processedPaths.add(pfxDir);
+          
+          // Process the parent directory (it will internally use the pfx path for the actual prefix)
           try {
-            final WinePrefix? prefix = await _processDirectory(entity.path, typeSubdir);
+            final WinePrefix? prefix = await _processDirectory(dirPath, typeSubdir);
             print('[DEBUG] _processDirectory returned: ${prefix?.name ?? 'null'}');
             if (prefix != null) {
               // Validate the prefix before adding
@@ -119,8 +156,33 @@ class PrefixManagementService {
               }
             }
           } catch (e) {
-            print('[DEBUG] Error processing directory ${entity.path}: $e');
-            _logService.log('Error processing directory ${entity.path}: $e', LogLevel.error);
+            print('[DEBUG] Error processing directory ${dirPath}: $e');
+            _logService.log('Error processing directory ${dirPath}: $e', LogLevel.error);
+          }
+        } else {
+          // Regular directory processing for non-Proton or direct Wine prefixes
+          processedPaths.add(dirPath);
+          
+          try {
+            final WinePrefix? prefix = await _processDirectory(dirPath, typeSubdir);
+            print('[DEBUG] _processDirectory returned: ${prefix?.name ?? 'null'}');
+            if (prefix != null) {
+              // Validate the prefix before adding
+              final bool isValid = await _validatePrefix(prefix);
+              print('[DEBUG] Prefix validation result: $isValid for ${prefix.name}');
+              if (isValid) {
+                prefixes.add(prefix);
+                print('[DEBUG] Added valid prefix: ${prefix.name}');
+                _logService.log('Added prefix: ${prefix.name}, type: ${prefix.type.name}, arch: ${prefix.architecture}, path: ${prefix.path}');
+              } else {
+                invalidPrefixes.add(prefix);
+                print('[DEBUG] Prefix marked as invalid: ${prefix.name}');
+                _logService.log('Found invalid prefix: ${prefix.name} at ${prefix.path}', LogLevel.warning);
+              }
+            }
+          } catch (e) {
+            print('[DEBUG] Error processing directory ${dirPath}: $e');
+            _logService.log('Error processing directory ${dirPath}: $e', LogLevel.error);
           }
         }
       }

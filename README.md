@@ -17,9 +17,12 @@ A modern Flutter application for managing Wine/Proton prefixes on Linux with bui
 
 ### Automatic Prefix Setup
 - Microsoft Visual C++ 2015-2022 Redistributable (x64/x86)
-- Game controller registry fixes (DisableHidraw, SDL winebus)
-- Essential gaming dependencies (DXVK, VKD3D for 64-bit prefixes)
+- Essential gaming dependencies (DXVK, VKD3D for 64-bit Wine prefixes)
 - Proton-specific optimizations for different Proton variants
+
+### Optional Manual Fixes
+- **Controller Fix** - Apply winebus registry fixes (DisableHidraw, Enable SDL) for better controller support
+- Available via the "Controller Fix" button in prefix details
 
 ## 🚀 Quick Start
 
@@ -116,7 +119,16 @@ For end users, IGDB integration works out of the box. For developers building fr
    cp env.example .env
    ```
 
-2. **Get IGDB credentials** (see [IGDB_SETUP.md](IGDB_SETUP.md))
+2. **Get IGDB credentials:**
+   - Go to [Twitch Developer Console](https://dev.twitch.tv/console/apps)
+   - Log in with your Twitch account (create one if needed)
+   - Click "Register Your Application"
+   - Fill in the required fields:
+     - **Name**: `Wine Prefix Manager` (or any name you prefer)
+     - **OAuth Redirect URLs**: `http://localhost` (required but not used)
+     - **Category**: `Game Integration`
+   - Click "Create"
+   - Copy the **Client ID** and **Client Secret**
 
 3. **Add to `.env` file:**
    ```env
@@ -137,7 +149,7 @@ wine_prefix_manager/
 ├── website/               # Project website
 ├── Makefile              # Main build orchestration
 ├── pubspec.yaml          # Flutter dependencies
-├── IGDB_SETUP.md         # IGDB setup guide
+├── env.example           # Environment template for developers
 └── README.md             # This file
 ```
 
@@ -163,7 +175,7 @@ wine_prefix_manager/
 
 2. **IGDB integration not working**
    - For users: Should work automatically
-   - For developers: Check [IGDB_SETUP.md](IGDB_SETUP.md)
+   - For developers: Check the IGDB Integration section above
 
 3. **AppImage won't run**
    ```bash

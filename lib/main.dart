@@ -28,7 +28,7 @@ import 'services/power_management_service.dart';
 // import 'widgets/custom_title_bar.dart'; // Removed import
 import 'pages/home_page.dart';
 import 'pages/manage_prefixes_page.dart';
-import 'pages/prefix_management_page.dart';
+// import 'pages/prefix_management_page.dart'; // Removed - functionality integrated into ManagePrefixesPage
 import 'pages/logs_page.dart';
 import 'pages/file_manager_page.dart';
 import 'pages/backup_manager_page.dart';
@@ -407,13 +407,11 @@ class _MainScaffoldState extends State<MainScaffold> {
           },
         );
       case 2:
-        return const PrefixManagementPage();
-      case 3:
         // Combined Files & Backup Manager - tabbed interface
         return const FilesAndBackupPage();
-      case 4:
+      case 3:
         return LogsPage();
-      case 5:
+      case 4:
         return const AboutScreen();
       default:
         return HomePage(onNavigateToTab: navigateToTab);
@@ -458,11 +456,6 @@ class _MainScaffoldState extends State<MainScaffold> {
                       icon: Icon(Icons.folder_outlined),
                       selectedIcon: Icon(Icons.folder),
                       label: Text('Manage'),
-                    ),
-                    NavigationRailDestination(
-                      icon: Icon(Icons.create_new_folder_outlined),
-                      selectedIcon: Icon(Icons.create_new_folder),
-                      label: Text('Create/Manage'),
                     ),
                     NavigationRailDestination(
                       icon: Icon(Icons.folder_copy_outlined),

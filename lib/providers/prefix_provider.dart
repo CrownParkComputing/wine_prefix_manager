@@ -202,39 +202,60 @@ class PrefixProvider with ChangeNotifier {
     try {
       final scannedPrefixes = await _managementService.scanForPrefixes(_settings!);
       
-      bool updated = false;
+      // Create a new list based on scanned results, preserving executable entries from existing prefixes
+      List<WinePrefix> newPrefixes = [];
       int addedCount = 0;
-      List<WinePrefix> currentPrefixes = List.from(_prefixes); // Makes a copy
-
+      int updatedCount = 0;
+      int removedCount = _prefixes.length; // Start with current count, will subtract what we keep
+      
       for (final scannedPrefix in scannedPrefixes) {
-        final index = currentPrefixes.indexWhere((p) => p.path == scannedPrefix.path);
-        if (index == -1) { // <-- Only adds if NOT found
-          currentPrefixes.add(scannedPrefix);
-          // debugPrint('Discovered new prefix via Provider: ${scannedPrefix.name}');
-          updated = true;
-          addedCount++;
-        } else { // Prefix already exists, check if it needs updating
-          // Compare relevant fields (e.g., type, buildPath)
-          // Note: We don't compare exeEntries here as the scanner doesn't load them.
-          if (currentPrefixes[index].type != scannedPrefix.type ||
-              currentPrefixes[index].wineBuildPath != scannedPrefix.wineBuildPath) {
-            // debugPrint('Updating existing prefix via Provider: ${scannedPrefix.name} (Type: ${currentPrefixes[index].type.name} -> ${scannedPrefix.type.name}, BuildPath: ${currentPrefixes[index].wineBuildPath} -> ${scannedPrefix.wineBuildPath})');
-            currentPrefixes[index] = scannedPrefix.copyWith(exeEntries: currentPrefixes[index].exeEntries); // Keep existing exeEntries
-            updated = true; // Mark as updated even if no new prefixes were added
+        // Look for existing prefix with same path
+        final existingPrefix = _prefixes.firstWhere(
+          (p) => p.path == scannedPrefix.path, 
+          orElse: () => scannedPrefix
+        );
+        
+        if (existingPrefix.path == scannedPrefix.path) {
+          // Existing prefix found - preserve executable entries and check for updates
+          if (existingPrefix.type != scannedPrefix.type ||
+              existingPrefix.wineBuildPath != scannedPrefix.wineBuildPath ||
+              existingPrefix.name != scannedPrefix.name) {
+            // Prefix metadata changed - update it but keep executable entries
+            final updatedPrefix = scannedPrefix.copyWith(exeEntries: existingPrefix.exeEntries);
+            newPrefixes.add(updatedPrefix);
+            updatedCount++;
           } else {
-            // debugPrint('Prefix already known and up-to-date via Provider: ${scannedPrefix.name}');
+            // No changes - keep existing prefix as-is
+            newPrefixes.add(existingPrefix);
           }
+          removedCount--; // This prefix was kept
+        } else {
+          // New prefix discovered
+          newPrefixes.add(scannedPrefix);
+          addedCount++;
         }
       }
-
-      if (updated) {
-        _prefixes = currentPrefixes; // Only updates _prefixes if a NEW prefix was added or an existing one changed
-        _updateStatus('Scan complete. $addedCount new prefix(es) added/updated.'); // Updated status message
+      
+      // Calculate actual removed count
+      removedCount = _prefixes.length - (newPrefixes.length - addedCount);
+      
+      // Always update the prefix list with scan results to ensure consistency
+      _prefixes = newPrefixes;
+      
+      // Build status message
+      List<String> statusParts = [];
+      if (addedCount > 0) statusParts.add('$addedCount new');
+      if (updatedCount > 0) statusParts.add('$updatedCount updated');
+      if (removedCount > 0) statusParts.add('$removedCount removed');
+      
+      if (statusParts.isNotEmpty) {
+        _updateStatus('Scan complete. ${statusParts.join(', ')} prefix(es).');
         await savePrefixes();
         notifyListeners();
       } else {
-         _updateStatus('Scan complete. No new or changed prefixes found.'); // Updated status message
+        _updateStatus('Scan complete. No changes detected.');
       }
+      
     } catch (e) {
       _updateStatus('Error scanning for prefixes: $e');
       // debugPrint('Error scanning for prefixes: $e');

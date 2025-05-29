@@ -84,12 +84,12 @@ class PrefixDetailActions extends StatelessWidget {
             tooltip: 'Run an installer (e.g., setup.exe) in this prefix',
             onPressed: () => onRunInstaller(prefix),
           ),
-          // ActionButton(
-          //   icon: Icons.gamepad_outlined,
-          //   label: 'Controller Fix',
-          //   tooltip: 'Apply common controller fixes (XInput, DInput)',
-          //   onPressed: () => onApplyControllerFix(context, prefix),
-          // ), // Removed Controller Fix button
+          ActionButton(
+            icon: Icons.gamepad_outlined,
+            label: 'Controller Fix',
+            tooltip: 'Apply common controller fixes (XInput, DInput)',
+            onPressed: () => onApplyControllerFix(context, prefix),
+          ),
            ActionButton(
             icon: Icons.edit_note_outlined,
             label: 'Env Variables',

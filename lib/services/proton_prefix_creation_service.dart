@@ -641,15 +641,7 @@ class ProtonPrefixCreationService {
           onStatusUpdate('Error installing VC++ Redistributable (x64).');
         }
 
-        // Apply Controller Fix for Proton-GE
-        onStatusUpdate('Applying controller fix...');
-        await _prefixManagementService.applyControllerFix(
-          tempPrefix,
-          onStatusUpdate: onStatusUpdate,
-          customWineExecutable: protonRunScript,
-          customEnv: protonEnv,
-        );
-        _logService.log('Controller fix applied for Proton-GE.');
+        _logService.log('VC++ Redistributable installation completed for Proton-GE.');
       } else {
         // For other standard Proton builds, install VC++ runtime and minimal dependencies
         _logService.log('Standard Proton build detected - installing VC++ Redistributable and minimal dependencies.');
@@ -720,19 +712,11 @@ class ProtonPrefixCreationService {
           }
         }
 
-        // Apply Controller Fix for standard Proton builds
-        onStatusUpdate('Applying controller fix...');
-        await _prefixManagementService.applyControllerFix(
-          tempPrefix,
-          onStatusUpdate: onStatusUpdate,
-          customWineExecutable: protonRunScript,
-          customEnv: protonEnv,
-        );
-        _logService.log('Controller fix applied for standard Proton.');
+        _logService.log('Essential dependencies installation completed for standard Proton.');
       }
     } else {
       // For 32-bit Proton prefixes (uncommon but possible)
-      _logService.log('Proton prefix identified as ${architecture}. Installing basic dependencies and controller fix.');
+      _logService.log('Proton prefix identified as ${architecture}. Installing basic dependencies.');
       onStatusUpdate('Installing dependencies for ${architecture} Proton prefix...');
 
       final tempPrefix = WinePrefix(
@@ -782,15 +766,7 @@ class ProtonPrefixCreationService {
         }
       }
 
-      // Apply Controller Fix for non-64-bit prefixes
-      onStatusUpdate('Applying controller fix...');
-      await _prefixManagementService.applyControllerFix(
-        tempPrefix,
-        onStatusUpdate: onStatusUpdate,
-        customWineExecutable: protonRunScript,
-        customEnv: protonEnv,
-      );
-      _logService.log('Controller fix applied for ${architecture} Proton prefix.');
+      _logService.log('Dependencies installation completed for ${architecture} Proton prefix.');
     }
 
     _logService.log('Gaming dependencies installation attempt for Proton finished.');

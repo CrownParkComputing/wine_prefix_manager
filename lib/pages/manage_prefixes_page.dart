@@ -3,11 +3,13 @@ import 'package:provider/provider.dart';
 import '../models/prefix_models.dart';
 import '../models/settings.dart';
 import '../providers/prefix_provider.dart';
+import '../providers/settings_provider.dart';
 import '../widgets/rename_prefix_dialog.dart';
 import '../widgets/env_variables_dialog.dart';
 import '../widgets/prefix_list_tile.dart';
 import '../widgets/prefix_detail_actions.dart';
 import '../widgets/executable_list_tile.dart';
+import '../widgets/prefix_creation_form.dart';
 
 // Define callback types needed by child widgets, to be passed from main.dart
 typedef OnExeAction = Future<void> Function(WinePrefix prefix, ExeEntry exe);
@@ -119,6 +121,58 @@ class _ManagePrefixesPageState extends State<ManagePrefixesPage> with SingleTick
     );
   }
 
+  void _showCreatePrefixDialog(PrefixType prefixType) {
+    final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false, // Prevent dismissing by tapping outside
+      builder: (dialogContext) => Dialog(
+        child: Container(
+          width: MediaQuery.of(context).size.width * 0.8,
+          height: MediaQuery.of(context).size.height * 0.8,
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Create ${prefixType == PrefixType.wine ? "Wine" : "Proton"} Prefix',
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.of(dialogContext).pop(),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              // Creation form
+              Expanded(
+                child: PrefixCreationForm(
+                  settings: settingsProvider.settings,
+                  initialPrefixType: prefixType,
+                  onSuccess: () {
+                    Navigator.of(dialogContext).pop(); // Close dialog on success
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('${prefixType == PrefixType.wine ? "Wine" : "Proton"} prefix created successfully!'),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -158,6 +212,22 @@ class _ManagePrefixesPageState extends State<ManagePrefixesPage> with SingleTick
           _buildPrefixList(PrefixType.proton),
         ],
       ),
+      floatingActionButton: AnimatedBuilder(
+        animation: _tabController,
+        builder: (context, child) {
+          final currentTab = _tabController.index;
+          final prefixType = currentTab == 0 ? PrefixType.wine : PrefixType.proton;
+          final icon = currentTab == 0 ? Icons.wine_bar : Icons.games;
+          final label = currentTab == 0 ? 'Wine Prefix' : 'Proton Prefix';
+          
+          return FloatingActionButton.extended(
+            onPressed: () => _showCreatePrefixDialog(prefixType),
+            icon: Icon(icon),
+            label: Text('Create $label'),
+            tooltip: 'Create new $label',
+          );
+        },
+      ),
     );
   }
 
@@ -196,9 +266,9 @@ class _ManagePrefixesPageState extends State<ManagePrefixesPage> with SingleTick
                   style: const TextStyle(fontSize: 18),
                 ),
                 const SizedBox(height: 8),
-                const Text(
-                  'Create a new prefix using the "Prefix Management" tab.',
-                  style: TextStyle(color: Colors.grey),
+                Text(
+                  'Click the + button below to create your first ${type.name} prefix.',
+                  style: const TextStyle(color: Colors.grey),
                   textAlign: TextAlign.center,
                 ),
               ],
