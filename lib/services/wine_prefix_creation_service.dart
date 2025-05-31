@@ -82,6 +82,20 @@ class WinePrefixCreationService {
       return null;
     }
 
+    // Early check for 32-bit prefix requests with WoW64-only builds
+    if (architecture == 'win32') {
+      _logService.log('32-bit prefix requested - checking Wine build compatibility...');
+      onStatusUpdate('Checking Wine build compatibility for 32-bit prefix...');
+      
+      final isWoW64Only = await _checkIfWoW64Only(selectedBuild);
+      if (isWoW64Only) {
+        final errorMsg = 'This Wine build only supports 64-bit prefixes (WoW64 mode). However, 64-bit prefixes can run both 32-bit and 64-bit applications automatically. Please create a 64-bit prefix instead.';
+        _logService.log(errorMsg, LogLevel.error);
+        onStatusUpdate('Error: Wine build requires 64-bit prefix for 32-bit app compatibility');
+        throw Exception(errorMsg);
+      }
+    }
+
     try {
       // Download and Extract (only if not installed)
       String extractedDir;
@@ -386,53 +400,94 @@ class WinePrefixCreationService {
     winebootArgs.addAll(['wineboot', '-u']);
     await setupShell.runExecutableArguments(effectiveWineExecutable, winebootArgs);
 
-    // Set Windows version to win10
-    onStatusUpdate('Setting Windows version to win10...');
-    _logService.log('Running winecfg /v win10...');
-    List<String> winecfgArgs = [];
-    if (isProton) winecfgArgs.add('run');
-    winecfgArgs.addAll(['winecfg', '/v', 'win10']);
-    await setupShell.runExecutableArguments(effectiveWineExecutable, winecfgArgs);
-    _logService.log('Windows version set to win10.');
+    // For 32-bit prefixes, check if Wine build supports them (WoW64 builds don't)
+    if (architecture == 'win32') {
+      _logService.log('32-bit prefix detected - setting up with proper win32 architecture...');
+      onStatusUpdate('Configuring 32-bit prefix...');
 
-    // Install core dependencies
-    // Standard dependencies first
-    final List<String> winetricksDeps = [
-      // Core fonts to match Jeff Minter profile (arial32, times32, courie32)
-      'arial',
-      'courier',
-      'times',
-      // Other essential dependencies
-      'd3dx9', // Common for older games
-      'd3dcompiler_43', // For shader compilation
-      // d3dcompiler_47 is also a gaming dependency, will be installed below if 64-bit
-      'msls31', // Microsoft Line Services, sometimes needed
-    ];
-
-    onStatusUpdate('Installing core Winetricks components...');
-    for (final dep in winetricksDeps) {
-      onStatusUpdate('Installing $dep...');
-      _logService.log('Installing winetricks $dep using WINE: $effectiveWineExecutable and WINEPREFIX: $prefixPath');
+      // Open winecfg for user to select Windows version (optional - may fail in some environments)
+      onStatusUpdate('Attempting to open winecfg for Windows version selection...');
+      _logService.log('Attempting to open winecfg for user to configure Windows version...');
+      _logService.log('Environment: WINEPREFIX=$prefixPath, WINEARCH=$architecture');
+      _logService.log('Wine executable: $effectiveWineExecutable');
+      _logService.log('Display environment: DISPLAY=${Platform.environment['DISPLAY']}, WAYLAND_DISPLAY=${Platform.environment['WAYLAND_DISPLAY']}');
+      
+      List<String> winecfgArgs = [];
+      if (isProton) winecfgArgs.add('run');
+      winecfgArgs.add('winecfg');
+      
       try {
-        // Use the winetricksShell with the correct environment for winetricks
-        final results = await winetricksShell.run(
-          'winetricks -q $dep',
-        );
-        final result = results.first; // Assuming single command, take the first result
-        _logService.log('$dep installation finished. ${result.outText}');
-        if (result.exitCode != 0) {
-          _logService.log('Winetricks $dep installation failed with exit code ${result.exitCode}: ${result.errText}', LogLevel.warning);
-          onStatusUpdate('Warning: $dep installation failed.');
+        _logService.log('Executing: $effectiveWineExecutable ${winecfgArgs.join(' ')}');
+        final result = await setupShell.runExecutableArguments(effectiveWineExecutable, winecfgArgs);
+        _logService.log('winecfg result: exit code ${result.exitCode}');
+        _logService.log('winecfg stdout: ${result.stdout}');
+        _logService.log('winecfg stderr: ${result.stderr}');
+        
+        if (result.exitCode == 0) {
+          _logService.log('winecfg completed successfully for 32-bit prefix configuration.');
+          onStatusUpdate('winecfg completed successfully. Windows version configured.');
+        } else {
+          _logService.log('winecfg finished with exit code ${result.exitCode}', LogLevel.warning);
+          onStatusUpdate('winecfg exited with issues. You can configure it manually later via the winecfg button.');
         }
       } catch (e) {
-        _logService.log('Error installing $dep with winetricks: $e', LogLevel.error);
-        onStatusUpdate('Error installing $dep.');
+        _logService.log('Error opening winecfg for 32-bit prefix: $e', LogLevel.error);
+        onStatusUpdate('winecfg could not open (display issue?). Use the winecfg button to configure manually.');
       }
-    }
-    _logService.log('Core Winetricks components installation attempt finished.');
 
-    // Install gaming-specific dependencies
-    if (architecture == 'win64') {
+      _logService.log('32-bit prefix setup complete with user-selected configuration.');
+      onStatusUpdate('32-bit prefix created successfully! Ready for 32-bit applications.');
+    } else {
+      // Full setup for 64-bit prefixes
+      _logService.log('64-bit prefix detected - proceeding with full gaming setup...');
+      onStatusUpdate('Setting up 64-bit prefix with gaming components...');
+
+      // Set Windows version to win10 (only for 64-bit)
+      onStatusUpdate('Setting Windows version to win10...');
+      _logService.log('Running winecfg /v win10...');
+      List<String> winecfgArgs = [];
+      if (isProton) winecfgArgs.add('run');
+      winecfgArgs.addAll(['winecfg', '/v', 'win10']);
+      await setupShell.runExecutableArguments(effectiveWineExecutable, winecfgArgs);
+      _logService.log('Windows version set to win10.');
+
+      // Install core dependencies (only for 64-bit)
+      // Standard dependencies first
+      final List<String> winetricksDeps = [
+        // Core fonts to match Jeff Minter profile (arial32, times32, courie32)
+        'arial',
+        'courier',
+        'times',
+        // Other essential dependencies
+        'd3dx9', // Common for older games
+        'd3dcompiler_43', // For shader compilation
+        // d3dcompiler_47 is also a gaming dependency, will be installed below if 64-bit
+        'msls31', // Microsoft Line Services, sometimes needed
+      ];
+
+      onStatusUpdate('Installing core Winetricks components...');
+      for (final dep in winetricksDeps) {
+        onStatusUpdate('Installing $dep...');
+        _logService.log('Installing winetricks $dep using WINE: $effectiveWineExecutable and WINEPREFIX: $prefixPath');
+        try {
+          // Use the winetricksShell with the correct environment for winetricks
+          final results = await winetricksShell.run(
+            'winetricks -q $dep',
+          );
+          final result = results.first; // Assuming single command, take the first result
+          _logService.log('$dep installation finished. ${result.outText}');
+          if (result.exitCode != 0) {
+            _logService.log('Winetricks $dep installation failed with exit code ${result.exitCode}: ${result.errText}', LogLevel.warning);
+            onStatusUpdate('Warning: $dep installation failed.');
+          }
+        } catch (e) {
+          _logService.log('Error installing $dep with winetricks: $e', LogLevel.error);
+          onStatusUpdate('Error installing $dep.');
+        }
+      }
+      _logService.log('Core Winetricks components installation attempt finished.');
+
+      // Full gaming setup for 64-bit prefixes
       _logService.log('Attempting to install gaming dependencies for 64-bit prefix...');
       onStatusUpdate('Installing gaming dependencies (DXVK, VKD3D, VC++ Runtimes, etc.)...');
 
@@ -495,26 +550,6 @@ class WinePrefixCreationService {
         onStatusUpdate('Error installing VC++ Redistributable (x64).');
       }
 
-      // Install dinput8 after VC++ Redist and before other gaming Winetricks deps
-      /*
-      onStatusUpdate('Installing dinput8 (controller fix component)...');
-      _logService.log('Installing winetricks dinput8 --force for controller compatibility using WINE: $effectiveWineExecutable and WINEPREFIX: $prefixPath');
-      try {
-        final dinput8Results = await winetricksShell.run(
-          'winetricks -q --force dinput8',
-        );
-        final dinput8Result = dinput8Results.first;
-        _logService.log('dinput8 --force installation finished. ${dinput8Result.outText}');
-        if (dinput8Result.exitCode != 0) {
-          _logService.log('Winetricks dinput8 --force installation failed with exit code ${dinput8Result.exitCode}: ${dinput8Result.errText}', LogLevel.warning);
-          onStatusUpdate('Warning: dinput8 --force installation failed.');
-        }
-      } catch (e) {
-        _logService.log('Error installing dinput8 --force with winetricks: $e', LogLevel.error);
-        onStatusUpdate('Error installing dinput8 --force.');
-      }
-      */
-      
       // Install other gaming-specific Winetricks dependencies
       final List<String> gamingWinetricksDeps = [
         'd3dcompiler_47', // Newer d3dcompiler
@@ -540,7 +575,7 @@ class WinePrefixCreationService {
         }
       }
 
-      // Apply Controller Fix (XInput, XAudio - dinput8 is now installed earlier)
+      // Apply Controller Fix (XInput, XAudio)
       onStatusUpdate('Applying controller fix (XInput, XAudio)...');
       await _prefixManagementService.applyControllerFix(
         tempPrefix,
@@ -549,68 +584,63 @@ class WinePrefixCreationService {
         customEnv: fullEnv,
       );
       _logService.log('Controller fix applied.');
-      
-    } else {
-      // Install dependencies for 32-bit prefixes
-      _logService.log('Installing dependencies for 32-bit prefix...');
-      onStatusUpdate('Installing dependencies for 32-bit prefix...');
-
-      final tempPrefix = WinePrefix(
-          name: path.basename(prefixPath),
-          path: prefixPath,
-          wineBuildPath: buildPath,
-          type: PrefixType.wine,
-          architecture: architecture,
-          exeEntries: [],
-      );
-
-      // Install Microsoft Visual C++ 2015-2022 Redistributable (x86) for 32-bit prefixes
-      onStatusUpdate('Downloading and installing Microsoft Visual C++ Redistributable (x86)...');
-      _logService.log('Downloading and installing Microsoft Visual C++ Redistributable (x86)...');
-      const vcRedistUrl = 'https://aka.ms/vs/17/release/vc_redist.x86.exe';
-      final tempDirForVcRedist = await Directory.systemTemp.createTemp('vcredist_x86_');
-      final vcRedistPath = path.join(tempDirForVcRedist.path, 'vc_redist.x86.exe');
-
-      try {
-        await _dio.download(vcRedistUrl, vcRedistPath, onReceiveProgress: (received, total) {
-          if (total > 0) {
-            final progressPercent = (received / total * 100).toStringAsFixed(1);
-            onStatusUpdate('Downloading VC++ Redist (x86): $progressPercent%');
-          }
-        });
-        _logService.log('VC++ Redistributable (x86) downloaded to $vcRedistPath');
-
-        onStatusUpdate('Installing VC++ Redistributable (x86) (this might take a moment)...');
-        final vcInstallArgs = [vcRedistPath, '/install', '/passive', '/norestart'];
-        final vcInstallResult = await winetricksShell.runExecutableArguments(effectiveWineExecutable, vcInstallArgs);
-
-        if (vcInstallResult.exitCode == 0 || vcInstallResult.exitCode == 3010) {
-          _logService.log('VC++ Redistributable (x86) installed successfully. Exit code: ${vcInstallResult.exitCode}');
-          onStatusUpdate('VC++ Redistributable (x86) installed.');
-        } else {
-          _logService.log('VC++ Redistributable (x86) installation failed. Exit code: ${vcInstallResult.exitCode}\nStdOut: ${vcInstallResult.outText}\nStdErr: ${vcInstallResult.errText}', LogLevel.error);
-          onStatusUpdate('Error: VC++ Redistributable (x86) installation failed.');
-        }
-      } catch (e) {
-        _logService.log('Error downloading or installing VC++ Redistributable (x86): $e', LogLevel.error);
-        onStatusUpdate('Error installing VC++ Redistributable (x86).');
-      }
-
-      // Apply Controller Fix for 32-bit prefixes as well
-      onStatusUpdate('Applying controller fix...');
-      await _prefixManagementService.applyControllerFix(
-        tempPrefix,
-        onStatusUpdate: onStatusUpdate,
-        customWineExecutable: effectiveWineExecutable,
-        customEnv: fullEnv,
-      );
-      _logService.log('Controller fix applied.');
-
-      _logService.log('Standard dependencies and controller fix installed for 32-bit prefix. Gaming components like DXVK/VKD3D can be installed manually if needed.');
-      onStatusUpdate('Standard dependencies and controller fix installed for 32-bit prefix.');
     }
 
     onStatusUpdate('Prefix initialization complete.');
     _logService.log('Prefix initialization complete.');
+  }
+
+  Future<bool> _checkIfWoW64Only(BaseBuild selectedBuild) async {
+    try {
+      // For downloadable builds, we need to check the actual Wine executable
+      // For now, assume system Wine (which we know is WoW64-only based on test results)
+      
+      // Quick test: try to create a temporary 32-bit prefix
+      final tempTestPrefix = path.join(Directory.systemTemp.path, 'wine_wow64_test_${DateTime.now().millisecondsSinceEpoch}');
+      
+      // Set up test environment
+      final testEnv = {
+        'WINEPREFIX': tempTestPrefix,
+        'WINEARCH': 'win32',
+        'WINEDLLOVERRIDES': 'winemenubuilder.exe=d',
+      };
+
+      _logService.log('Testing for WoW64-only mode with temporary prefix: $tempTestPrefix');
+      
+      // For system Wine (when selectedBuild has no downloadUrl), test directly
+      if (selectedBuild.downloadUrl == null && selectedBuild.installPath == null) {
+        final testResults = await Shell(environment: testEnv, verbose: false)
+            .run('wine wineboot --init');
+        final testResult = testResults.first; // Get the first (and only) result
+        
+        // Clean up test prefix regardless of result
+        try {
+          if (Directory(tempTestPrefix).existsSync()) {
+            Directory(tempTestPrefix).deleteSync(recursive: true);
+          }
+        } catch (e) {
+          _logService.log('Could not clean up WoW64 test prefix: $e', LogLevel.warning);
+        }
+
+        // Check if the error indicates WoW64-only mode
+        if (testResult.exitCode != 0 && testResult.stderr.contains('wow64 mode')) {
+          _logService.log('Detected WoW64-only Wine build - 32-bit prefixes not supported');
+          return true;
+        }
+        
+        _logService.log('Wine build supports true 32-bit prefixes');
+        return false;
+      }
+      
+      // For downloadable builds, we'll assume they support 32-bit unless proven otherwise
+      // TODO: Could be enhanced to check the actual build characteristics
+      _logService.log('Downloadable Wine build - assuming 32-bit prefix support');
+      return false;
+      
+    } catch (e) {
+      _logService.log('Error checking WoW64 mode: $e', LogLevel.warning);
+      // If we can't determine, assume it supports 32-bit and let the user find out
+      return false;
+    }
   }
 } 

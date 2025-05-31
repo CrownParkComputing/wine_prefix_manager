@@ -23,6 +23,7 @@ import 'services/igdb_service.dart'; // Import IgdbService
 import 'services/ui_action_service.dart'; // Import UIActionService
 import 'services/compressed_game_service.dart'; // Import CompressedGameService
 import 'services/power_management_service.dart';
+import 'services/iso_mounting_service.dart'; // Add import for IsoMountingService
 
 // Widgets & Pages
 // import 'widgets/custom_title_bar.dart'; // Removed import
@@ -38,6 +39,7 @@ import 'pages/game_library_page.dart';
 import 'pages/game_details_page.dart'; // Add import for GameDetailsPage
 import 'widgets/about_screen.dart'; // Correct import for AboutScreen
 import 'pages/files_and_backup_page.dart'; // Add import for FilesAndBackupPage
+import 'pages/iso_mounting_page.dart'; // Add import for IsoMountingPage
 
 // Constants
 // const String appTitle = 'Wine Prefix Manager'; // Removed
@@ -97,6 +99,7 @@ void main() async {
         Provider(create: (_) => PrefixManagementService()),
         Provider(create: (_) => PrefixCreationService()),
         Provider(create: (_) => CompressedGameService()),
+        ChangeNotifierProvider(create: (_) => IsoMountingService()), // Changed to ChangeNotifierProvider
         Provider<PowerManagementService>(
           create: (context) => PowerManagementService(context.read<LogService>()),
         ),
@@ -130,6 +133,7 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> {
   late final Settings _settings;
   late final LogService _logService;
+  late final IsoMountingService _isoService; // Add ISO mounting service
   // Removed IgdbService and PrefixProvider instance variables as they are mainly used via UIActionService now
   // late final IgdbService _igdbService;
   // late final PrefixProvider _prefixProvider;
@@ -140,6 +144,7 @@ class _MyAppState extends State<MyApp> {
     final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
     _settings = settingsProvider.settings;
     _logService = Provider.of<LogService>(context, listen: false);
+    _isoService = Provider.of<IsoMountingService>(context, listen: false); // Initialize ISO service
     // _igdbService = Provider.of<IgdbService>(context, listen: false); // No longer needed here
     final prefixProvider = Provider.of<PrefixProvider>(context, listen: false); // Get provider instance
 
@@ -167,6 +172,16 @@ class _MyAppState extends State<MyApp> {
     _logService.log('IGDB Image Base URL: ${_settings.igdbImageBaseUrl}');
     _logService.log('Twitch OAuth URL: ${_settings.twitchOAuthUrl}');
     _logService.log('IGDB API Base URL: ${_settings.igdbApiBaseUrl}');
+  }
+
+  // Add dispose method to cleanup mounted ISOs
+  @override
+  void dispose() {
+    // Cleanup all mounted ISOs when app closes
+    _isoService.cleanupAllMountedIsos().catchError((e) {
+      _logService.log('Error cleaning up mounted ISOs on app exit: $e', LogLevel.error);
+    });
+    super.dispose();
   }
 
   // Removed unused _addLogMessage method
@@ -410,8 +425,11 @@ class _MainScaffoldState extends State<MainScaffold> {
         // Combined Files & Backup Manager - tabbed interface
         return const FilesAndBackupPage();
       case 3:
-        return LogsPage();
+        // ISO/CD Management page
+        return const IsoMountingPage();
       case 4:
+        return LogsPage();
+      case 5:
         return const AboutScreen();
       default:
         return HomePage(onNavigateToTab: navigateToTab);
@@ -461,6 +479,11 @@ class _MainScaffoldState extends State<MainScaffold> {
                       icon: Icon(Icons.folder_copy_outlined),
                       selectedIcon: Icon(Icons.folder_copy),
                       label: Text('Files & Backup'),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.album_outlined),
+                      selectedIcon: Icon(Icons.album),
+                      label: Text('ISO/CD'),
                     ),
                     NavigationRailDestination(
                       icon: Icon(Icons.article_outlined),

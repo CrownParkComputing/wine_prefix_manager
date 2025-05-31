@@ -643,130 +643,42 @@ class ProtonPrefixCreationService {
 
         _logService.log('VC++ Redistributable installation completed for Proton-GE.');
       } else {
-        // For other standard Proton builds, install VC++ runtime and minimal dependencies
-        _logService.log('Standard Proton build detected - installing VC++ Redistributable and minimal dependencies.');
-        onStatusUpdate('Installing VC++ Redistributable and basic dependencies...');
+        // Minimal 32-bit Proton prefix setup with proper configuration
+        _logService.log('32-bit Proton prefix detected - setting up with proper win32 architecture...');
+        onStatusUpdate('Configuring 32-bit Proton prefix...');
 
-        // Install Microsoft Visual C++ 2015-2022 Redistributable (x64) directly
-        onStatusUpdate('Downloading and installing Microsoft Visual C++ Redistributable (x64)...');
-        _logService.log('Downloading and installing Microsoft Visual C++ Redistributable (x64) for standard Proton...');
-        const vcRedistUrl = 'https://aka.ms/vs/17/release/vc_redist.x64.exe';
-        final tempDirForVcRedist = await Directory.systemTemp.createTemp('vcredist_');
-        final vcRedistPath = path.join(tempDirForVcRedist.path, 'vc_redist.x64.exe');
-
+        // Set Windows version to win10 for 32-bit Proton prefix
+        onStatusUpdate('Setting Windows version to win10 for 32-bit Proton prefix...');
+        _logService.log('Running winecfg /v win10 for 32-bit Proton prefix...');
+        List<String> winecfgArgs = [];
+        
+        if (isWineExecutable) {
+          // For Wine executables, don't use 'run' prefix
+          winecfgArgs.addAll(['winecfg', '/v', 'win10']);
+        } else {
+          // For true Proton scripts, use 'run' prefix
+          winecfgArgs.addAll(['run', 'winecfg', '/v', 'win10']);
+        }
+        
         try {
-          await _dio.download(vcRedistUrl, vcRedistPath, onReceiveProgress: (received, total) {
-            if (total > 0) {
-              final progressPercent = (received / total * 100).toStringAsFixed(1);
-              onStatusUpdate('Downloading VC++ Redist: $progressPercent%');
-            }
-          });
-          _logService.log('VC++ Redistributable downloaded to $vcRedistPath');
-
-          onStatusUpdate('Installing VC++ Redistributable (this might take a moment)...');
-          final vcInstallArgs = [vcRedistPath, '/install', '/passive', '/norestart'];
-          final vcInstallResult = await setupShell.runExecutableArguments(protonRunScript, vcInstallArgs);
-
-          if (vcInstallResult.exitCode == 0 || vcInstallResult.exitCode == 3010) {
-            _logService.log('VC++ Redistributable (x64) installed successfully for standard Proton. Exit code: ${vcInstallResult.exitCode}');
-            onStatusUpdate('VC++ Redistributable (x64) installed.');
-          } else {
-            _logService.log('VC++ Redistributable (x64) installation failed for standard Proton. Exit code: ${vcInstallResult.exitCode}\nStdOut: ${vcInstallResult.stdout}\nStdErr: ${vcInstallResult.stderr}', LogLevel.error);
-            onStatusUpdate('Error: VC++ Redistributable (x64) installation failed.');
-          }
+          await setupShell.runExecutableArguments(protonRunScript, winecfgArgs);
+          _logService.log('Windows version set to win10 for 32-bit Proton prefix.');
+          onStatusUpdate('Windows version configured for 32-bit Proton prefix.');
         } catch (e) {
-          _logService.log('Error downloading or installing VC++ Redistributable (x64) for standard Proton: $e', LogLevel.error);
-          onStatusUpdate('Error installing VC++ Redistributable (x64).');
+          _logService.log('Warning: Could not set Windows version for 32-bit Proton prefix: $e', LogLevel.warning);
+          onStatusUpdate('Warning: Windows version setting failed, but prefix should still work.');
         }
 
-        // Install only essential components via winetricks
-        final List<String> minimalWinetricksDeps = [
-          'd3dcompiler_47', // Essential for some games
-        ];
-
-        for (final dep in minimalWinetricksDeps) {
-          onStatusUpdate('Installing $dep (Winetricks for Proton)...');
-          _logService.log('Installing winetricks $dep for standard Proton prefix...');
-          try {
-            if (isWineExecutable) {
-              final winetricksShell = Shell(environment: {...fullEnv, 'WINE': protonRunScript}, verbose: false);
-              final wtResults = await winetricksShell.run('winetricks -q $dep');
-              final wtResult = wtResults.first;
-              _logService.log('$dep installation finished (Winetricks for Proton). stdout: ${wtResult.stdout}, stderr: ${wtResult.stderr}');
-              if (wtResult.exitCode != 0) {
-                _logService.log('Winetricks $dep installation failed for Proton with exit code ${wtResult.exitCode}: ${wtResult.stderr}', LogLevel.warning);
-                onStatusUpdate('Warning: $dep (Winetricks for Proton) installation failed.');
-              }
-            } else {
-              final wtResults = await setupShell.run('"$protonRunScript" run winetricks -q $dep');
-              final wtResult = wtResults.first;
-              _logService.log('$dep installation finished (Winetricks for Proton). stdout: ${wtResult.stdout}, stderr: ${wtResult.stderr}');
-              if (wtResult.exitCode != 0) {
-                _logService.log('Winetricks $dep installation failed for Proton with exit code ${wtResult.exitCode}: ${wtResult.stderr}', LogLevel.warning);
-                onStatusUpdate('Warning: $dep (Winetricks for Proton) installation failed.');
-              }
-            }
-          } catch (e) {
-            _logService.log('Error installing $dep with winetricks for Proton: $e', LogLevel.error);
-            onStatusUpdate('Error installing $dep (Winetricks for Proton).');
-          }
-        }
-
-        _logService.log('Essential dependencies installation completed for standard Proton.');
+        _logService.log('32-bit Proton prefix setup complete with proper architecture configuration.');
+        onStatusUpdate('32-bit Proton prefix created successfully! Ready for 32-bit applications.');
       }
     } else {
-      // For 32-bit Proton prefixes (uncommon but possible)
-      _logService.log('Proton prefix identified as ${architecture}. Installing basic dependencies.');
-      onStatusUpdate('Installing dependencies for ${architecture} Proton prefix...');
+      // Completely minimal 32-bit Proton prefix setup - bare prefix only
+      _logService.log('Creating completely minimal 32-bit Proton prefix - bare prefix only...');
+      onStatusUpdate('Creating minimal 32-bit Proton prefix...');
 
-      final tempPrefix = WinePrefix(
-        name: path.basename(prefixPath),
-        path: prefixPath,
-        wineBuildPath: buildPath,
-        type: PrefixType.proton,
-        architecture: architecture,
-        exeEntries: [],
-      );
-
-      // Install VC++ runtime for 32-bit if needed
-      if (architecture == 'win32') {
-        try {
-          onStatusUpdate('Installing VC++ runtime for 32-bit Proton prefix...');
-          _logService.log('Installing VC++ runtime (x86) for 32-bit Proton prefix...');
-          
-          // Download and install Microsoft Visual C++ 2015-2022 Redistributable (x86) directly
-          onStatusUpdate('Downloading and installing Microsoft Visual C++ Redistributable (x86)...');
-          _logService.log('Downloading and installing Microsoft Visual C++ Redistributable (x86) for 32-bit Proton...');
-          const vcRedistUrl = 'https://aka.ms/vs/17/release/vc_redist.x86.exe';
-          final tempDirForVcRedist = await Directory.systemTemp.createTemp('vcredist_x86_');
-          final vcRedistPath = path.join(tempDirForVcRedist.path, 'vc_redist.x86.exe');
-
-          await _dio.download(vcRedistUrl, vcRedistPath, onReceiveProgress: (received, total) {
-            if (total > 0) {
-              final progressPercent = (received / total * 100).toStringAsFixed(1);
-              onStatusUpdate('Downloading VC++ Redist (x86): $progressPercent%');
-            }
-          });
-          _logService.log('VC++ Redistributable (x86) downloaded to $vcRedistPath');
-
-          onStatusUpdate('Installing VC++ Redistributable (x86) (this might take a moment)...');
-          final vcInstallArgs = [vcRedistPath, '/install', '/passive', '/norestart'];
-          final vcInstallResult = await setupShell.runExecutableArguments(protonRunScript, vcInstallArgs);
-
-          if (vcInstallResult.exitCode == 0 || vcInstallResult.exitCode == 3010) {
-            _logService.log('VC++ Redistributable (x86) installed successfully for 32-bit Proton. Exit code: ${vcInstallResult.exitCode}');
-            onStatusUpdate('VC++ Redistributable (x86) installed.');
-          } else {
-            _logService.log('VC++ Redistributable (x86) installation failed for 32-bit Proton. Exit code: ${vcInstallResult.exitCode}\nStdOut: ${vcInstallResult.stdout}\nStdErr: ${vcInstallResult.stderr}', LogLevel.error);
-            onStatusUpdate('Error: VC++ Redistributable (x86) installation failed.');
-          }
-        } catch (e) {
-          _logService.log('Error downloading or installing VC++ Redistributable (x86) for 32-bit Proton: $e', LogLevel.error);
-          onStatusUpdate('Error installing VC++ Redistributable (x86).');
-        }
-      }
-
-      _logService.log('Dependencies installation completed for ${architecture} Proton prefix.');
+      _logService.log('32-bit Proton prefix setup complete - bare prefix ready for manual configuration.');
+      onStatusUpdate('32-bit Proton prefix created successfully! Install VC++ and configure manually via winecfg button as needed.');
     }
 
     _logService.log('Gaming dependencies installation attempt for Proton finished.');

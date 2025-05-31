@@ -216,7 +216,7 @@ class _CommonComponentsDialogState extends State<CommonComponentsDialog> {
 
     setState(() {
       _isInstalling = true;
-      _statusMessage = 'Starting combined DirectX support installation...';
+      _statusMessage = 'Installing complete DirectX support...';
     });
 
     try {
@@ -229,13 +229,13 @@ class _CommonComponentsDialogState extends State<CommonComponentsDialog> {
       if (mounted) {
         setState(() {
           _statusMessage = success 
-            ? 'Complete DirectX support installation successful!' 
-            : 'Complete DirectX support installation partially failed. Check logs.';
+            ? 'Complete DirectX support installed successfully!' 
+            : 'Complete DirectX support installation failed. Check logs.';
         });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(_statusMessage),
-            backgroundColor: success ? Colors.green : Colors.orange, // Use standard orange instead of warning
+            backgroundColor: success ? Colors.green : Colors.orange,
           ),
         );
         
@@ -245,9 +245,157 @@ class _CommonComponentsDialogState extends State<CommonComponentsDialog> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _statusMessage = 'Error during installation: $e';
+          _statusMessage = 'Error during complete DirectX support installation: $e';
+        });
+         ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isInstalling = false;
+        });
+      }
+    }
+  }
+
+  // Add methods for Visual C++ Redistributable installation
+  Future<void> _installVcRedistX86() async {
+    if (_isInstalling) return;
+
+    setState(() {
+      _isInstalling = true;
+      _statusMessage = 'Installing Visual C++ Redistributable (x86)...';
+    });
+
+    try {
+      final success = await _installer.installVcRedistX86(
+        widget.prefix,
+        widget.settings,
+        progressCallback: _updateStatus,
+      );
+
+      if (mounted) {
+        setState(() {
+          _statusMessage = success 
+            ? 'Visual C++ Redistributable (x86) installed successfully!' 
+            : 'Visual C++ Redistributable (x86) installation failed. Check logs.';
         });
         ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_statusMessage),
+            backgroundColor: success ? Colors.green : Colors.orange,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _statusMessage = 'Error during VC++ x86 installation: $e';
+        });
+         ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isInstalling = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _installVcRedistX64() async {
+    if (_isInstalling) return;
+
+    setState(() {
+      _isInstalling = true;
+      _statusMessage = 'Installing Visual C++ Redistributable (x64)...';
+    });
+
+    try {
+      final success = await _installer.installVcRedistX64(
+        widget.prefix,
+        widget.settings,
+        progressCallback: _updateStatus,
+      );
+
+      if (mounted) {
+        setState(() {
+          _statusMessage = success 
+            ? 'Visual C++ Redistributable (x64) installed successfully!' 
+            : 'Visual C++ Redistributable (x64) installation failed. Check logs.';
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_statusMessage),
+            backgroundColor: success ? Colors.green : Colors.orange,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _statusMessage = 'Error during VC++ x64 installation: $e';
+        });
+         ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isInstalling = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _installLegacyGameDependencies() async {
+    if (_isInstalling) return;
+
+    setState(() {
+      _isInstalling = true;
+      _statusMessage = 'Installing legacy game dependencies...';
+    });
+
+    try {
+      final success = await _installer.installLegacyGameDependencies(
+        widget.prefix,
+        widget.settings,
+        progressCallback: _updateStatus,
+      );
+
+      if (mounted) {
+        setState(() {
+          _statusMessage = success 
+            ? 'Legacy game dependencies installed successfully!' 
+            : 'Legacy game dependencies installation failed. Check logs.';
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_statusMessage),
+            backgroundColor: success ? Colors.green : Colors.orange,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _statusMessage = 'Error during legacy game dependencies installation: $e';
+        });
+         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error: $e'),
             backgroundColor: Theme.of(context).colorScheme.error,
@@ -280,31 +428,27 @@ class _CommonComponentsDialogState extends State<CommonComponentsDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Install necessary components like DXVK or VKD3D-Proton into the selected Wine prefix.',
+              'Install necessary components like DXVK, VKD3D-Proton, or Visual C++ Redistributables into the selected Wine prefix.',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 20),
             
             // Status cards for component installation status
-            Container(
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surfaceVariant,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'DirectX Component Status:',
-                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  _isLoading 
-                    ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
-                    : Column(
+            if (_isLoading)
+              const Center(child: CircularProgressIndicator())
+            else
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Current Status',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 8),
+                      Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Row(
@@ -332,9 +476,10 @@ class _CommonComponentsDialogState extends State<CommonComponentsDialog> {
                           ),
                         ],
                       ),
-                ],
+                    ],
+                  ),
+                ),
               ),
-            ),
             
             const SizedBox(height: 16),
             if (isProtonPrefix && !isKronekProton)
@@ -418,6 +563,79 @@ class _CommonComponentsDialogState extends State<CommonComponentsDialog> {
                   ),
                 ),
               ),
+              
+            const SizedBox(height: 16),
+            const Divider(),
+            const SizedBox(height: 8),
+            
+            // Visual C++ Redistributables Section
+            Text(
+              'Visual C++ Redistributables (2015-2022)',
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Required for many games and applications. Install x86 for legacy 32-bit games.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 12),
+            
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    icon: const Icon(Icons.download, size: 18),
+                    label: const Text('VC++ x86', style: TextStyle(fontSize: 13)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Theme.of(context).colorScheme.secondaryContainer,
+                      foregroundColor: Theme.of(context).colorScheme.onSecondaryContainer,
+                      padding: const EdgeInsets.symmetric(vertical: 10.0),
+                    ),
+                    onPressed: _isInstalling ? null : _installVcRedistX86,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    icon: const Icon(Icons.download, size: 18),
+                    label: const Text('VC++ x64', style: TextStyle(fontSize: 13)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Theme.of(context).colorScheme.secondaryContainer,
+                      foregroundColor: Theme.of(context).colorScheme.onSecondaryContainer,
+                      padding: const EdgeInsets.symmetric(vertical: 10.0),
+                    ),
+                    onPressed: _isInstalling ? null : _installVcRedistX64,
+                  ),
+                ),
+              ],
+            ),
+            
+            const SizedBox(height: 12),
+            
+            // Legacy Game Dependencies Button
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                icon: const Icon(Icons.sports_esports),
+                label: const Text('Install Legacy Game Dependencies'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Theme.of(context).colorScheme.tertiaryContainer,
+                  foregroundColor: Theme.of(context).colorScheme.onTertiaryContainer,
+                  padding: const EdgeInsets.symmetric(vertical: 10.0),
+                ),
+                onPressed: _isInstalling ? null : _installLegacyGameDependencies,
+              ),
+            ),
+            
+            const SizedBox(height: 8),
+            Text(
+              'Installs VC++ x86, DirectPlay, DirectSound, MFC42, and older VC++ runtimes for legacy games like Tiger Woods PGA TOUR 06.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                fontSize: 11,
+              ),
+            ),
               
             const SizedBox(height: 20),
             const Divider(),

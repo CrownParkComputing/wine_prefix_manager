@@ -147,18 +147,7 @@ class ProcessService {
 
       // --- Determine paths, command, and specific env vars based on prefix type ---
 
-      if (prefix.type == PrefixType.wine) {
-        // Custom prefixes use the system's wine installation
-        command = 'wine'; // Assume 'wine' is in PATH
-        wineExecutablePath = 'wine'; // For potential checks, though existence check might fail if not absolute
-        wineBinDir = ''; // Rely on system PATH
-        wineLibDir = ''; // Rely on system libs
-        wineLib64Dir = ''; // Rely on system libs
-
-        // Base arguments for system wine
-        baseArguments = isMsi ? ['wineconsole', 'msiexec', '/i', actualExe.path] : [actualExe.path];
-
-      } else if (prefix.type == PrefixType.proton) {
+      if (prefix.type == PrefixType.proton) {
         final buildPath = prefix.wineBuildPath; // Removed unnecessary '!'
         
         // Check if we're running from an AppImage
@@ -315,8 +304,8 @@ class ProcessService {
           }
         }
 
-      } else {
-        // Handle standard Wine prefix case (PrefixType.wine)
+      } else if (prefix.type == PrefixType.wine && prefix.wineBuildPath.isNotEmpty) {
+        // Handle Wine prefix with custom build path
         
         // Check if we're running from an AppImage
         final currentPath = Directory.current.path;
@@ -338,9 +327,9 @@ class ProcessService {
         }
         
         final normalizedBuildPath = path.normalize(
-          path.isAbsolute(prefix.wineBuildPath) // Removed '?? '''
-              ? prefix.wineBuildPath // Removed '?? '''
-              : path.join(basePath, 'wine_builds', prefix.wineBuildPath) // Removed '?? '''
+          path.isAbsolute(prefix.wineBuildPath)
+              ? prefix.wineBuildPath
+              : path.join(basePath, 'wine_builds', prefix.wineBuildPath)
         );
         wineBinDir = path.join(normalizedBuildPath, 'bin');
         wineLibDir = path.join(normalizedBuildPath, 'lib');
@@ -362,6 +351,16 @@ class ProcessService {
           baseArguments = [actualExe.path];
           // Wine EXE mode
         }
+      } else {
+        // Handle system Wine prefix case (no custom build)
+        command = 'wine'; // Assume 'wine' is in PATH
+        wineExecutablePath = 'wine'; // For potential checks, though existence check might fail if not absolute
+        wineBinDir = ''; // Rely on system PATH
+        wineLibDir = ''; // Rely on system libs
+        wineLib64Dir = ''; // Rely on system libs
+
+        // Base arguments for system wine
+        baseArguments = isMsi ? ['wineconsole', 'msiexec', '/i', actualExe.path] : [actualExe.path];
       }
 
       // --- Start Parsing Launch Options ---
@@ -445,12 +444,22 @@ class ProcessService {
         if (!fullEnv.containsKey('WINEFSYNC')) fullEnv['WINEFSYNC'] = '1';
       }
 
-      // Only prepend build paths for non-custom prefixes
+      // Set build paths and architecture for prefixes
       if (prefix.type == PrefixType.proton) {
         fullEnv['PATH'] = '$wineBinDir:${Platform.environment['PATH'] ?? ''}';
         fullEnv['LD_LIBRARY_PATH'] = '$wineLib64Dir:$wineLibDir:${Platform.environment['LD_LIBRARY_PATH'] ?? ''}';
+      } else if (prefix.type == PrefixType.wine && prefix.wineBuildPath.isNotEmpty) {
+        // Set environment for Wine prefixes with custom builds
+        fullEnv['PATH'] = '$wineBinDir:${Platform.environment['PATH'] ?? ''}';
+        fullEnv['LD_LIBRARY_PATH'] = '$wineLib64Dir:$wineLibDir:${Platform.environment['LD_LIBRARY_PATH'] ?? ''}';
+        
+        // Critical: Set WINEARCH for proper architecture handling
+        if (prefix.architecture == 'win32') {
+          fullEnv['WINEARCH'] = 'win32';
+        } else {
+          fullEnv['WINEARCH'] = 'win64';
+        }
       }
-
 
       final exeDir = path.dirname(actualExe.path);
       Process process;
@@ -481,6 +490,20 @@ class ProcessService {
       }
       // --- End Construct Final Command and Arguments ---
 
+      // Debug logging for launch process (commented out for production)
+      // print('=== WINE LAUNCH DEBUG ===');
+      // print('Prefix: ${prefix.name} (${prefix.architecture})');
+      // print('Prefix path: ${prefix.path}');
+      // print('Wine build path: ${prefix.wineBuildPath}');
+      // print('Final command: $finalCommand');
+      // print('Final arguments: ${finalArguments.join(' ')}');
+      // print('Working directory: $exeDir');
+      // print('Key environment variables:');
+      // print('  WINEPREFIX: ${fullEnv['WINEPREFIX']}');
+      // print('  WINEARCH: ${fullEnv['WINEARCH']}');
+      // print('  PATH: ${fullEnv['PATH']}');
+      // print('  LD_LIBRARY_PATH: ${fullEnv['LD_LIBRARY_PATH']}');
+      // print('========================');
 
       // Running command
       // Working directory

@@ -477,6 +477,217 @@ class WineComponentInstaller {
     }
   }
 
+  /// Installs Microsoft Visual C++ Redistributable x64 (2015-2022) to a Wine prefix
+  Future<bool> installVcRedistX64(WinePrefix prefix, Settings settings, {Function(String)? progressCallback, String? customWineExecutable, Map<String, String>? customEnv}) async {
+    final logService = LogService();
+    const vcRedistUrl = 'https://aka.ms/vs/17/release/vc_redist.x64.exe';
+    Directory? tempDirForVcRedist;
+    
+    try {
+      progressCallback?.call('Downloading Microsoft Visual C++ Redistributable (x64)...');
+      logService.log('Starting VC++ Redistributable (x64) installation for prefix: ${prefix.path}');
+      
+      tempDirForVcRedist = await Directory.systemTemp.createTemp('vcredist_x64_');
+      final vcRedistPath = path.join(tempDirForVcRedist.path, 'vc_redist.x64.exe');
+      
+      final dio = Dio();
+      await dio.download(vcRedistUrl, vcRedistPath, onReceiveProgress: (received, total) {
+        if (total > 0) {
+          final progressPercent = (received / total * 100).toStringAsFixed(1);
+          progressCallback?.call('Downloading VC++ Redist (x64): $progressPercent%');
+        }
+      });
+      
+      logService.log('VC++ Redistributable (x64) downloaded to $vcRedistPath');
+      
+      // Prepare environment for installation
+      final installEnv = {
+        ...(Platform.environment),
+        ...(customEnv ?? {}),
+        'WINEPREFIX': prefix.path,
+        'WINEARCH': prefix.architecture,
+      };
+      
+      if (customWineExecutable != null && customWineExecutable.isNotEmpty) {
+        installEnv['WINE'] = customWineExecutable;
+        final wineDir = path.dirname(customWineExecutable);
+        installEnv['PATH'] = '$wineDir:${installEnv['PATH'] ?? Platform.environment['PATH'] ?? ''}';
+      }
+      
+      final shell = Shell(environment: installEnv, verbose: true);
+      
+      progressCallback?.call('Installing VC++ Redistributable (x64)...');
+      logService.log('Installing VC++ Redistributable (x64) with command: wine "$vcRedistPath" /install /passive /norestart');
+      
+      final wineExecutable = customWineExecutable ?? 'wine';
+      final vcInstallResult = await shell.runExecutableArguments(wineExecutable, [
+        vcRedistPath, '/install', '/passive', '/norestart'
+      ]);
+      
+      if (vcInstallResult.exitCode == 0 || vcInstallResult.exitCode == 3010) {
+        final successMsg = 'VC++ Redistributable (x64) installed successfully. Exit code: ${vcInstallResult.exitCode}';
+        logService.log(successMsg);
+        progressCallback?.call('VC++ Redistributable (x64) installed successfully.');
+        return true;
+      } else {
+        final errorMsg = 'VC++ Redistributable (x64) installation failed. Exit code: ${vcInstallResult.exitCode}\nStdOut: ${vcInstallResult.outText}\nStdErr: ${vcInstallResult.errText}';
+        logService.log(errorMsg, LogLevel.error);
+        progressCallback?.call('Error: VC++ Redistributable (x64) installation failed.');
+        return false;
+      }
+      
+    } catch (e, stackTrace) {
+      final errorMsg = 'Error downloading or installing VC++ Redistributable (x64): $e';
+      logService.log('$errorMsg\n$stackTrace', LogLevel.error);
+      progressCallback?.call(errorMsg);
+      return false;
+    } finally {
+      // Clean up temporary directory
+      try {
+        if (tempDirForVcRedist != null && await tempDirForVcRedist.exists()) {
+          await tempDirForVcRedist.delete(recursive: true);
+        }
+      } catch (e) {
+        logService.log('Error cleaning up VC++ Redist temp files: $e', LogLevel.warning);
+      }
+    }
+  }
+
+  /// Installs Microsoft Visual C++ Redistributable x86 (2015-2022) to a Wine prefix
+  Future<bool> installVcRedistX86(WinePrefix prefix, Settings settings, {Function(String)? progressCallback, String? customWineExecutable, Map<String, String>? customEnv}) async {
+    final logService = LogService();
+    const vcRedistUrl = 'https://aka.ms/vs/17/release/vc_redist.x86.exe';
+    Directory? tempDirForVcRedist;
+    
+    try {
+      progressCallback?.call('Downloading Microsoft Visual C++ Redistributable (x86)...');
+      logService.log('Starting VC++ Redistributable (x86) installation for prefix: ${prefix.path}');
+      
+      tempDirForVcRedist = await Directory.systemTemp.createTemp('vcredist_x86_');
+      final vcRedistPath = path.join(tempDirForVcRedist.path, 'vc_redist.x86.exe');
+      
+      final dio = Dio();
+      await dio.download(vcRedistUrl, vcRedistPath, onReceiveProgress: (received, total) {
+        if (total > 0) {
+          final progressPercent = (received / total * 100).toStringAsFixed(1);
+          progressCallback?.call('Downloading VC++ Redist (x86): $progressPercent%');
+        }
+      });
+      
+      logService.log('VC++ Redistributable (x86) downloaded to $vcRedistPath');
+      
+      // Prepare environment for installation
+      final installEnv = {
+        ...(Platform.environment),
+        ...(customEnv ?? {}),
+        'WINEPREFIX': prefix.path,
+        'WINEARCH': prefix.architecture,
+      };
+      
+      if (customWineExecutable != null && customWineExecutable.isNotEmpty) {
+        installEnv['WINE'] = customWineExecutable;
+        final wineDir = path.dirname(customWineExecutable);
+        installEnv['PATH'] = '$wineDir:${installEnv['PATH'] ?? Platform.environment['PATH'] ?? ''}';
+      }
+      
+      final shell = Shell(environment: installEnv, verbose: true);
+      
+      progressCallback?.call('Installing VC++ Redistributable (x86)...');
+      logService.log('Installing VC++ Redistributable (x86) with command: wine "$vcRedistPath" /install /passive /norestart');
+      
+      final wineExecutable = customWineExecutable ?? 'wine';
+      final vcInstallResult = await shell.runExecutableArguments(wineExecutable, [
+        vcRedistPath, '/install', '/passive', '/norestart'
+      ]);
+      
+      if (vcInstallResult.exitCode == 0 || vcInstallResult.exitCode == 3010) {
+        final successMsg = 'VC++ Redistributable (x86) installed successfully. Exit code: ${vcInstallResult.exitCode}';
+        logService.log(successMsg);
+        progressCallback?.call('VC++ Redistributable (x86) installed successfully.');
+        return true;
+      } else {
+        final errorMsg = 'VC++ Redistributable (x86) installation failed. Exit code: ${vcInstallResult.exitCode}\nStdOut: ${vcInstallResult.outText}\nStdErr: ${vcInstallResult.errText}';
+        logService.log(errorMsg, LogLevel.error);
+        progressCallback?.call('Error: VC++ Redistributable (x86) installation failed.');
+        return false;
+      }
+      
+    } catch (e, stackTrace) {
+      final errorMsg = 'Error downloading or installing VC++ Redistributable (x86): $e';
+      logService.log('$errorMsg\n$stackTrace', LogLevel.error);
+      progressCallback?.call(errorMsg);
+      return false;
+    } finally {
+      // Clean up temporary directory
+      try {
+        if (tempDirForVcRedist != null && await tempDirForVcRedist.exists()) {
+          await tempDirForVcRedist.delete(recursive: true);
+        }
+      } catch (e) {
+        logService.log('Error cleaning up VC++ Redist temp files: $e', LogLevel.warning);
+      }
+    }
+  }
+
+  /// Installs common dependencies for older games like Tiger Woods PGA TOUR 06
+  Future<bool> installLegacyGameDependencies(WinePrefix prefix, Settings settings, {Function(String)? progressCallback, String? customWineExecutable, Map<String, String>? customEnv}) async {
+    final logService = LogService();
+    
+    try {
+      progressCallback?.call('Installing legacy game dependencies...');
+      logService.log('Starting legacy game dependencies installation for prefix: ${prefix.path}');
+      
+      // Install VC++ Redistributable x86 (most legacy games need 32-bit)
+      progressCallback?.call('Installing VC++ Redistributable (x86) for legacy game support...');
+      final vcX86Success = await installVcRedistX86(prefix, settings, 
+        progressCallback: progressCallback, 
+        customWineExecutable: customWineExecutable, 
+        customEnv: customEnv
+      );
+      
+      if (!vcX86Success) {
+        logService.log('VC++ x86 installation failed, continuing with other dependencies...', LogLevel.warning);
+      }
+      
+      // Install common Winetricks dependencies for legacy games
+      final legacyDeps = [
+        'directplay',        // For older DirectX multiplayer games
+        'dsound',           // DirectSound
+        'mfc42',            // Microsoft Foundation Classes
+        'vcrun6',           // Visual C++ 6.0 runtime
+        'vcrun2005',        // Visual C++ 2005 runtime
+        'vcrun2008',        // Visual C++ 2008 runtime
+        'physx',            // PhysX for games that need it
+      ];
+      
+      progressCallback?.call('Installing Winetricks dependencies for legacy games...');
+      for (final dep in legacyDeps) {
+        try {
+          progressCallback?.call('Installing $dep...');
+          await installComponent(prefix, dep, 
+            progressCallback: progressCallback,
+            customWineExecutable: customWineExecutable,
+            customEnv: customEnv
+          );
+          logService.log('Successfully installed legacy dependency: $dep');
+        } catch (e) {
+          logService.log('Failed to install legacy dependency $dep: $e', LogLevel.warning);
+          progressCallback?.call('Warning: Failed to install $dep, continuing...');
+        }
+      }
+      
+      progressCallback?.call('Legacy game dependencies installation completed.');
+      logService.log('Legacy game dependencies installation completed for prefix: ${prefix.path}');
+      return true;
+      
+    } catch (e, stackTrace) {
+      final errorMsg = 'Error installing legacy game dependencies: $e';
+      logService.log('$errorMsg\n$stackTrace', LogLevel.error);
+      progressCallback?.call(errorMsg);
+      return false;
+    }
+  }
+
   /// Installs a component (verb) using winetricks into the specified prefix.
   /// 
   /// The `component` parameter is the name of the Winetricks verb to install (e.g., 'dxvk', 'vcrun2019').
