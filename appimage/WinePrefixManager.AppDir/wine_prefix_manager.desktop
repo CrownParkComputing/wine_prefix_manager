@@ -7,4 +7,4 @@ Icon=wine_prefix_manager
 Categories=System;Utility;
 Terminal=false
 StartupNotify=true
-X-AppImage-Version=3.3.0
+X-AppImage-Version=3.3.1
