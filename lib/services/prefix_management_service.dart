@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:async'; // Added for Completer and Timer
 import 'package:path/path.dart' as path;
 import 'package:process_run/shell.dart'; // Import Shell
 import '../models/settings.dart';
@@ -9,6 +10,7 @@ import 'package:http/http.dart' as http;
 import 'wine_component_installer.dart'; // Add import for WineComponentInstaller
 import 'package:dio/dio.dart';
 import '../utils/path_utils.dart'; // Import the path utility
+import 'process_service.dart'; // Added for ProcessService
 
 class PrefixManagementService {
   final LogService _logService = LogService(); // Add log service
@@ -747,7 +749,7 @@ class PrefixManagementService {
 
   /// Applies a common controller fix (XInput, DInput) to the prefix.
   /// This typically involves running a script or specific Winetricks verbs.
-  Future<void> applyControllerFix(
+  Future<bool> applyControllerFix(
     WinePrefix prefix,
     {Function(String)? onStatusUpdate,
      String? customWineExecutable,
@@ -809,6 +811,7 @@ class PrefixManagementService {
 
     onStatusUpdate?.call('Controller fix application finished.');
     _logService.log('Controller fix application finished for prefix: ${prefix.name}');
+    return true; // Return success
   }
 
   /// Retrieves the appropriate wine executable path for a given prefix.
@@ -1123,4 +1126,192 @@ class PrefixManagementService {
 
   // Removed Winetricks verb methods
 
+  /// Diagnoses common issues with 32-bit Wine prefixes
+  Future<Map<String, dynamic>> diagnose32BitPrefix(WinePrefix prefix) async {
+    _logService.log("Starting 32-bit prefix diagnostics for ${prefix.name}");
+    
+    final results = <String, dynamic>{
+      'prefix': prefix.name,
+      'architecture': prefix.architecture,
+      'issues': <String>[],
+      'recommendations': <String>[],
+      'details': <Map<String, dynamic>>[],
+      'status': 'unknown',
+    };
+    
+    try {
+      // 1. Check if it's actually a 32-bit prefix
+      if (prefix.architecture != 'win32') {
+        results['issues'].add('This is not a 32-bit prefix (architecture: ${prefix.architecture})');
+        results['recommendations'].add('Create a new 32-bit prefix with WINEARCH=win32');
+        results['status'] = 'error';
+        return results;
+      }
+      
+      // 2. Check if registry files exist and are valid
+      final systemRegistryFile = File(path.join(prefix.path, 'system.reg'));
+      final userRegistryFile = File(path.join(prefix.path, 'user.reg'));
+      final userdataDrive = Directory(path.join(prefix.path, 'drive_c'));
+      
+      if (!await systemRegistryFile.exists()) {
+        results['issues'].add('Missing system.reg file');
+        results['recommendations'].add('Repair or recreate the prefix');
+        results['status'] = 'error';
+      }
+      
+      if (!await userRegistryFile.exists()) {
+        results['issues'].add('Missing user.reg file');
+        results['recommendations'].add('Repair or recreate the prefix');
+        results['status'] = 'error';
+      }
+      
+      if (!await userdataDrive.exists()) {
+        results['issues'].add('Missing drive_c directory');
+        results['recommendations'].add('Repair or recreate the prefix');
+        results['status'] = 'error';
+      }
+      
+      // 3. Check if wineserver is running
+      final wineServerRunning = await _isWineServerRunning(prefix.path);
+      results['details'].add({
+        'test': 'wineserver running',
+        'result': wineServerRunning,
+        'description': wineServerRunning ? 'WineServer is running (may interfere with operations)' : 'WineServer not running'
+      });
+      
+      if (wineServerRunning) {
+        results['issues'].add('WineServer is currently running for this prefix');
+        results['recommendations'].add('Stop any Wine processes before performing operations');
+      }
+      
+      // 4. Check Wine version for the prefix
+      final wineVersion = await _getWineVersion(prefix);
+      results['details'].add({
+        'test': 'wine version',
+        'result': wineVersion,
+        'description': 'Detected Wine version: $wineVersion'
+      });
+      
+      // 5. Test basic Wine functionality
+      final canRunWine = await _testWineCommand(prefix);
+      results['details'].add({
+        'test': 'wine command',
+        'result': canRunWine,
+        'description': canRunWine ? 'Basic Wine command works' : 'Cannot run basic Wine command'
+      });
+      
+      if (!canRunWine) {
+        results['issues'].add('Cannot run basic Wine commands');
+        results['recommendations'].add('Check Wine installation and path configuration');
+        results['status'] = 'error';
+      }
+      
+      // 6. Test winecfg specifically
+      final canRunWinecfg = await _testWinecfg(prefix);
+      results['details'].add({
+        'test': 'winecfg',
+        'result': canRunWinecfg,
+        'description': canRunWinecfg ? 'winecfg runs successfully' : 'Cannot run winecfg'
+      });
+      
+      if (!canRunWinecfg) {
+        results['issues'].add('Cannot run winecfg');
+        results['recommendations'].add('Try repairing the prefix');
+      }
+      
+      // Set overall status if not already set
+      if (results['status'] == 'unknown') {
+        if (results['issues'].isEmpty) {
+          results['status'] = 'ok';
+          results['recommendations'].add('No issues detected. Prefix appears to be healthy.');
+        } else {
+          results['status'] = 'warning';
+        }
+      }
+      
+      _logService.log("32-bit prefix diagnostics complete: ${results['status']}");
+      return results;
+    } catch (e) {
+      _logService.log("Error during 32-bit prefix diagnostics: $e", LogLevel.error);
+      results['issues'].add('Error during diagnosis: $e');
+      results['status'] = 'error';
+      return results;
+    }
+  }
+  
+  /// Helper method to get Wine version for a prefix
+  Future<String> _getWineVersion(WinePrefix prefix) async {
+    try {
+      final env = await _prepareEnvironment(prefix);
+      final result = await Process.run('wine', ['--version'], environment: env);
+      if (result.exitCode == 0) {
+        return result.stdout.toString().trim();
+      }
+      return 'Unknown (error getting version)';
+    } catch (e) {
+      return 'Unknown (error: $e)';
+    }
+  }
+  
+  /// Helper method to test if Wine can run a basic command
+  Future<bool> _testWineCommand(WinePrefix prefix) async {
+    try {
+      final env = await _prepareEnvironment(prefix);
+      final result = await Process.run('wine', ['cmd', '/c', 'echo', 'test'], environment: env);
+      return result.exitCode == 0;
+    } catch (e) {
+      return false;
+    }
+  }
+  
+  /// Helper method to test if winecfg runs
+  Future<bool> _testWinecfg(WinePrefix prefix) async {
+    try {
+      final env = await _prepareEnvironment(prefix);
+      // Use a timeout to avoid hanging
+      final completer = Completer<bool>();
+      
+      final process = await Process.start('winecfg', [], environment: env);
+      
+      // Set a timeout
+      Timer(const Duration(seconds: 5), () {
+        if (!completer.isCompleted) {
+          process.kill();
+          completer.complete(false);
+        }
+      });
+      
+      // Check exit code
+      process.exitCode.then((code) {
+        if (!completer.isCompleted) {
+          completer.complete(code == 0);
+        }
+      });
+      
+      return await completer.future;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// Checks if wineserver is running for a specific Wine prefix
+  Future<bool> _isWineServerRunning(String prefixPath) async {
+    try {
+      // Check for wineserver processes with the WINEPREFIX environment variable set to this prefix
+      final result = await Process.run('ps', ['aux']);
+      final lines = result.stdout.toString().split('\n');
+      
+      // Look for processes with WINEPREFIX=<path> in their environment
+      for (final line in lines) {
+        if (line.contains('wineserver') && line.contains(prefixPath)) {
+          return true;
+        }
+      }
+      
+      return false;
+    } catch (e) {
+      _logService.log('Error checking if wineserver is running: $e', LogLevel.error);
+      return false;
+    }
+  }
 }

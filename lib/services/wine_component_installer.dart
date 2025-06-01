@@ -754,6 +754,28 @@ class WineComponentInstaller {
       // Potentially throw an exception here
     }
   }
+
+  /// Wrapper method for installDxvk to maintain backwards compatibility
+  Future<bool> installDXVK(WinePrefix prefix, {Function(String)? progressCallback}) async {
+    // Get settings from the prefix's path
+    final settings = Settings(
+      prefixDirectory: path.dirname(prefix.path),
+      categories: const [],
+      igdbImageBaseUrl: 'https://images.igdb.com/igdb/image/upload/',
+    );
+    return installDxvk(prefix, settings, progressCallback: progressCallback);
+  }
+
+  /// Wrapper method for installVkd3d to maintain backwards compatibility
+  Future<bool> installVKD3D(WinePrefix prefix, {Function(String)? progressCallback}) async {
+    // Get settings from the prefix's path
+    final settings = Settings(
+      prefixDirectory: path.dirname(prefix.path),
+      categories: const [],
+      igdbImageBaseUrl: 'https://images.igdb.com/igdb/image/upload/',
+    );
+    return installVkd3d(prefix, settings, progressCallback: progressCallback);
+  }
 }
 
 // Typedef for the status callback function

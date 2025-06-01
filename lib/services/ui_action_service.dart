@@ -552,4 +552,161 @@ class UIActionService {
       // Don't rethrow - metadata is optional
     }
   }
+
+  /// Shows a dialog to edit environment variables for a Wine prefix
+  Future<void> editPrefixEnvironmentVariables(BuildContext context, WinePrefix prefix) async {
+    // Get the existing environment variables
+    Map<String, String> envVars = {...prefix.environmentVariables};
+    
+    // Show the dialog
+    await _showEnvironmentVarsDialog(context, prefix, envVars);
+    
+    return;
+  }
+  
+  Future<void> _showEnvironmentVarsDialog(BuildContext context, WinePrefix prefix, Map<String, String> initialVars) async {
+    final newKeyController = TextEditingController();
+    final newValueController = TextEditingController();
+    
+    // Convert map to list of controllers for easier manipulation
+    List<MapEntry<String, TextEditingController>> controllers = initialVars.entries
+        .map((e) => MapEntry(e.key, TextEditingController(text: e.value)))
+        .toList();
+    
+    // Show dialog with a stateful builder to manage state
+    bool? result = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('Edit Environment Variables'),
+              content: SizedBox(
+                width: 500,
+                height: 400,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Expanded(
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: controllers.length,
+                        itemBuilder: (context, index) {
+                          final entry = controllers[index];
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4.0),
+                            child: Row(
+                              children: [
+                                SizedBox(
+                                  width: 180,
+                                  child: Text(
+                                    entry.key,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                                Expanded(
+                                  child: TextField(
+                                    controller: entry.value,
+                                    decoration: const InputDecoration(
+                                      border: OutlineInputBorder(),
+                                      contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    ),
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete, color: Colors.red),
+                                  onPressed: () {
+                                    setState(() {
+                                      controllers.removeAt(index);
+                                    });
+                                  },
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const Divider(),
+                    const Text('Add New Variable', style: TextStyle(fontWeight: FontWeight.bold)),
+                    Row(
+                      children: [
+                        SizedBox(
+                          width: 180,
+                          child: TextField(
+                            controller: newKeyController,
+                            decoration: const InputDecoration(
+                              hintText: 'Variable Name',
+                              border: OutlineInputBorder(),
+                              contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextField(
+                            controller: newValueController,
+                            decoration: const InputDecoration(
+                              hintText: 'Value',
+                              border: OutlineInputBorder(),
+                              contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.add, color: Colors.green),
+                          onPressed: () {
+                            if (newKeyController.text.isNotEmpty) {
+                              setState(() {
+                                controllers.add(
+                                  MapEntry(
+                                    newKeyController.text,
+                                    TextEditingController(text: newValueController.text),
+                                  ),
+                                );
+                                newKeyController.clear();
+                                newValueController.clear();
+                              });
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    // Update the environment variables
+                    Map<String, String> updatedEnvVars = {};
+                    for (var entry in controllers) {
+                      updatedEnvVars[entry.key] = entry.value.text;
+                    }
+                    
+                    // Return the updated variables
+                    Navigator.of(context).pop(true);
+                    
+                    // Update the prefix with new environment variables
+                    final updatedPrefix = prefix.copyWith(
+                      environmentVariables: updatedEnvVars,
+                    );
+                    
+                    // Save the updated prefix
+                    _prefixProvider.updatePrefix(updatedPrefix);
+                  },
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
 }
