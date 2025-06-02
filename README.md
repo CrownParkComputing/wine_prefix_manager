@@ -1,44 +1,119 @@
 # Wine Prefix Manager
 
-A modern Flutter application for managing Wine/Proton prefixes on Linux with built-in IGDB integration for automatic game metadata.
+A modern Flutter application for managing Wine/Proton prefixes on Linux with comprehensive gaming features, ISO mounting, and built-in IGDB integration.
 
-![Main Interface](Screenshots/Screenshot_20250327_181806.png)
+![Version](https://img.shields.io/badge/version-3.3.1-blue)
+![Platform](https://img.shields.io/badge/platform-Linux-green)
+![License](https://img.shields.io/badge/license-MIT-red)
 
 ## ✨ Features
 
+### 🎮 Game Library Management
+- **Visual Game Library** - Beautiful grid view with cover art and metadata
+- **IGDB Integration** - Automatic game metadata, cover art, and screenshots
+- **Game Categories** - Organize your games with custom categories
+- **Advanced Search** - Find games quickly with powerful search functionality
+- **Game Details** - Comprehensive game information and launch options
+
+### 🍷 Wine Prefix Management
 - **Modern Flutter UI** - Beautiful, responsive interface with dark/light themes
-- **Built-in IGDB Integration** - Automatic game metadata, cover art, and screenshots
 - **Comprehensive Prefix Management** - Create, manage, and organize Wine/Proton prefixes
-- **Game Library** - Visual game library with categories and search
-- **Backup & Restore** - Complete backup system for games and prefixes
-- **Proton Integration** - Seamless Steam Proton support
-- **File Management** - Browse and manage prefix files directly
+- **Proton Integration** - Seamless Steam Proton support with automatic detection
+- **32-bit & 64-bit Support** - Full support for both architectures
+- **Automatic Setup** - Microsoft Visual C++ redistributables and gaming dependencies
+
+### 💿 ISO/CD Management
+- **Virtual CD Drive Simulation** - Mount ISO files as real CD drives (D:) in Wine prefixes
+- **Multiple Format Support** - .iso, .img, .bin, .cue files
+- **Real-time Status** - Live updates during mounting/unmounting operations
+- **Automatic Wine Registry Configuration** - Proper CD-ROM drive detection
+- **Safe Ejection** - Clean unmounting with automatic cleanup
+
+### 💾 Backup & Restore
+- **Complete Backup System** - Backup entire prefixes with games and settings
+- **Selective Restore** - Restore specific components or complete prefixes
+- **Compressed Archives** - Efficient storage with compression
+- **Backup Scheduling** - Automatic backup reminders and management
+
+### 📁 File Management
+- **Integrated File Browser** - Browse and manage prefix files directly
+- **Quick Access** - Jump to common directories (Program Files, System32, etc.)
+- **File Operations** - Copy, move, delete files within prefixes
+- **Registry Editing** - Access to Wine registry for advanced configuration
+
+### ⚙️ Advanced Configuration
+- **Environment Variables** - Manage prefix-specific environment variables
+- **Controller Support** - Built-in controller fixes for gaming
+- **Wine Version Management** - Switch between different Wine versions
+- **Performance Optimization** - DXVK, VKD3D integration for 64-bit prefixes
+
+### 🔧 System Integration
 - **One-Click AppImage** - Portable, no-installation-required distribution
-
-### Automatic Prefix Setup
-- Microsoft Visual C++ 2015-2022 Redistributable (x64/x86)
-- Essential gaming dependencies (DXVK, VKD3D for 64-bit Wine prefixes)
-- Proton-specific optimizations for different Proton variants
-
-### Optional Manual Fixes
-- **Controller Fix** - Apply winebus registry fixes (DisableHidraw, Enable SDL) for better controller support
-- Available via the "Controller Fix" button in prefix details
+- **Desktop Integration** - .desktop file for system menu integration
+- **Logging System** - Comprehensive logging for troubleshooting
+- **Power Management** - Prevent system sleep during long operations
 
 ## 🚀 Quick Start
 
-### For Users
+### Download & Install
 
-1. **Download the latest AppImage** from [Releases](https://github.com/CrownParkComputing/wine_prefix_manager/releases)
+1. **Download the AppImage** from [Releases](https://github.com/CrownParkComputing/wine_prefix_manager/releases/latest)
 2. **Make it executable:**
    ```bash
    chmod +x WinePrefixManager-*.AppImage
    ```
-3. **Run it:**
+3. **Run the application:**
    ```bash
    ./WinePrefixManager-*.AppImage
    ```
 
-### For Developers
+### First Launch Setup
+
+1. **Configure Prefix Directory** - Choose where to store your Wine prefixes
+2. **Set Game Library Path** - Select your games directory for automatic detection
+3. **Install ISO Mounting** (Optional) - Run setup for password-free ISO mounting:
+   ```bash
+   ./scripts/setup_iso_mounting.sh
+   ```
+
+## 🎮 Using the Application
+
+### Creating Wine Prefixes
+1. Navigate to **Manage Prefixes** tab
+2. Click **Create New Prefix**
+3. Choose Wine/Proton version and architecture
+4. Configure initial settings and dependencies
+5. Wait for automatic setup completion
+
+### Managing Your Game Library
+1. Go to **Game Library** tab
+2. Add games manually or let the app auto-detect
+3. Fetch metadata from IGDB for cover art and details
+4. Organize games into categories
+5. Launch games directly from the library
+
+### Mounting ISO Files
+1. Open **ISO/CD** tab
+2. Select target Wine prefix
+3. Click **Mount ISO** and choose your file
+4. The ISO appears as drive D: in the selected prefix
+5. Eject safely when done
+
+### Backup & Restore
+1. Access **Files & Backup** tab
+2. Select prefixes to backup
+3. Choose backup location and options
+4. Monitor backup progress
+5. Restore from backups when needed
+
+## 🔧 Development
+
+### Prerequisites
+- Flutter SDK (latest stable) with Linux desktop support
+- Wine or Proton installed
+- Git
+
+### Building from Source
 
 1. **Clone and setup:**
    ```bash
@@ -53,84 +128,35 @@ A modern Flutter application for managing Wine/Proton prefixes on Linux with bui
    flutter run -d linux
    ```
 
-## 🔧 Development
-
-### Prerequisites
-- Flutter SDK (latest stable) with Linux desktop support enabled
-- Wine or Proton installed
-- Git
-
-### Essential Commands
+### Available Commands
 ```bash
-# Setup development environment
-make setup
+# Development
+make setup          # Setup development environment
+make build          # Build the application
+make test           # Run tests
+make lint           # Run linter
+make format         # Format code
+make clean          # Clean build artifacts
 
-# Build the application
-make build
+# Distribution
+make appimage       # Build AppImage
+make release-all VERSION=x.y.z  # Complete release workflow
 
-# Run tests and checks
-make test
-make lint
-make format
-
-# Clean build artifacts
-make clean
-
-# Check version synchronization
-make version-check
+# Version Management
+make version-check  # Check version synchronization
+make version-fix    # Auto-fix version issues
 ```
 
-## 📦 Building Releases
+### IGDB Integration Setup (Developers)
 
-### Quick Release (Recommended)
-```bash
-# Complete release workflow: tag + build + GitHub release
-make release-all VERSION=3.2.0
-```
+For developers building from source:
 
-### Step-by-Step Release
-```bash
-# 1. Create and push version tag
-make tag-release VERSION=3.2.0
-
-# 2. Build AppImage
-make appimage
-
-# 3. Create GitHub release
-make github-release VERSION=3.2.0
-```
-
-### Secure Build (with IGDB credentials)
-```bash
-# Set environment variables
-export IGDB_CLIENT_ID=your_client_id
-export IGDB_CLIENT_SECRET=your_client_secret
-
-# Build with credentials
-./scripts/build_with_env.sh patch
-```
-
-## 🔐 IGDB Integration
-
-For end users, IGDB integration works out of the box. For developers building from source:
-
-1. **Copy environment template:**
+1. **Get IGDB credentials** from [Twitch Developer Console](https://dev.twitch.tv/console/apps)
+2. **Copy environment template:**
    ```bash
    cp env.example .env
    ```
-
-2. **Get IGDB credentials:**
-   - Go to [Twitch Developer Console](https://dev.twitch.tv/console/apps)
-   - Log in with your Twitch account (create one if needed)
-   - Click "Register Your Application"
-   - Fill in the required fields:
-     - **Name**: `Wine Prefix Manager` (or any name you prefer)
-     - **OAuth Redirect URLs**: `http://localhost` (required but not used)
-     - **Category**: `Game Integration`
-   - Click "Create"
-   - Copy the **Client ID** and **Client Secret**
-
-3. **Add to `.env` file:**
+3. **Add credentials to .env:**
    ```env
    IGDB_CLIENT_ID=your_client_id_here
    IGDB_CLIENT_SECRET=your_client_secret_here
@@ -141,72 +167,77 @@ For end users, IGDB integration works out of the box. For developers building fr
 ```
 wine_prefix_manager/
 ├── lib/                    # Flutter source code
+│   ├── pages/             # Application pages/screens
+│   ├── services/          # Core business logic services
+│   ├── widgets/           # Reusable UI components
+│   ├── models/            # Data models
+│   ├── providers/         # State management
+│   └── theme/             # UI theming
 ├── scripts/               # Build and utility scripts
-│   ├── build_with_env.sh  # Secure build with env vars
 │   ├── build_appimage.sh  # AppImage creation
 │   ├── create_github_release.sh  # GitHub release automation
-│   └── check_version_sync.sh     # Version management
+│   ├── check_version_sync.sh     # Version management
+│   └── setup_iso_mounting.sh     # ISO mounting setup
+├── appimage/              # AppImage build artifacts
 ├── website/               # Project website
-├── Makefile              # Main build orchestration
+├── Makefile              # Build orchestration
 ├── pubspec.yaml          # Flutter dependencies
-├── env.example           # Environment template for developers
-└── README.md             # This file
+└── env.example           # Environment template
 ```
 
-## 🛠️ Available Scripts
-
-| Script | Purpose | Usage |
-|--------|---------|-------|
-| `make setup` | Development environment setup | One-time setup |
-| `make build` | Build Flutter app | Development |
-| `make appimage` | Create AppImage distribution | Release |
-| `make release-all VERSION=x.y.z` | Complete release workflow | Release |
-| `./scripts/build_with_env.sh` | Secure build with env vars | Production |
-
-## 🔍 Troubleshooting
+## 🐛 Troubleshooting
 
 ### Common Issues
 
-1. **Flutter not found**
-   ```bash
-   flutter config --enable-linux-desktop
-   flutter doctor
-   ```
-
-2. **IGDB integration not working**
-   - For users: Should work automatically
-   - For developers: Check the IGDB Integration section above
-
-3. **AppImage won't run**
+1. **AppImage won't run:**
    ```bash
    # Install FUSE if needed
-   sudo apt install fuse  # Ubuntu/Debian
-   sudo pacman -S fuse    # Arch Linux
+   sudo apt install fuse          # Ubuntu/Debian
+   sudo pacman -S fuse           # Arch Linux
+   sudo dnf install fuse         # Fedora
    ```
 
-### Debug Logs
-Logs are available in the app under the "Logs" tab, or run with:
-```bash
-flutter run -d linux --verbose
-```
+2. **ISO mounting requires password:**
+   ```bash
+   # Run the setup script once
+   sudo ./scripts/setup_iso_mounting.sh
+   ```
+
+3. **Games won't launch:**
+   - Check prefix configuration in Manage Prefixes
+   - Verify Wine/Proton version compatibility
+   - Check logs tab for detailed error messages
+
+4. **IGDB integration not working:**
+   - For users: Should work automatically
+   - For developers: Check IGDB credentials in .env file
+
+### Debug Information
+
+- **Logs**: Available in the "Logs" tab within the application
+- **Verbose logging**: Run with `flutter run -d linux --verbose`
+- **Log files**: Check application data directory for persistent logs
 
 ## 🤝 Contributing
 
 1. Fork the repository
-2. Create a feature branch
+2. Create a feature branch: `git checkout -b feature/new-feature`
 3. Make your changes
-4. Run `make pre-commit` to ensure code quality
-5. Submit a pull request
+4. Run quality checks: `make pre-commit`
+5. Commit changes: `git commit -m "Add new feature"`
+6. Push to branch: `git push origin feature/new-feature`
+7. Submit a pull request
 
-## 📄 License
+## 📝 License
 
-Released under MIT License. See LICENSE file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🌟 Support
+
+- **Issues**: [GitHub Issues](https://github.com/CrownParkComputing/wine_prefix_manager/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/CrownParkComputing/wine_prefix_manager/discussions)
+- **Releases**: [GitHub Releases](https://github.com/CrownParkComputing/wine_prefix_manager/releases)
 
 ---
 
-**Why Choose Wine Prefix Manager?**
-- 🎯 **Gaming-focused** - Designed specifically for Linux gamers
-- 🚀 **Zero configuration** - Works out of the box
-- 🔄 **Built-in everything** - IGDB, backups, file management included
-- 🎨 **Modern UI** - Beautiful Flutter interface
-- 📦 **Portable** - Single AppImage file, no installation needed
+**Made with ❤️ for the Linux gaming community** 
