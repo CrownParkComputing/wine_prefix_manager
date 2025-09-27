@@ -158,8 +158,8 @@ class PrefixManagementService {
               }
             }
           } catch (e) {
-            print('[DEBUG] Error processing directory ${dirPath}: $e');
-            _logService.log('Error processing directory ${dirPath}: $e', LogLevel.error);
+            print('[DEBUG] Error processing directory $dirPath: $e');
+            _logService.log('Error processing directory $dirPath: $e', LogLevel.error);
           }
         } else {
           // Regular directory processing for non-Proton or direct Wine prefixes
@@ -183,8 +183,8 @@ class PrefixManagementService {
               }
             }
           } catch (e) {
-            print('[DEBUG] Error processing directory ${dirPath}: $e');
-            _logService.log('Error processing directory ${dirPath}: $e', LogLevel.error);
+            print('[DEBUG] Error processing directory $dirPath: $e');
+            _logService.log('Error processing directory $dirPath: $e', LogLevel.error);
           }
         }
       }
@@ -624,9 +624,7 @@ class PrefixManagementService {
         }
         
         // If wineserver not found, assume it's in the same directory as wine
-        if (wineServerPath == null && winePath != null) {
-          wineServerPath = path.join(path.dirname(winePath), wineServerBinaryName);
-        }
+        wineServerPath ??= path.join(path.dirname(winePath), wineServerBinaryName);
         
       } else {
         // For non-Proton builds, use the standard location
@@ -971,7 +969,7 @@ class PrefixManagementService {
       
       final file = File(downloadPath);
       await response.stream.pipe(file.openWrite());
-      progressCallback?.call('Download complete: ${downloadPath}');
+      progressCallback?.call('Download complete: $downloadPath');
       
       // Extract using zstd and tar
       progressCallback?.call('Extracting VKD3D-Proton...');

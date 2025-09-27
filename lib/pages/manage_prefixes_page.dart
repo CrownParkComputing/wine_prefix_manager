@@ -5,7 +5,6 @@ import '../models/settings.dart';
 import '../providers/prefix_provider.dart';
 import '../providers/settings_provider.dart';
 import '../widgets/rename_prefix_dialog.dart';
-import '../widgets/env_variables_dialog.dart';
 import '../widgets/prefix_list_tile.dart';
 import '../widgets/prefix_detail_actions.dart';
 import '../widgets/executable_list_tile.dart';

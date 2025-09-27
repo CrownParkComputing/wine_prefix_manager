@@ -321,7 +321,7 @@ class GameLibraryPage extends StatelessWidget {
                   title: Text(category ?? 'Uncategorized'),
                   tileColor: isSelected ? Colors.blue.withOpacity(0.2) : null,
                   onTap: () {
-                    if (onGenreSelected != null) onGenreSelected!(category);
+                    if (onGenreSelected != null) onGenreSelected(category);
                     Navigator.pop(context);
                   },
                 );

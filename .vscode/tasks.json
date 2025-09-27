@@ -1,0 +1,71 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Build Flutter App",
+			"type": "shell",
+			"command": "flutter",
+			"args": [
+				"build",
+				"linux"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$dart"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Run Flutter Linux App",
+			"type": "shell",
+			"command": "./build/linux/x64/release/bundle/wine_prefix_manager",
+			"args": [],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "Build Flutter App",
+			"type": "shell",
+			"command": "flutter",
+			"args": [
+				"build",
+				"linux"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$dart"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Run Flutter Linux App",
+			"type": "shell",
+			"command": "./build/linux/x64/release/bundle/wine_prefix_manager",
+			"args": [],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "Rebuild Flutter App after .env fix",
+			"type": "shell",
+			"command": "flutter",
+			"args": [
+				"build",
+				"linux"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$dart"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Run Flutter Linux App after .env fix",
+			"type": "shell",
+			"command": "./build/linux/x64/release/bundle/wine_prefix_manager",
+			"args": [],
+			"isBackground": false,
+			"group": "test"
+		}
+	]
+}

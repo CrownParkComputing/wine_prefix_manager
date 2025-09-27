@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:process_run/shell.dart';
 import '../models/settings.dart';

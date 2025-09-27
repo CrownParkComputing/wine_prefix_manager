@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
+import 'package:file_selector/file_selector.dart';
 import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -12,7 +12,6 @@ import '../models/igdb_models.dart';
 
 // Providers
 import '../providers/prefix_provider.dart';
-import '../providers/settings_provider.dart';
 // Removed: import '../providers/game_provider.dart'; // Does not exist
 // Removed: import '../providers/log_provider.dart'; // Does not exist
 // Removed: duplicate import '../providers/prefix_provider.dart';
@@ -22,7 +21,6 @@ import 'log_service.dart';
 import 'igdb_service.dart';
 import 'process_service.dart';
 import 'prefix_management_service.dart';
-import 'backup_service.dart';
 import '../config/api_keys.dart';
 
 // Widgets & Dialogs
@@ -31,7 +29,7 @@ import '../config/api_keys.dart';
 import '../widgets/game_details_dialog.dart';
 import '../widgets/game_search_dialog.dart'; // Corrected from pages
 import '../widgets/common_components_dialog.dart';
-import '../widgets/change_prefix_dialog.dart'; // This was likely prefix_selection_dialog
+// This was likely prefix_selection_dialog
 import '../widgets/text_input_dialog.dart';
 // Other dialogs like edit_game_dialog, prefix_creation_dialog, confirmation_dialog, message_dialog
 // might be specific widgets or part of page navigation logic, not direct imports here unless they are generic dialog widgets.
@@ -40,7 +38,6 @@ import '../widgets/text_input_dialog.dart';
 
 // TODO: Create a Winetricks Verbs Dialog widget
 // import '../widgets/winetricks_verbs_dialog.dart';
-
 
 class UIActionService {
   final LogService _logService;
@@ -67,41 +64,47 @@ class UIActionService {
         _prefixProvider = prefixProvider,
         _settings = settings,
         // Initialize, potentially with a default instance if not provided
-        _prefixManagementService = prefixManagementService ?? PrefixManagementService();
-
+        _prefixManagementService =
+            prefixManagementService ?? PrefixManagementService();
 
   // Removed _addLog helper, using _logService.log directly
 
   /// Handles picking an executable file, asking if it's a game, fetching IGDB data if needed,
   /// and adding it to a prefix via the provider.
-  Future<void> addExecutableToPrefix(BuildContext context, WinePrefix prefix) async {
+  Future<void> addExecutableToPrefix(
+      BuildContext context, WinePrefix prefix) async {
     // Make sure we're using the root navigator context for dialogs
     final rootContext = Navigator.of(context, rootNavigator: true).context;
-    
-    try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['exe', 'msi', 'bat'], // Allow common executable types
-      );
 
-      if (result == null || result.files.single.path == null) {
+    try {
+      final typeGroup =
+          const XTypeGroup(label: 'Executables', extensions: ['exe', 'msi', 'bat']);
+      final result = await openFile(acceptedTypeGroups: [typeGroup]);
+
+      if (result == null) {
         _logService.log('Executable selection cancelled.');
         return;
       }
 
-      final filePath = result.files.single.path!;
+      final filePath = result.path;
       final fileName = p.basename(filePath);
       final exeName = p.basenameWithoutExtension(fileName);
 
       // Check if executable already exists in this prefix
-      if (_prefixProvider.prefixes.firstWhere((p) => p.path == prefix.path).exeEntries.any((e) => e.path == filePath)) {
-         _logService.log('Executable "$fileName" already exists in prefix "${prefix.name}".');
-         if (rootContext.mounted) {
-            ScaffoldMessenger.of(rootContext).showSnackBar(
-               SnackBar(content: Text('Executable "$fileName" already exists in this prefix.')),
-            );
-         }
-         return;
+      if (_prefixProvider.prefixes
+          .firstWhere((p) => p.path == prefix.path)
+          .exeEntries
+          .any((e) => e.path == filePath)) {
+        _logService.log(
+            'Executable "$fileName" already exists in prefix "${prefix.name}".');
+        if (rootContext.mounted) {
+          ScaffoldMessenger.of(rootContext).showSnackBar(
+            SnackBar(
+                content: Text(
+                    'Executable "$fileName" already exists in this prefix.')),
+          );
+        }
+        return;
       }
 
       // --- Ask if it's a game ---
@@ -140,67 +143,84 @@ class UIActionService {
             labelText: 'Game Name for IGDB Search',
             initialValue: exeName, // Pre-fill with exe name
             confirmButtonText: 'Search IGDB',
-            validator: (value) => (value == null || value.trim().isEmpty) ? 'Name cannot be empty' : null,
+            validator: (value) => (value == null || value.trim().isEmpty)
+                ? 'Name cannot be empty'
+                : null,
           ),
         );
 
         if (gameNameToSearch == null || gameNameToSearch.isEmpty) {
-          _logService.log('IGDB search cancelled or name empty. Adding as game without metadata.');
+          _logService.log(
+              'IGDB search cancelled or name empty. Adding as game without metadata.');
           finalExeEntry = ExeEntry(path: filePath, name: exeName, isGame: true);
         } else {
           // --- Search IGDB ---
           _logService.log('Searching IGDB for "$gameNameToSearch"...');
-          ExeEntry tempEntry = ExeEntry(path: filePath, name: exeName, isGame: true); // Start with basic game entry
+          ExeEntry tempEntry = ExeEntry(
+              path: filePath,
+              name: exeName,
+              isGame: true); // Start with basic game entry
           String igdbStatus = "";
 
           try {
             final tokenData = await _igdbService.getIgdbToken(_settings);
             if (tokenData != null && tokenData['token'] != null) {
               final token = tokenData['token'] as String;
-              final searchResults = await _igdbService.searchIgdbGames(gameNameToSearch, _settings, token);
+              final searchResults = await _igdbService.searchIgdbGames(
+                  gameNameToSearch, _settings, token);
 
               if (searchResults.isNotEmpty) {
-                 // TODO: Potentially show a selection dialog if multiple results?
-                 // For now, just take the first result.
-                 final IgdbGame firstMatch = searchResults.first;
-                 _logService.log('Found IGDB match: ${firstMatch.name} (ID: ${firstMatch.id})');
+                // TODO: Potentially show a selection dialog if multiple results?
+                // For now, just take the first result.
+                final IgdbGame firstMatch = searchResults.first;
+                _logService.log(
+                    'Found IGDB match: ${firstMatch.name} (ID: ${firstMatch.id})');
 
-                 // Fetch details
-                 final coverDetails = await _igdbService.fetchCoverDetails(firstMatch.cover, _settings, token);
-                 final screenshotDetails = await _igdbService.fetchScreenshotDetails(firstMatch.screenshots, _settings, token);
-                 final videoIds = await _igdbService.fetchGameVideoIds(firstMatch.id, _settings, token);
+                // Fetch details
+                final coverDetails = await _igdbService.fetchCoverDetails(
+                    firstMatch.cover, _settings, token);
+                final screenshotDetails =
+                    await _igdbService.fetchScreenshotDetails(
+                        firstMatch.screenshots, _settings, token);
+                final videoIds = await _igdbService.fetchGameVideoIds(
+                    firstMatch.id, _settings, token);
 
-                 // Enrich the entry
-                 tempEntry = tempEntry.copyWith(
-                   igdbId: firstMatch.id,
-                   description: firstMatch.summary,
-                   igdbCoverId: firstMatch.cover,
-                   coverUrl: coverDetails?['url'],
-                   coverImageId: coverDetails?['imageId'],
-                   igdbScreenshotIds: firstMatch.screenshots,
-                   screenshotUrls: screenshotDetails.map((s) => s['url']!).toList(),
-                   screenshotImageIds: screenshotDetails.map((s) => s['imageId']!).toList(),
-                   videoIds: videoIds,
-                 );
-                 igdbStatus = " Found IGDB details.";
+                // Enrich the entry
+                tempEntry = tempEntry.copyWith(
+                  igdbId: firstMatch.id,
+                  description: firstMatch.summary,
+                  igdbCoverId: firstMatch.cover,
+                  coverUrl: coverDetails?['url'],
+                  coverImageId: coverDetails?['imageId'],
+                  igdbScreenshotIds: firstMatch.screenshots,
+                  screenshotUrls:
+                      screenshotDetails.map((s) => s['url']!).toList(),
+                  screenshotImageIds:
+                      screenshotDetails.map((s) => s['imageId']!).toList(),
+                  videoIds: videoIds,
+                );
+                igdbStatus = " Found IGDB details.";
               } else {
-                 igdbStatus = " No IGDB details found.";
-                 _logService.log('No IGDB match found for query: "$gameNameToSearch"');
+                igdbStatus = " No IGDB details found.";
+                _logService
+                    .log('No IGDB match found for query: "$gameNameToSearch"');
               }
             } else {
-               igdbStatus = " Could not get IGDB token.";
-               _logService.log('Failed to get IGDB token, skipping fetch.');
+              igdbStatus = " Could not get IGDB token.";
+              _logService.log('Failed to get IGDB token, skipping fetch.');
             }
           } catch (e) {
-             igdbStatus = " Error fetching IGDB details: $e";
-             _logService.log('Error during IGDB fetch: $e', LogLevel.error);
+            igdbStatus = " Error fetching IGDB details: $e";
+            _logService.log('Error during IGDB fetch: $e', LogLevel.error);
           }
           finalExeEntry = tempEntry; // Use the potentially enriched entry
           _logService.log('IGDB Fetch Status: $igdbStatus');
           if (rootContext.mounted) {
-             ScaffoldMessenger.of(rootContext).showSnackBar(
-                SnackBar(content: Text('IGDB Fetch: ${igdbStatus.trim()}'), duration: const Duration(seconds: 2)),
-             );
+            ScaffoldMessenger.of(rootContext).showSnackBar(
+              SnackBar(
+                  content: Text('IGDB Fetch: ${igdbStatus.trim()}'),
+                  duration: const Duration(seconds: 2)),
+            );
           }
         }
       } else {
@@ -213,24 +233,28 @@ class UIActionService {
 
       // Show final status from provider
       if (rootContext.mounted) {
-         ScaffoldMessenger.of(rootContext).showSnackBar(
-            SnackBar(content: Text(_prefixProvider.status), duration: const Duration(seconds: 2)),
-         );
+        ScaffoldMessenger.of(rootContext).showSnackBar(
+          SnackBar(
+              content: Text(_prefixProvider.status),
+              duration: const Duration(seconds: 2)),
+        );
       }
-
     } catch (e) {
-       _logService.log('Error adding executable: $e', LogLevel.error);
-       if (rootContext.mounted) {
-          ScaffoldMessenger.of(rootContext).showSnackBar(
-             SnackBar(content: Text('Error adding executable: $e'), duration: const Duration(seconds: 3)),
-          );
-       }
+      _logService.log('Error adding executable: $e', LogLevel.error);
+      if (rootContext.mounted) {
+        ScaffoldMessenger.of(rootContext).showSnackBar(
+          SnackBar(
+              content: Text('Error adding executable: $e'),
+              duration: const Duration(seconds: 3)),
+        );
+      }
     }
   }
 
   /// Launches the specified game executable.
   /// Accepts optional callbacks for process start and exit.
-  Future<void> launchGame(GameEntry entry, {
+  Future<void> launchGame(
+    GameEntry entry, {
     Function(String exePath, int pid)? onProcessStart,
     Function(String exePath, int exitCode, List<String> errors)? onProcessExit,
   }) async {
@@ -247,9 +271,10 @@ class UIActionService {
         onProcessExit: (exePath, exitCode, errors) {
           _logService.log('${p.basename(exePath)} exited with code $exitCode.');
           if (errors.isNotEmpty) {
-             _logService.log('Errors:\n${errors.join('\n')}', LogLevel.warning);
+            _logService.log('Errors:\n${errors.join('\n')}', LogLevel.warning);
           }
-          onProcessExit?.call(exePath, exitCode, errors); // Call the provided callback
+          onProcessExit?.call(
+              exePath, exitCode, errors); // Call the provided callback
         },
       );
     } catch (e) {
@@ -260,15 +285,18 @@ class UIActionService {
   }
 
   /// Shows the Game Details Dialog and handles its actions.
-  Future<void> showGameDetails(BuildContext scaffoldContext, GameEntry entry) async {
+  Future<void> showGameDetails(
+      BuildContext scaffoldContext, GameEntry entry) async {
     // Get the latest settings by directly accessing the field
     // final Settings currentSettings = _settings; // No longer need to get settings for this check
-    
+
     // Ensure settings are loaded before showing details that might need IGDB
     // Check global API keys instead of settings
     if (globalIgdbClientId.isEmpty || globalIgdbClientSecret.isEmpty) {
-       _logService.log('Global IGDB credentials not set. Cannot fetch full details.', LogLevel.warning);
-       // Optionally show the dialog with limited info or prevent opening
+      _logService.log(
+          'Global IGDB credentials not set. Cannot fetch full details.',
+          LogLevel.warning);
+      // Optionally show the dialog with limited info or prevent opening
     }
 
     // Use the scaffoldContext passed from the page
@@ -281,7 +309,8 @@ class UIActionService {
 
     await showDialog(
       context: scaffoldContext, // Use the correct context
-      builder: (dialogContext) => GameDetailsDialog( // This is the GameDetailsDialog context
+      builder: (dialogContext) => GameDetailsDialog(
+        // This is the GameDetailsDialog context
         game: entry, // Use 'game' parameter name
         settings: _settings, // Use instance field settings
         availablePrefixes: availablePrefixes, // Pass available prefixes
@@ -294,89 +323,116 @@ class UIActionService {
           // Launch the game
           await launchGame(entry);
         },
-        onEditExePath: (gameEntry) async { // FIX: Rename parameter to onEditExePath
-           final result = await FilePicker.platform.pickFiles(
-              type: FileType.custom,
-              allowedExtensions: ['exe', 'msi', 'bat'],
-              initialDirectory: p.dirname(gameEntry.exe.path), // Use gameEntry
-           );
-           if (result != null && result.files.single.path != null) {
-              final newPath = result.files.single.path!;
-              // Use injected PrefixProvider instance
-              await _prefixProvider.updateExecutablePath(gameEntry.prefix, gameEntry.exe, newPath); // Use gameEntry
-              if (Navigator.of(dialogContext).canPop()) {
-                 Navigator.of(dialogContext).pop();
-              }
-           }
+        onEditExePath: (gameEntry) async {
+          // FIX: Rename parameter to onEditExePath
+          final typeGroup = const XTypeGroup(
+              label: 'Executables', extensions: ['exe', 'msi', 'bat']);
+          final result = await openFile(
+              acceptedTypeGroups: [typeGroup],
+              initialDirectory: p.dirname(gameEntry.exe.path));
+          if (result != null) {
+            final newPath = result.path;
+            // Use injected PrefixProvider instance
+            await _prefixProvider.updateExecutablePath(
+                gameEntry.prefix, gameEntry.exe, newPath); // Use gameEntry
+            if (Navigator.of(dialogContext).canPop()) {
+              Navigator.of(dialogContext).pop();
+            }
+          }
         },
-        onUpdateMetadata: (gameEntry) async { // Adjusted signature
-           _logService.log('Metadata update requested for ${gameEntry.exe.name}'); // Use log
-           // Check mount status before showing nested dialog
-           if (!scaffoldContext.mounted) return;
+        onUpdateMetadata: (gameEntry) async {
+          // Adjusted signature
+          _logService.log(
+              'Metadata update requested for ${gameEntry.exe.name}'); // Use log
+          // Check mount status before showing nested dialog
+          if (!scaffoldContext.mounted) return;
 
-           final searchResult = await showDialog<IgdbGame>(
-              context: scaffoldContext,
-              builder: (_) => GameSearchDialog(
-                initialQuery: gameEntry.exe.name, // Use gameEntry
-                onSearch: (query) async {
-                  // Use injected IgdbService and Settings instances
-                  final tokenData = await _igdbService.getIgdbToken(_settings);
-                  if (tokenData == null) return {'error': 'Could not get IGDB token'};
-                  final games = await _igdbService.searchIgdbGames(query, _settings, tokenData['token']);
-                  return {'games': games};
-                },
-              ),
-           );
+          final searchResult = await showDialog<IgdbGame>(
+            context: scaffoldContext,
+            builder: (_) => GameSearchDialog(
+              initialQuery: gameEntry.exe.name, // Use gameEntry
+              onSearch: (query) async {
+                // Use injected IgdbService and Settings instances
+                final tokenData = await _igdbService.getIgdbToken(_settings);
+                if (tokenData == null) {
+                  return {'error': 'Could not get IGDB token'};
+                }
+                final games = await _igdbService.searchIgdbGames(
+                    query, _settings, tokenData['token']);
+                return {'games': games};
+              },
+            ),
+          );
 
-           // Check mount status again after await
-           if (searchResult != null && scaffoldContext.mounted) {
-              ExeEntry updatedExe = gameEntry.exe; // Use gameEntry
-              _logService.log('Fetching full details for ${searchResult.name} (ID: ${searchResult.id})...'); // Use log
-              try {
-                 final tokenData = await _igdbService.getIgdbToken(_settings);
-                 if (tokenData != null && tokenData['token'] != null) {
-                    final token = tokenData['token'] as String;
-                    final coverDetails = await _igdbService.fetchCoverDetails(searchResult.cover, _settings, token);
-                    // Removed redundant '?? []' as searchResult.screenshots is non-nullable
-                    final screenshotDetails = await _igdbService.fetchScreenshotDetails(searchResult.screenshots, _settings, token);
-                    final videoIds = await _igdbService.fetchGameVideoIds(searchResult.id, _settings, token);
+          // Check mount status again after await
+          if (searchResult != null && scaffoldContext.mounted) {
+            ExeEntry updatedExe = gameEntry.exe; // Use gameEntry
+            _logService.log(
+                'Fetching full details for ${searchResult.name} (ID: ${searchResult.id})...'); // Use log
+            try {
+              final tokenData = await _igdbService.getIgdbToken(_settings);
+              if (tokenData != null && tokenData['token'] != null) {
+                final token = tokenData['token'] as String;
+                final coverDetails = await _igdbService.fetchCoverDetails(
+                    searchResult.cover, _settings, token);
+                // Removed redundant '?? []' as searchResult.screenshots is non-nullable
+                final screenshotDetails =
+                    await _igdbService.fetchScreenshotDetails(
+                        searchResult.screenshots, _settings, token);
+                final videoIds = await _igdbService.fetchGameVideoIds(
+                    searchResult.id, _settings, token);
 
-                    updatedExe = gameEntry.exe.copyWith( // Use gameEntry
-                       igdbId: searchResult.id,
-                       description: searchResult.summary,
-                       igdbCoverId: searchResult.cover,
-                       coverUrl: coverDetails?['url'],
-                       coverImageId: coverDetails?['imageId'],
-                       igdbScreenshotIds: searchResult.screenshots,
-                       screenshotUrls: screenshotDetails.map((s) => s['url']!).toList(),
-                       screenshotImageIds: screenshotDetails.map((s) => s['imageId']!).toList(),
-                       videoIds: videoIds,
-                       isGame: true,
-                    );
-                    _logService.log('Successfully fetched full details for ${searchResult.name}.'); // Use log
-                 } else {
-                    _logService.log('Could not get IGDB token to fetch full details.', LogLevel.warning); // FIX: Use positional level
-                    updatedExe = gameEntry.exe.copyWith(igdbId: searchResult.id); // Use gameEntry
-                 }
-              } catch (e) {
-                 _logService.log('Error fetching full IGDB details: $e. Updating ID only.', LogLevel.error); // FIX: Use positional level
-                 updatedExe = gameEntry.exe.copyWith(igdbId: searchResult.id); // Use gameEntry
+                updatedExe = gameEntry.exe.copyWith(
+                  // Use gameEntry
+                  igdbId: searchResult.id,
+                  description: searchResult.summary,
+                  igdbCoverId: searchResult.cover,
+                  coverUrl: coverDetails?['url'],
+                  coverImageId: coverDetails?['imageId'],
+                  igdbScreenshotIds: searchResult.screenshots,
+                  screenshotUrls:
+                      screenshotDetails.map((s) => s['url']!).toList(),
+                  screenshotImageIds:
+                      screenshotDetails.map((s) => s['imageId']!).toList(),
+                  videoIds: videoIds,
+                  isGame: true,
+                );
+                _logService.log(
+                    'Successfully fetched full details for ${searchResult.name}.'); // Use log
+              } else {
+                _logService.log(
+                    'Could not get IGDB token to fetch full details.',
+                    LogLevel.warning); // FIX: Use positional level
+                updatedExe = gameEntry.exe
+                    .copyWith(igdbId: searchResult.id); // Use gameEntry
               }
+            } catch (e) {
+              _logService.log(
+                  'Error fetching full IGDB details: $e. Updating ID only.',
+                  LogLevel.error); // FIX: Use positional level
+              updatedExe = gameEntry.exe
+                  .copyWith(igdbId: searchResult.id); // Use gameEntry
+            }
 
-              // Use injected PrefixProvider instance
-              await _prefixProvider.updateExecutable(gameEntry.prefix, updatedExe); // Use gameEntry
-              _logService.log('Updated metadata for ${gameEntry.exe.name} from search.'); // Use log
+            // Use injected PrefixProvider instance
+            await _prefixProvider.updateExecutable(
+                gameEntry.prefix, updatedExe); // Use gameEntry
+            _logService.log(
+                'Updated metadata for ${gameEntry.exe.name} from search.'); // Use log
 
-              // Pop the details dialog
-              if (Navigator.of(dialogContext).canPop()) {
-                 Navigator.of(dialogContext).pop();
-              }
-           }
+            // Pop the details dialog
+            if (Navigator.of(dialogContext).canPop()) {
+              Navigator.of(dialogContext).pop();
+            }
+          }
         },
-        onSaveLaunchOptions: (gameEntry, options) async { // Adjusted signature
-           // Use injected PrefixProvider instance
-           await _prefixProvider.updateExecutable(gameEntry.prefix, gameEntry.exe.copyWith(launchOptions: options)); // Use gameEntry
-           _logService.log('Launch options updated for ${gameEntry.exe.name}.'); // Use log
+        onSaveLaunchOptions: (gameEntry, options) async {
+          // Adjusted signature
+          // Use injected PrefixProvider instance
+          await _prefixProvider.updateExecutable(gameEntry.prefix,
+              gameEntry.exe.copyWith(launchOptions: options)); // Use gameEntry
+          _logService.log(
+              'Launch options updated for ${gameEntry.exe.name}.'); // Use log
         },
         // onSaveSteamAppId: (gameEntry, appId) async { // Removed callback
         //    // Use injected PrefixProvider instance
@@ -384,20 +440,25 @@ class UIActionService {
         //    _logService.log('Steam App ID updated for ${gameEntry.exe.name}.'); // Use log
         // },
         // Add other required callbacks from GameDetailsDialog constructor
-        onChangeCategory: (gameEntry, category) async { // Adjusted signature
-           await _prefixProvider.updateExecutable(gameEntry.prefix, gameEntry.exe.copyWith(category: category));
-           _logService.log('Category changed for ${gameEntry.exe.name}');
+        onChangeCategory: (gameEntry, category) async {
+          // Adjusted signature
+          await _prefixProvider.updateExecutable(
+              gameEntry.prefix, gameEntry.exe.copyWith(category: category));
+          _logService.log('Category changed for ${gameEntry.exe.name}');
         },
-        onToggleWorkingStatus: (gameEntry, notWorking) async { // Add missing parameter
-           await _prefixProvider.updateExecutable(gameEntry.prefix, gameEntry.exe.copyWith(notWorking: notWorking));
-           _logService.log('Working status toggled for ${gameEntry.exe.name}');
+        onToggleWorkingStatus: (gameEntry, notWorking) async {
+          // Add missing parameter
+          await _prefixProvider.updateExecutable(
+              gameEntry.prefix, gameEntry.exe.copyWith(notWorking: notWorking));
+          _logService.log('Working status toggled for ${gameEntry.exe.name}');
         },
       ),
     );
   }
 
   /// Shows the Common Components Dialog.
-  Future<void> showCommonComponentsDialog(BuildContext scaffoldContext, WinePrefix prefix) async {
+  Future<void> showCommonComponentsDialog(
+      BuildContext scaffoldContext, WinePrefix prefix) async {
     // Check mount status before showing dialog
     if (!scaffoldContext.mounted) return;
     await showDialog(
@@ -415,19 +476,18 @@ class UIActionService {
   }
 
   /// Allows the user to pick an installer file and runs it within the prefix.
-  Future<void> runInstallerInPrefix(BuildContext context, WinePrefix prefix) async {
+  Future<void> runInstallerInPrefix(
+      BuildContext context, WinePrefix prefix) async {
     try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['exe', 'msi'],
-        dialogTitle: 'Select Installer',
-      );
-
-      if (result != null && result.files.single.path != null) {
-        final installerPath = result.files.single.path!;
+      final typeGroup =
+          const XTypeGroup(label: 'Installers', extensions: ['exe', 'msi']);
+      final result = await openFile(acceptedTypeGroups: [typeGroup]);
+      if (result != null) {
+        final installerPath = result.path;
         final installerName = p.basename(installerPath);
 
-        _logService.log('Attempting to run installer "$installerName" in prefix "${prefix.name}"...');
+        _logService.log(
+            'Attempting to run installer "$installerName" in prefix "${prefix.name}"...');
 
         // Create a temporary ExeEntry for the installer
         final installerExe = ExeEntry(path: installerPath, name: installerName);
@@ -446,24 +506,28 @@ class UIActionService {
             }
           },
           onProcessExit: (exePath, exitCode, errors) {
-            _logService.log('Installer $installerName exited with code $exitCode.');
+            _logService
+                .log('Installer $installerName exited with code $exitCode.');
             if (errors.isNotEmpty) {
-              _logService.log('Installer errors:\n${errors.join('\n')}', LogLevel.warning);
+              _logService.log(
+                  'Installer errors:\n${errors.join('\n')}', LogLevel.warning);
             }
             if (context.mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Installer $installerName finished (Code: $exitCode)')),
+                SnackBar(
+                    content: Text(
+                        'Installer $installerName finished (Code: $exitCode)')),
               );
             }
             // Suggest rescanning or adding executable manually after install?
           },
         );
-         // Removed redundant snackbar here, handled by onProcessExit
-         // if (context.mounted) {
-         //   ScaffoldMessenger.of(context).showSnackBar(
-         //     SnackBar(content: Text('Installer $installerName finished.')),
-         //   );
-         // }
+        // Removed redundant snackbar here, handled by onProcessExit
+        // if (context.mounted) {
+        //   ScaffoldMessenger.of(context).showSnackBar(
+        //     SnackBar(content: Text('Installer $installerName finished.')),
+        //   );
+        // }
       } else {
         _logService.log('Installer selection cancelled.');
       }
@@ -484,23 +548,26 @@ class UIActionService {
     try {
       // Try to use xdg-open on Linux
       final result = await Process.run('xdg-open', [path]);
-      
+
       if (result.exitCode != 0) {
-        _logService.log('Error opening file explorer: ${result.stderr}', LogLevel.error);
+        _logService.log(
+            'Error opening file explorer: ${result.stderr}', LogLevel.error);
       }
     } catch (e) {
-       _logService.log('Error launching file explorer: $e', LogLevel.error);
+      _logService.log('Error launching file explorer: $e', LogLevel.error);
     }
   }
 
   // Removed showWinetricksVerbsDialog method
 
   /// Adds a specific ExeEntry to a prefix (used for compressed games)
-  Future<void> addSpecificExecutableToPrefix(WinePrefix prefix, ExeEntry exeEntry) async {
+  Future<void> addSpecificExecutableToPrefix(
+      WinePrefix prefix, ExeEntry exeEntry) async {
     try {
       await _prefixProvider.addExecutable(prefix, exeEntry);
-      _logService.log('Added executable "${exeEntry.name}" to prefix "${prefix.name}"');
-      
+      _logService.log(
+          'Added executable "${exeEntry.name}" to prefix "${prefix.name}"');
+
       // For compressed games, also try to fetch metadata
       if (exeEntry.isCompressed) {
         await _tryFetchMetadataForCompressedGame(prefix, exeEntry);
@@ -512,23 +579,30 @@ class UIActionService {
   }
 
   /// Try to fetch metadata for compressed games
-  Future<void> _tryFetchMetadataForCompressedGame(WinePrefix prefix, ExeEntry compressedGame) async {
+  Future<void> _tryFetchMetadataForCompressedGame(
+      WinePrefix prefix, ExeEntry compressedGame) async {
     try {
-      _logService.log('Fetching metadata for compressed game: ${compressedGame.name}');
-      
+      _logService
+          .log('Fetching metadata for compressed game: ${compressedGame.name}');
+
       final tokenData = await _igdbService.getIgdbToken(_settings);
       if (tokenData != null && tokenData['token'] != null) {
         final token = tokenData['token'] as String;
-        final searchResults = await _igdbService.searchIgdbGames(compressedGame.name, _settings, token);
+        final searchResults = await _igdbService.searchIgdbGames(
+            compressedGame.name, _settings, token);
 
         if (searchResults.isNotEmpty) {
           final firstMatch = searchResults.first;
-          _logService.log('Found IGDB match for compressed game: ${firstMatch.name}');
+          _logService
+              .log('Found IGDB match for compressed game: ${firstMatch.name}');
 
           // Fetch details
-          final coverDetails = await _igdbService.fetchCoverDetails(firstMatch.cover, _settings, token);
-          final screenshotDetails = await _igdbService.fetchScreenshotDetails(firstMatch.screenshots, _settings, token);
-          final videoIds = await _igdbService.fetchGameVideoIds(firstMatch.id, _settings, token);
+          final coverDetails = await _igdbService.fetchCoverDetails(
+              firstMatch.cover, _settings, token);
+          final screenshotDetails = await _igdbService.fetchScreenshotDetails(
+              firstMatch.screenshots, _settings, token);
+          final videoIds = await _igdbService.fetchGameVideoIds(
+              firstMatch.id, _settings, token);
 
           // Update the compressed game with metadata
           final updatedGame = compressedGame.copyWith(
@@ -539,7 +613,8 @@ class UIActionService {
             coverImageId: coverDetails?['imageId'],
             igdbScreenshotIds: firstMatch.screenshots,
             screenshotUrls: screenshotDetails.map((s) => s['url']!).toList(),
-            screenshotImageIds: screenshotDetails.map((s) => s['imageId']!).toList(),
+            screenshotImageIds:
+                screenshotDetails.map((s) => s['imageId']!).toList(),
             videoIds: videoIds,
           );
 
@@ -548,31 +623,35 @@ class UIActionService {
         }
       }
     } catch (e) {
-      _logService.log('Could not fetch metadata for compressed game: $e', LogLevel.warning);
+      _logService.log(
+          'Could not fetch metadata for compressed game: $e', LogLevel.warning);
       // Don't rethrow - metadata is optional
     }
   }
 
   /// Shows a dialog to edit environment variables for a Wine prefix
-  Future<void> editPrefixEnvironmentVariables(BuildContext context, WinePrefix prefix) async {
+  Future<void> editPrefixEnvironmentVariables(
+      BuildContext context, WinePrefix prefix) async {
     // Get the existing environment variables
     Map<String, String> envVars = {...prefix.environmentVariables};
-    
+
     // Show the dialog
     await _showEnvironmentVarsDialog(context, prefix, envVars);
-    
+
     return;
   }
-  
-  Future<void> _showEnvironmentVarsDialog(BuildContext context, WinePrefix prefix, Map<String, String> initialVars) async {
+
+  Future<void> _showEnvironmentVarsDialog(BuildContext context,
+      WinePrefix prefix, Map<String, String> initialVars) async {
     final newKeyController = TextEditingController();
     final newValueController = TextEditingController();
-    
+
     // Convert map to list of controllers for easier manipulation
-    List<MapEntry<String, TextEditingController>> controllers = initialVars.entries
+    List<MapEntry<String, TextEditingController>> controllers = initialVars
+        .entries
         .map((e) => MapEntry(e.key, TextEditingController(text: e.value)))
         .toList();
-    
+
     // Show dialog with a stateful builder to manage state
     bool? result = await showDialog<bool>(
       context: context,
@@ -602,7 +681,8 @@ class UIActionService {
                                   child: Text(
                                     entry.key,
                                     overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(fontWeight: FontWeight.bold),
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.bold),
                                   ),
                                 ),
                                 Expanded(
@@ -610,12 +690,14 @@ class UIActionService {
                                     controller: entry.value,
                                     decoration: const InputDecoration(
                                       border: OutlineInputBorder(),
-                                      contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      contentPadding: EdgeInsets.symmetric(
+                                          horizontal: 8, vertical: 4),
                                     ),
                                   ),
                                 ),
                                 IconButton(
-                                  icon: const Icon(Icons.delete, color: Colors.red),
+                                  icon: const Icon(Icons.delete,
+                                      color: Colors.red),
                                   onPressed: () {
                                     setState(() {
                                       controllers.removeAt(index);
@@ -629,7 +711,8 @@ class UIActionService {
                       ),
                     ),
                     const Divider(),
-                    const Text('Add New Variable', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const Text('Add New Variable',
+                        style: TextStyle(fontWeight: FontWeight.bold)),
                     Row(
                       children: [
                         SizedBox(
@@ -639,7 +722,8 @@ class UIActionService {
                             decoration: const InputDecoration(
                               hintText: 'Variable Name',
                               border: OutlineInputBorder(),
-                              contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              contentPadding: EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 4),
                             ),
                           ),
                         ),
@@ -650,7 +734,8 @@ class UIActionService {
                             decoration: const InputDecoration(
                               hintText: 'Value',
                               border: OutlineInputBorder(),
-                              contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              contentPadding: EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 4),
                             ),
                           ),
                         ),
@@ -662,7 +747,8 @@ class UIActionService {
                                 controllers.add(
                                   MapEntry(
                                     newKeyController.text,
-                                    TextEditingController(text: newValueController.text),
+                                    TextEditingController(
+                                        text: newValueController.text),
                                   ),
                                 );
                                 newKeyController.clear();
@@ -688,15 +774,15 @@ class UIActionService {
                     for (var entry in controllers) {
                       updatedEnvVars[entry.key] = entry.value.text;
                     }
-                    
+
                     // Return the updated variables
                     Navigator.of(context).pop(true);
-                    
+
                     // Update the prefix with new environment variables
                     final updatedPrefix = prefix.copyWith(
                       environmentVariables: updatedEnvVars,
                     );
-                    
+
                     // Save the updated prefix
                     _prefixProvider.updatePrefix(updatedPrefix);
                   },

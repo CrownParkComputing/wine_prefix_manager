@@ -270,7 +270,7 @@ class _LogsPageState extends State<LogsPage> {
                 ],
               ),
             ),
-            Divider(),
+            const Divider(),
             Expanded(
               child: Builder(
                 builder: (context) {

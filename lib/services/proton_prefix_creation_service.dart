@@ -214,7 +214,7 @@ class ProtonPrefixCreationService {
       if (!await Directory(extractedDir).exists()) {
         // Try with wine-proton prefix for Kronek builds
         if (selectedBuild.name.contains('Kronek')) {
-          String altExtractedDir = path.join(downloadDir, 'wine-proton-' + extractedName.split('-').last);
+          String altExtractedDir = path.join(downloadDir, 'wine-proton-${extractedName.split('-').last}');
           if (await Directory(altExtractedDir).exists()) {
             extractedDir = altExtractedDir;
             _logService.log('Found Kronek Proton at alternate path: $extractedDir');
@@ -273,8 +273,8 @@ class ProtonPrefixCreationService {
   }
 
   Future<String> _getDownloadDirectory() async {
-    final String appName = 'wine_prefix_manager';
-    final String buildsSubDir = 'downloaded_builds'; // Consistent subdirectory
+    const String appName = 'wine_prefix_manager';
+    const String buildsSubDir = 'downloaded_builds'; // Consistent subdirectory
     final homeDir = Platform.environment['HOME'];
 
     String baseDir;
@@ -431,7 +431,7 @@ class ProtonPrefixCreationService {
     // Determine if this is a true Proton script or a Wine executable
     final isWineExecutable = protonRunScript.endsWith('/wine') || protonRunScript.endsWith('/wine64');
     
-    var result;
+    ProcessResult result;
     if (isWineExecutable) {
       // For Wine executables, don't use 'run' prefix
       final winebootArgs = ['wineboot', '-u'];

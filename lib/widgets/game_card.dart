@@ -13,7 +13,8 @@ class GameCard extends StatelessWidget {
   final Function(GameEntry)? onShowInfo; // For showing info modal
   final Function(GameEntry)? onShowSettings; // For showing settings
   final Function(GameEntry) onLaunch;
-  final Function(GameEntry)? onStop; // Callback to stop the game, nullable if not running
+  final Function(GameEntry)?
+      onStop; // Callback to stop the game, nullable if not running
   final Function(GameEntry)? onDelete; // Callback to delete the game
   final GameLaunchState launchState; // Current state of the game
 
@@ -39,13 +40,15 @@ class GameCard extends StatelessWidget {
             ? Image.file(
                 File(game.exe.localCoverPath!),
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => _buildFallbackCover(), // Fallback on file error
+                errorBuilder: (_, __, ___) =>
+                    _buildFallbackCover(), // Fallback on file error
               )
             : (game.exe.coverUrl != null && game.exe.coverUrl!.isNotEmpty)
                 ? Image.network(
                     game.exe.coverUrl!,
                     fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => _buildFallbackCover(), // Fallback on network error
+                    errorBuilder: (_, __, ___) =>
+                        _buildFallbackCover(), // Fallback on network error
                   )
                 : _buildFallbackCover(), // Ultimate fallback
 
@@ -86,7 +89,7 @@ class GameCard extends StatelessWidget {
                       vertical: _getSmallPadding() / 2,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.blue.withValues(alpha: 0.9),
+                      color: Colors.blue.withOpacity(0.9),
                       borderRadius: BorderRadius.circular(_getBorderRadius()),
                     ),
                     child: Row(
@@ -111,14 +114,15 @@ class GameCard extends StatelessWidget {
                   ),
                 // Not working warning icon
                 if (game.exe.notWorking == true) ...[
-                  if (game.exe.isCompressed) SizedBox(width: _getSmallPadding()),
+                  if (game.exe.isCompressed)
+                    SizedBox(width: _getSmallPadding()),
                   Container(
                     padding: EdgeInsets.symmetric(
                       horizontal: _getSmallPadding(),
                       vertical: _getSmallPadding() / 2,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.orange.withValues(alpha: 0.9),
+                      color: Colors.orange.withOpacity(0.9),
                       borderRadius: BorderRadius.circular(_getBorderRadius()),
                     ),
                     child: Row(
@@ -162,10 +166,11 @@ class GameCard extends StatelessWidget {
             ),
             child: IconButton(
               onPressed: () {
-                print('Details icon tapped for ${game.exe.name}'); // Debug print
+                print(
+                    'Details icon tapped for ${game.exe.name}'); // Debug print
                 onShowInfo?.call(game);
               },
-              icon: Icon(
+              icon: const Icon(
                 Icons.info_outline,
                 color: Colors.white,
                 size: 16,
@@ -195,10 +200,11 @@ class GameCard extends StatelessWidget {
             ),
             child: IconButton(
               onPressed: () {
-                print('Settings icon tapped for ${game.exe.name}'); // Debug print
+                print(
+                    'Settings icon tapped for ${game.exe.name}'); // Debug print
                 onShowSettings?.call(game);
               },
-              icon: Icon(
+              icon: const Icon(
                 Icons.settings,
                 color: Colors.white,
                 size: 16,
@@ -229,10 +235,11 @@ class GameCard extends StatelessWidget {
               ),
               child: IconButton(
                 onPressed: () {
-                  print('Delete icon tapped for ${game.exe.name}'); // Debug print
+                  print(
+                      'Delete icon tapped for ${game.exe.name}'); // Debug print
                   onDelete?.call(game);
                 },
-                icon: Icon(
+                icon: const Icon(
                   Icons.delete_outline,
                   color: Colors.white,
                   size: 16,
@@ -281,7 +288,7 @@ class GameCard extends StatelessWidget {
           left: 8,
           child: Container(
             decoration: BoxDecoration(
-              color: game.exe.isCompressed 
+              color: game.exe.isCompressed
                   ? Colors.blue.withOpacity(0.8)
                   : Colors.green.withOpacity(0.8),
               borderRadius: BorderRadius.circular(14),
@@ -296,7 +303,7 @@ class GameCard extends StatelessWidget {
                 onLaunch(game);
               },
               icon: Icon(
-                launchState == GameLaunchState.running 
+                launchState == GameLaunchState.running
                     ? Icons.stop
                     : launchState == GameLaunchState.launching
                         ? Icons.hourglass_bottom
@@ -306,7 +313,7 @@ class GameCard extends StatelessWidget {
                 color: Colors.white,
                 size: 16,
               ),
-              tooltip: launchState == GameLaunchState.running 
+              tooltip: launchState == GameLaunchState.running
                   ? 'Stop Game'
                   : launchState == GameLaunchState.launching
                       ? 'Launching...'
@@ -327,9 +334,11 @@ class GameCard extends StatelessWidget {
         // Launch area (excluding corners where icons are)
         Positioned(
           left: _getIconAreaSize(), // Exclude left corner area for info icon
-          right: _getIconAreaSize(), // Exclude right corner area for settings icon and delete icon
+          right:
+              _getIconAreaSize(), // Exclude right corner area for settings icon and delete icon
           top: _getIconAreaSize() - 10, // Exclude top area where icons are
-          bottom: _getIconAreaSize() - 10, // Exclude bottom area where delete icon is
+          bottom: _getIconAreaSize() -
+              10, // Exclude bottom area where delete icon is
           child: Material(
             color: Colors.transparent,
             child: InkWell(
@@ -358,13 +367,13 @@ class GameCard extends StatelessWidget {
         return Container(
           padding: EdgeInsets.all(_getSmallPadding() * 2),
           decoration: BoxDecoration(
-            color: Colors.green.withValues(alpha: 0.2),
+            color: Colors.green.withOpacity(0.2),
             shape: BoxShape.circle,
           ),
           child: SizedBox(
             width: _getCenterIconSize(),
             height: _getCenterIconSize(),
-            child: CircularProgressIndicator(
+            child: const CircularProgressIndicator(
               strokeWidth: 3,
               valueColor: AlwaysStoppedAnimation<Color>(Colors.green),
             ),
@@ -374,7 +383,7 @@ class GameCard extends StatelessWidget {
         return Container(
           padding: EdgeInsets.all(_getSmallPadding() * 2),
           decoration: BoxDecoration(
-            color: Colors.red.withValues(alpha: 0.2),
+            color: Colors.red.withOpacity(0.2),
             shape: BoxShape.circle,
           ),
           child: IconButton(
@@ -394,7 +403,7 @@ class GameCard extends StatelessWidget {
         return Container(
           padding: EdgeInsets.all(_getSmallPadding() * 2),
           decoration: BoxDecoration(
-            color: Colors.orange.withValues(alpha: 0.2),
+            color: Colors.orange.withOpacity(0.2),
             shape: BoxShape.circle,
           ),
           child: Icon(
@@ -408,7 +417,7 @@ class GameCard extends StatelessWidget {
         return Container(
           padding: EdgeInsets.all(_getSmallPadding()),
           decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.1),
+            color: Colors.black.withOpacity(0.1),
             shape: BoxShape.circle,
           ),
           child: Icon(
@@ -419,7 +428,6 @@ class GameCard extends StatelessWidget {
         );
     }
   }
-
 
   Widget _buildFallbackCover() {
     return Container(
@@ -439,7 +447,7 @@ class GameCard extends StatelessWidget {
       ),
     );
   }
-  
+
   // Helper method to format play time
   String _formatPlayTime(int minutes) {
     if (minutes < 60) {

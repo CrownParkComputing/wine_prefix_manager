@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import '../models/prefix_models.dart';
 import '../providers/settings_provider.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:path/path.dart' as p;
 
 class GameSettingsModal extends StatefulWidget {
   final GameEntry game;

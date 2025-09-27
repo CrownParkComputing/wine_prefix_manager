@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart'; // For listEquals, ChangeNotifier, debugPrint
 import 'package:path/path.dart' as p; // Import path package
@@ -8,9 +7,8 @@ import '../services/prefix_storage_service.dart';
 import '../services/prefix_management_service.dart';
 import '../services/cover_art_service.dart';
 import '../services/igdb_service.dart'; // Import IgdbService
-import '../models/igdb_models.dart'; // Import IgdbGame model
+// Import IgdbGame model
 import 'package:flutter/material.dart';
-import 'package:collection/collection.dart';
 
 class PrefixProvider with ChangeNotifier {
   List<WinePrefix> _prefixes = [];

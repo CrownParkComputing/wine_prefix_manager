@@ -94,7 +94,7 @@ class WineComponentInstaller {
     } catch (e) {
       // Fallback if unzstd is not available or tar doesn't support it directly
       LogService().log('tar with unzstd failed: $e. Trying zstd -d and then tar -xf.', LogLevel.warning);
-      final tempTarPath = '${filePath}.tar';
+      final tempTarPath = '$filePath.tar';
       await shell.run('zstd -d "$filePath" -o "$tempTarPath"');
       await shell.run('tar -xf "$tempTarPath" -C "$targetDir"');
       await File(tempTarPath).delete(); // Clean up temporary .tar file

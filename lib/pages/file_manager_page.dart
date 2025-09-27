@@ -10,7 +10,9 @@ import '../providers/prefix_provider.dart';
 
 // Utility to sanitize file-/folder names
 String sanitizeFileName(String name) {
-  return name.replaceAll(RegExp(r'[<>:"/\\|?*]'), '_').replaceAll(RegExp(r'\s+'), '_');
+  return name
+      .replaceAll(RegExp(r'[<>:"/\\|?*]'), '_')
+      .replaceAll(RegExp(r'\s+'), '_');
 }
 
 class FileManagerPage extends StatefulWidget {
@@ -74,45 +76,47 @@ class _FileManagerPageState extends State<FileManagerPage> {
     if (selectedGame != null) {
       // Auto-set source folder to game directory
       sourceFolderPath = p.dirname(selectedGame!.exe.path);
-      
+
       // Auto-discover save data folders
       _autoDiscoverSaveDataFolders();
     }
 
     // Set default backup folder path
     final settings = Provider.of<Settings>(context, listen: false);
-    backupFolderPath = p.join(settings.backupPath ?? settings.prefixDirectory, 'game_backups');
+    backupFolderPath =
+        p.join(settings.backupPath ?? settings.prefixDirectory, 'game_backups');
 
     setState(() => loading = false);
   }
 
   void _autoDiscoverSaveDataFolders() {
     if (selectedGame == null) return;
-    
+
     final List<String> potentialSavePaths = [];
     final prefix = selectedGame!.prefix;
-    
+
     // Check common save locations
     final List<String> commonSaveFolders = [
       'drive_c/users/*/Documents/My Games',
-      'drive_c/users/*/Documents/Games', 
+      'drive_c/users/*/Documents/Games',
       'drive_c/users/*/Documents/${selectedGame!.exe.name}',
       'drive_c/users/*/AppData/Local/${selectedGame!.exe.name}',
       'drive_c/users/*/AppData/Roaming/${selectedGame!.exe.name}',
       'drive_c/users/*/Saved Games',
     ];
-    
+
     for (final pattern in commonSaveFolders) {
       final fullPath = p.join(prefix.path, pattern);
       final parts = fullPath.split('*');
-      
+
       if (parts.length == 2) {
         try {
           final dir = Directory(parts[0]);
           if (dir.existsSync()) {
             final userDirs = dir.listSync().whereType<Directory>();
             for (final userDir in userDirs) {
-              final savePath = p.join(userDir.path, parts[1].substring(1)); // Remove leading /
+              final savePath = p.join(
+                  userDir.path, parts[1].substring(1)); // Remove leading /
               if (Directory(savePath).existsSync()) {
                 potentialSavePaths.add(savePath);
               }
@@ -127,7 +131,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
         }
       }
     }
-    
+
     setState(() {
       saveDataPaths = potentialSavePaths;
     });
@@ -135,9 +139,9 @@ class _FileManagerPageState extends State<FileManagerPage> {
 
   Future<void> _selectSourceFolder() async {
     // Default to home directory or current source folder
-    String initialDir = sourceFolderPath.isNotEmpty 
-        ? sourceFolderPath 
-        : selectedGame != null 
+    String initialDir = sourceFolderPath.isNotEmpty
+        ? sourceFolderPath
+        : selectedGame != null
             ? p.dirname(selectedGame!.exe.path)
             : '/home';
 
@@ -161,11 +165,11 @@ class _FileManagerPageState extends State<FileManagerPage> {
   Future<void> _addSaveDataFolder() async {
     // Default to Documents folder if we have a selected game, otherwise home
     String initialDir = '/home';
-    
+
     if (selectedGame != null) {
       final prefix = selectedGame!.prefix;
       String prefixInitialDir = p.join(prefix.path, 'drive_c/users');
-      
+
       // Try to find the first user directory
       try {
         final usersDir = Directory(prefixInitialDir);
@@ -188,7 +192,6 @@ class _FileManagerPageState extends State<FileManagerPage> {
     }
 
     final String? selectedDir = await FilePicker.platform.getDirectoryPath(
-      dialogTitle: 'Select Save Data Folder',
       initialDirectory: initialDir,
     );
 
@@ -207,19 +210,19 @@ class _FileManagerPageState extends State<FileManagerPage> {
 
   Future<int> _calculateTotalSize(List<String> paths) async {
     int totalSize = 0;
-    
+
     for (final path in paths) {
       if (Directory(path).existsSync()) {
         totalSize += await _calculateDirectorySize(Directory(path));
       }
     }
-    
+
     return totalSize;
   }
 
   Future<int> _calculateDirectorySize(Directory dir) async {
     int size = 0;
-    
+
     try {
       await for (final entity in dir.list(recursive: true)) {
         if (entity is File) {
@@ -233,7 +236,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
     } catch (e) {
       // Ignore errors
     }
-    
+
     return size;
   }
 
@@ -269,7 +272,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
     try {
       // Calculate total size for progress tracking
       totalFileSize = await _calculateTotalSize(pathsToBackup);
-      
+
       setState(() {
         backupStatus = 'Creating backup archive...';
       });
@@ -277,16 +280,21 @@ class _FileManagerPageState extends State<FileManagerPage> {
       // Create temporary script to handle multiple paths and progress
       final tempDir = Directory.systemTemp.createTempSync('backup_');
       final scriptPath = p.join(tempDir.path, 'backup_script.sh');
-      
+
       // Build exclude list
-      List<String> excludes = ['--exclude=*.lock', '--exclude=*/tmp/*', '--exclude=*/cache/*'];
+      List<String> excludes = [
+        '--exclude=*.lock',
+        '--exclude=*/tmp/*',
+        '--exclude=*/cache/*'
+      ];
 
       if (!includeGameSaves) {
         excludes.addAll(['--exclude=*/saves/*', '--exclude=*/Saves/*']);
       }
 
       if (!includeConfigs) {
-        excludes.addAll(['--exclude=*/config/*', '--exclude=*.ini', '--exclude=*.cfg']);
+        excludes.addAll(
+            ['--exclude=*/config/*', '--exclude=*.ini', '--exclude=*.cfg']);
       }
 
       // Create backup script that handles multiple directories
@@ -351,10 +359,13 @@ echo "Backup complete!"
           if (await outputFile.exists()) {
             final currentSize = await outputFile.length();
             // Estimate progress based on compression ratio (rough estimate)
-            final estimatedProgress = (currentSize * 3) / totalFileSize; // Assume 3:1 compression
+            final estimatedProgress =
+                (currentSize * 3) / totalFileSize; // Assume 3:1 compression
             setState(() {
-              backupProgress = estimatedProgress.clamp(0.0, 0.95); // Don't show 100% until done
-              backupStatus = 'Creating backup... ${(backupProgress * 100).toStringAsFixed(1)}%';
+              backupProgress = estimatedProgress.clamp(
+                  0.0, 0.95); // Don't show 100% until done
+              backupStatus =
+                  'Creating backup... ${(backupProgress * 100).toStringAsFixed(1)}%';
             });
           }
         } catch (e) {
@@ -395,7 +406,6 @@ echo "Backup complete!"
 
       // Cleanup temp directory
       await tempDir.delete(recursive: true);
-
     } catch (e) {
       setState(() {
         error = 'Backup error: $e';
@@ -419,7 +429,6 @@ echo "Backup complete!"
   Future<void> _decompressFile(String filePath) async {
     // Ask for destination directory
     final String? destinationDir = await FilePicker.platform.getDirectoryPath(
-      dialogTitle: 'Select Where to Extract',
       initialDirectory: p.dirname(filePath),
     );
 
@@ -436,10 +445,13 @@ echo "Backup complete!"
       // Create command based on file type
       String cmd;
       if (fileName.endsWith('.tar.zst')) {
-        cmd = 'pv -n "$filePath" | zstd -d --threads=$compressionThreads | tar xf - -C "$destinationDir"';
+        cmd =
+            'pv -n "$filePath" | zstd -d --threads=$compressionThreads | tar xf - -C "$destinationDir"';
       } else if (fileName.endsWith('.zst')) {
-        final outFile = p.join(destinationDir, p.basenameWithoutExtension(fileName));
-        cmd = 'pv -n "$filePath" | zstd -d --threads=$compressionThreads > "$outFile"';
+        final outFile =
+            p.join(destinationDir, p.basenameWithoutExtension(fileName));
+        cmd =
+            'pv -n "$filePath" | zstd -d --threads=$compressionThreads > "$outFile"';
       } else {
         throw Exception('Unsupported file format');
       }
@@ -485,7 +497,9 @@ echo "Backup complete!"
   String _formatFileSize(int bytes) {
     if (bytes < 1024) return '${bytes}B';
     if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)}KB';
-    if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)}MB';
+    if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)}MB';
+    }
     return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)}GB';
   }
 
@@ -495,7 +509,8 @@ echo "Backup complete!"
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Create Backup${selectedGame != null ? ' - ${selectedGame!.exe.name}' : ''}'),
+        title: Text(
+            'Create Backup${selectedGame != null ? ' - ${selectedGame!.exe.name}' : ''}'),
         automaticallyImplyLeading: false,
         elevation: 0,
         backgroundColor: theme.colorScheme.surface,
@@ -545,11 +560,11 @@ echo "Backup complete!"
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: theme.colorScheme.surface,
-              boxShadow: [
+              boxShadow: const [
                 BoxShadow(
                   color: Colors.black12,
                   blurRadius: 4,
-                  offset: const Offset(0, 2),
+                  offset: Offset(0, 2),
                 ),
               ],
             ),
@@ -594,7 +609,8 @@ echo "Backup complete!"
                   children: [
                     Expanded(
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
                         decoration: BoxDecoration(
                           border: Border.all(color: theme.dividerColor),
                           borderRadius: BorderRadius.circular(4),
@@ -607,11 +623,17 @@ echo "Backup complete!"
                               style: theme.textTheme.bodySmall,
                             ),
                             Text(
-                              sourceFolderPath.isEmpty ? 'Click "Browse" to select a folder' : sourceFolderPath,
+                              sourceFolderPath.isEmpty
+                                  ? 'Click "Browse" to select a folder'
+                                  : sourceFolderPath,
                               style: TextStyle(
                                 fontFamily: 'monospace',
-                                fontWeight: sourceFolderPath.isEmpty ? FontWeight.normal : FontWeight.bold,
-                                fontStyle: sourceFolderPath.isEmpty ? FontStyle.italic : FontStyle.normal,
+                                fontWeight: sourceFolderPath.isEmpty
+                                    ? FontWeight.normal
+                                    : FontWeight.bold,
+                                fontStyle: sourceFolderPath.isEmpty
+                                    ? FontStyle.italic
+                                    : FontStyle.normal,
                               ),
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -646,7 +668,8 @@ echo "Backup complete!"
                       label: const Text('Add Folder'),
                       onPressed: backupInProgress ? null : _addSaveDataFolder,
                       style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
                       ),
                     ),
                   ],
@@ -660,16 +683,20 @@ echo "Backup complete!"
                     decoration: BoxDecoration(
                       border: Border.all(color: theme.dividerColor),
                       borderRadius: BorderRadius.circular(4),
-                      color: theme.colorScheme.surface.withValues(alpha: 0.5),
+                      color: theme.colorScheme.surface.withOpacity(0.5),
                     ),
                     child: Row(
                       children: [
-                        Icon(Icons.info_outline, size: 16, color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
+                        Icon(Icons.info_outline,
+                            size: 16,
+                            color:
+                                theme.colorScheme.onSurface.withOpacity(0.6)),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             'Optional: Add additional folders (like save files) to include in the backup.',
-                            style: theme.textTheme.bodySmall?.copyWith(fontStyle: FontStyle.italic),
+                            style: theme.textTheme.bodySmall
+                                ?.copyWith(fontStyle: FontStyle.italic),
                           ),
                         ),
                       ],
@@ -692,20 +719,25 @@ echo "Backup complete!"
                           leading: const Icon(Icons.save, size: 16),
                           title: Text(
                             p.basename(path),
-                            style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold),
+                            style: theme.textTheme.bodyMedium
+                                ?.copyWith(fontWeight: FontWeight.bold),
                           ),
                           subtitle: Text(
                             path,
                             style: TextStyle(
                               fontFamily: 'monospace',
                               fontSize: 11,
-                              color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                              color:
+                                  theme.colorScheme.onSurface.withOpacity(0.7),
                             ),
                             overflow: TextOverflow.ellipsis,
                           ),
                           trailing: IconButton(
-                            icon: const Icon(Icons.remove_circle_outline, size: 18),
-                            onPressed: backupInProgress ? null : () => _removeSaveDataFolder(path),
+                            icon: const Icon(Icons.remove_circle_outline,
+                                size: 18),
+                            onPressed: backupInProgress
+                                ? null
+                                : () => _removeSaveDataFolder(path),
                             tooltip: 'Remove this save folder',
                           ),
                         );
@@ -732,16 +764,20 @@ echo "Backup complete!"
                         max: 19,
                         divisions: 18,
                         label: compressionLevel.toString(),
-                        onChanged: backupInProgress ? null : (value) { // Disable during backup
-                          setState(() {
-                            compressionLevel = value.round();
-                          });
-                        },
+                        onChanged: backupInProgress
+                            ? null
+                            : (value) {
+                                // Disable during backup
+                                setState(() {
+                                  compressionLevel = value.round();
+                                });
+                              },
                       ),
                     ),
                     Text(
                       "$compressionLevel",
-                      style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold),
+                      style: theme.textTheme.bodyLarge
+                          ?.copyWith(fontWeight: FontWeight.bold),
                     ),
                   ],
                 ),
@@ -756,17 +792,23 @@ echo "Backup complete!"
                         min: 0,
                         max: 16,
                         divisions: 16,
-                        label: compressionThreads == 0 ? "Auto" : compressionThreads.toString(),
-                        onChanged: backupInProgress ? null : (value) { // Disable during backup
-                          setState(() {
-                            compressionThreads = value.round();
-                          });
-                        },
+                        label: compressionThreads == 0
+                            ? "Auto"
+                            : compressionThreads.toString(),
+                        onChanged: backupInProgress
+                            ? null
+                            : (value) {
+                                // Disable during backup
+                                setState(() {
+                                  compressionThreads = value.round();
+                                });
+                              },
                       ),
                     ),
                     Text(
                       compressionThreads == 0 ? "Auto" : "$compressionThreads",
-                      style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold),
+                      style: theme.textTheme.bodyLarge
+                          ?.copyWith(fontWeight: FontWeight.bold),
                     ),
                   ],
                 ),
@@ -778,7 +820,8 @@ echo "Backup complete!"
                     compressionThreads == 0
                         ? 'Using all available CPU threads for compression'
                         : 'Using $compressionThreads thread${compressionThreads > 1 ? "s" : ""} for compression',
-                    style: theme.textTheme.bodySmall?.copyWith(fontStyle: FontStyle.italic),
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(fontStyle: FontStyle.italic),
                   ),
                 ),
 
@@ -792,11 +835,14 @@ echo "Backup complete!"
                         controlAffinity: ListTileControlAffinity.leading,
                         dense: true,
                         contentPadding: EdgeInsets.zero,
-                        onChanged: backupInProgress ? null : (value) { // Disable during backup
-                          setState(() {
-                            includeGameSaves = value ?? true;
-                          });
-                        },
+                        onChanged: backupInProgress
+                            ? null
+                            : (value) {
+                                // Disable during backup
+                                setState(() {
+                                  includeGameSaves = value ?? true;
+                                });
+                              },
                       ),
                     ),
                     Expanded(
@@ -806,11 +852,14 @@ echo "Backup complete!"
                         controlAffinity: ListTileControlAffinity.leading,
                         dense: true,
                         contentPadding: EdgeInsets.zero,
-                        onChanged: backupInProgress ? null : (value) { // Disable during backup
-                          setState(() {
-                            includeConfigs = value ?? true;
-                          });
-                        },
+                        onChanged: backupInProgress
+                            ? null
+                            : (value) {
+                                // Disable during backup
+                                setState(() {
+                                  includeConfigs = value ?? true;
+                                });
+                              },
                       ),
                     ),
                   ],
@@ -823,9 +872,12 @@ echo "Backup complete!"
                     icon: const Icon(Icons.backup),
                     label: const Text('Create Backup'),
                     style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 24, vertical: 12),
                     ),
-                    onPressed: sourceFolderPath.isEmpty || backupInProgress ? null : _createBackup,
+                    onPressed: sourceFolderPath.isEmpty || backupInProgress
+                        ? null
+                        : _createBackup,
                   ),
                 ),
 
@@ -853,7 +905,7 @@ echo "Backup complete!"
           if (error.isNotEmpty)
             Container(
               padding: const EdgeInsets.all(8),
-              color: Colors.red.withValues(alpha: 0.1),
+              color: Colors.red.withOpacity(0.1),
               child: Row(
                 children: [
                   const Icon(Icons.error, color: Colors.red, size: 16),

@@ -17,7 +17,7 @@ dependencies:
   http: ^1.1.0  # For API requests to GitHub
   dio: ^5.0.0
   process_run: ^0.13.0
-  file_picker: ^6.0.0
+  file_selector: ^1.0.0
   window_manager: ^0.4.3 # Updated version
   archive: ^3.3.7  # For tar.gz extraction
   collection: ^1.17.0 # Added for groupBy
@@ -29,6 +29,7 @@ dependencies:
   file_saver: ^0.2.4
   url_launcher: ^6.1.14
   flutter_dotenv: ^5.1.0  # For environment variable management
+  file_picker: ^8.0.0+1  # For file selection dialogs
   # ...any other dependencies you need...
 
 dev_dependencies:

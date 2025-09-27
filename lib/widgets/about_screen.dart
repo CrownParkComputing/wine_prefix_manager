@@ -1,8 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../models/settings.dart';
-import '../models/prefix_models.dart';
-import '../providers/prefix_provider.dart';
 import '../providers/settings_provider.dart';
 import '../theme/theme_provider.dart';
 // import '../services/ui_action_service.dart'; // Likely not needed for a pure About screen

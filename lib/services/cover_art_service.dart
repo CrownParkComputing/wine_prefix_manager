@@ -77,7 +77,7 @@ class CoverArtService {
   String _generateScreenshotFilename(String screenshotUrl) {
     final urlHash = screenshotUrl.hashCode.toRadixString(16);
     final extension = p.extension(screenshotUrl).split('?').first;
-    return 'ss_${urlHash}${extension.isNotEmpty ? extension : '.jpg'}';
+    return 'ss_$urlHash${extension.isNotEmpty ? extension : '.jpg'}';
   }
 
   Future<String?> _downloadAndSaveScreenshot(String screenshotUrl) async {

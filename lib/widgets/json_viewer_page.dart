@@ -67,7 +67,7 @@ class _JsonViewerPageState extends State<JsonViewerPage> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.error_outline, color: Colors.red, size: 48),
+                        const Icon(Icons.error_outline, color: Colors.red, size: 48),
                         const SizedBox(height: 16),
                         Text(
                           _error!,

@@ -4,7 +4,6 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../models/prefix_models.dart';
 import '../models/settings.dart';
-import '../widgets/common_components_dialog.dart';
 import '../providers/settings_provider.dart';
 
 class GameDetailsPage extends StatefulWidget {

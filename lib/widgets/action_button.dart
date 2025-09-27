@@ -33,7 +33,7 @@ class ActionButton extends StatelessWidget {
       icon: Icon(icon, size: 18), // Adjusted icon size for consistency
       label: Text(label),
       style: buttonStyle.copyWith(
-        padding: MaterialStateProperty.all(const EdgeInsets.symmetric(horizontal: 12, vertical: 8)), // Adjusted padding
+        padding: WidgetStateProperty.all(const EdgeInsets.symmetric(horizontal: 12, vertical: 8)), // Adjusted padding
       )
     );
 

@@ -417,7 +417,7 @@ class _CommonComponentsDialogState extends State<CommonComponentsDialog> {
     final bool isKronekProton = isProtonPrefix && 
       (widget.prefix.wineBuildPath.contains('wine-proton') || 
        widget.prefix.wineBuildPath.contains('Kronek'));
-    final String protonTooltip = 'Not needed for Proton-GE prefixes (already included)';
+    const String protonTooltip = 'Not needed for Proton-GE prefixes (already included)';
 
     return AlertDialog(
       title: Text('Install Components for "${widget.prefix.name}"'),

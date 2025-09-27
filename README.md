@@ -16,17 +16,7 @@ A modern Flutter application for managing Wine/Proton prefixes on Linux with com
 - **Game Details** - Comprehensive game information and launch options
 
 ### 🍷 Wine Prefix Management
-- **Modern Flutter UI** - Beautiful, responsive interface with dark/light themes
-- **Comprehensive Prefix Management** - Create, manage, and organize Wine/Proton prefixes
-- **Proton Integration** - Seamless Steam Proton support with automatic detection
-- **32-bit & 64-bit Support** - Full support for both architectures
-- **Automatic Setup** - Microsoft Visual C++ redistributables and gaming dependencies
 
-### 💿 ISO/CD Management
-- **Virtual CD Drive Simulation** - Mount ISO files as real CD drives (D:) in Wine prefixes
-- **Multiple Format Support** - .iso, .img, .bin, .cue files
-- **Real-time Status** - Live updates during mounting/unmounting operations
-- **Automatic Wine Registry Configuration** - Proper CD-ROM drive detection
 - **Safe Ejection** - Clean unmounting with automatic cleanup
 
 ### 💾 Backup & Restore

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 // Models
@@ -31,11 +30,8 @@ import 'pages/home_page.dart';
 import 'pages/manage_prefixes_page.dart';
 // import 'pages/prefix_management_page.dart'; // Removed - functionality integrated into ManagePrefixesPage
 import 'pages/logs_page.dart';
-import 'pages/file_manager_page.dart';
-import 'pages/backup_manager_page.dart';
-import 'widgets/rename_prefix_dialog.dart'; // Import RenamePrefixDialog
+// Import RenamePrefixDialog
 import 'widgets/env_variables_dialog.dart'; // Add import for environment variables dialog
-import 'pages/game_library_page.dart';
 import 'pages/game_details_page.dart'; // Add import for GameDetailsPage
 import 'widgets/about_screen.dart'; // Correct import for AboutScreen
 import 'pages/files_and_backup_page.dart'; // Add import for FilesAndBackupPage
@@ -251,7 +247,7 @@ class _MyAppState extends State<MyApp> {
                 return MaterialPageRoute(builder: (context) => const MainScaffold());
             }
           },
-          routes: {
+          routes: const {
             // Routes are now handled through main scaffold navigation
             // Keeping only essential routes if needed by other parts of the app
           },
@@ -428,7 +424,7 @@ class _MainScaffoldState extends State<MainScaffold> {
         // ISO/CD Management page
         return const IsoMountingPage();
       case 4:
-        return LogsPage();
+        return const LogsPage();
       case 5:
         return const AboutScreen();
       default:
@@ -448,7 +444,7 @@ class _MainScaffoldState extends State<MainScaffold> {
 
     return Scaffold(
       key: scaffoldKey,
-      backgroundColor: theme.colorScheme.background,
+      backgroundColor: theme.colorScheme.surface,
       body: Column(
         children: [
           Expanded(

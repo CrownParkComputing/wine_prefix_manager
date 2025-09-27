@@ -99,7 +99,7 @@ class IsoMountingService extends ChangeNotifier {
       // Check sudo setup first
       final sudoSetup = await _checkSudoPasswordlessSetup();
       if (!sudoSetup) {
-        final warning = 'Warning: Passwordless sudo not configured. Commands may timeout.';
+        const warning = 'Warning: Passwordless sudo not configured. Commands may timeout.';
         _logService.log(warning, LogLevel.warning);
         onStatusUpdate?.call(warning);
       }

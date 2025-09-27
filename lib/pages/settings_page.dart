@@ -149,16 +149,16 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
         // Show success message
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
+            const SnackBar(
               content: Row(
                 children: [
                   Icon(Icons.check_circle, color: Colors.white),
-                  const SizedBox(width: 10),
-                  const Text('Settings saved successfully'),
+                  SizedBox(width: 10),
+                  Text('Settings saved successfully'),
                 ],
               ),
               backgroundColor: Colors.green,
-              duration: const Duration(seconds: 2),
+              duration: Duration(seconds: 2),
             ),
           );
         }
@@ -169,7 +169,7 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
             SnackBar(
               content: Row(
                 children: [
-                  Icon(Icons.error, color: Colors.white),
+                  const Icon(Icons.error, color: Colors.white),
                   const SizedBox(width: 10),
                   Text('Failed to save settings: $e'),
                 ],
@@ -194,12 +194,10 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
     String? selectedDirectory = await FilePicker.platform.getDirectoryPath(
       dialogTitle: 'Select Prefix Directory',
     );
-    if (selectedDirectory != null) {
-      setState(() {
-        _prefixDirController.text = selectedDirectory;
-      });
+    setState(() {
+      _prefixDirController.text = selectedDirectory;
+    });
     }
-  }
 
   Future<void> _pickGameLibraryPath() async {
     // Corrected to pick a file, not a directory, for the game library path
@@ -213,12 +211,10 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
           : (_settings?.prefixDirectory ?? Platform.environment['HOME']), // Default to prefix or home
     );
 
-    if (selectedFile != null) {
-      setState(() {
-        _gameLibraryPathController.text = selectedFile;
-      });
+    setState(() {
+      _gameLibraryPathController.text = selectedFile;
+    });
     }
-  }
 
   Future<void> _pickBackupPath() async {
     final directory = await FilePicker.platform.getDirectoryPath(
@@ -440,18 +436,18 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
   }
 
   Widget _buildApiSettingsTab() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16.0),
+    return const SingleChildScrollView(
+      padding: EdgeInsets.all(16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('IGDB API Settings (for Game Information)', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          const Divider(),
-          const Text('IGDB Client ID and Secret are now configured globally in the application.'),
-          const SizedBox(height: 20),
-          const Text('All IGDB API URLs are now configured globally for optimal performance.'),
-          const SizedBox(height: 16),
-          const Text('No additional configuration is required for IGDB integration.', 
+          Text('IGDB API Settings (for Game Information)', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          Divider(),
+          Text('IGDB Client ID and Secret are now configured globally in the application.'),
+          SizedBox(height: 20),
+          Text('All IGDB API URLs are now configured globally for optimal performance.'),
+          SizedBox(height: 16),
+          Text('No additional configuration is required for IGDB integration.', 
                      style: TextStyle(fontStyle: FontStyle.italic)),
         ],
       ),

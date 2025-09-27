@@ -89,7 +89,7 @@ class WinePrefixCreationService {
       
       final isWoW64Only = await _checkIfWoW64Only(selectedBuild);
       if (isWoW64Only) {
-        final errorMsg = 'This Wine build only supports 64-bit prefixes (WoW64 mode). However, 64-bit prefixes can run both 32-bit and 64-bit applications automatically. Please create a 64-bit prefix instead.';
+        const errorMsg = 'This Wine build only supports 64-bit prefixes (WoW64 mode). However, 64-bit prefixes can run both 32-bit and 64-bit applications automatically. Please create a 64-bit prefix instead.';
         _logService.log(errorMsg, LogLevel.error);
         onStatusUpdate('Error: Wine build requires 64-bit prefix for 32-bit app compatibility');
         throw Exception(errorMsg);
@@ -211,8 +211,8 @@ class WinePrefixCreationService {
   }
 
   Future<String> _getDownloadDirectory() async {
-    final String appName = 'wine_prefix_manager';
-    final String buildsSubDir = 'downloaded_builds';
+    const String appName = 'wine_prefix_manager';
+    const String buildsSubDir = 'downloaded_builds';
     final homeDir = Platform.environment['HOME'];
 
     String baseDir;
