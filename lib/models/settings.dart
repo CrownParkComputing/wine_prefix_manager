@@ -24,6 +24,7 @@ class Settings {
   final String wineBuildsApiUrl;
   final String protonGeApiUrl;
   final String kronekProtonApiUrl; // Add URL for Kron4ek Proton builds
+  final String cachyOSProtonApiUrl; // Add URL for CachyOS Proton builds
   final String protonExperimentalApiUrl;
   final String twitchOAuthUrl;
   final String igdbApiBaseUrl;
@@ -39,9 +40,10 @@ class Settings {
     this.backupPath, // Add to constructor
     this.dxvkApiUrl = 'https://api.github.com/repos/doitsujin/dxvk/releases/latest',
     this.vkd3dApiUrl = 'https://api.github.com/repos/HansKristian-Work/vkd3d-proton/releases/latest',
-    this.wineBuildsApiUrl = 'https://api.github.com/repos/Kron4ek/Wine-Builds/releases/tags/10.4',
+    this.wineBuildsApiUrl = 'https://api.github.com/repos/Kron4ek/Wine-Builds/releases/tags/10.15',
     this.protonGeApiUrl = 'https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases',
-    this.kronekProtonApiUrl = 'https://api.github.com/repos/Kron4ek/Wine-Builds/releases/tags/proton-10.0-1',
+    this.kronekProtonApiUrl = 'https://api.github.com/repos/Kron4ek/Wine-Builds/releases/tags/10.15',
+    this.cachyOSProtonApiUrl = 'https://api.github.com/repos/CachyOS/proton-cachyos/releases',
     this.protonExperimentalApiUrl = 'https://api.github.com/repos/ValveSoftware/Proton/releases',
     this.twitchOAuthUrl = 'https://id.twitch.tv/oauth2/token',
     this.igdbApiBaseUrl = 'https://api.igdb.com/v4',
@@ -61,6 +63,7 @@ class Settings {
         'wineBuildsApiUrl': wineBuildsApiUrl,
         'protonGeApiUrl': protonGeApiUrl,
         'kronekProtonApiUrl': kronekProtonApiUrl,
+        'cachyOSProtonApiUrl': cachyOSProtonApiUrl,
         'protonExperimentalApiUrl': protonExperimentalApiUrl,
         'twitchOAuthUrl': twitchOAuthUrl,
         'igdbApiBaseUrl': igdbApiBaseUrl,
@@ -87,14 +90,16 @@ class Settings {
             'https://api.github.com/repos/doitsujin/dxvk/releases/latest',
         vkd3dApiUrl: json['vkd3dApiUrl'] ??
             'https://api.github.com/repos/HansKristian-Work/vkd3d-proton/releases/latest',
-        wineBuildsApiUrl: json['wineBuildsApiUrl'] ??
-            'https://api.github.com/repos/Kron4ek/Wine-Builds/releases/tags/10.4',
+    wineBuildsApiUrl: json['wineBuildsApiUrl'] ??
+      'https://api.github.com/repos/Kron4ek/Wine-Builds/releases/tags/10.15',
         protonGeApiUrl: json['protonGeApiUrl'] ??
             'https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases',
-        kronekProtonApiUrl: json['kronekProtonApiUrl'] ??
-            'https://api.github.com/repos/Kron4ek/Wine-Builds/releases/tags/proton-10.0-1',
-        protonExperimentalApiUrl: json['protonExperimentalApiUrl'] ??
-            'https://api.github.com/repos/ValveSoftware/Proton/releases',
+    kronekProtonApiUrl: json['kronekProtonApiUrl'] ??
+      'https://api.github.com/repos/Kron4ek/Wine-Builds/releases/tags/10.15',
+    cachyOSProtonApiUrl: json['cachyOSProtonApiUrl'] ??
+      'https://api.github.com/repos/CachyOS/proton-cachyos/releases',
+    protonExperimentalApiUrl: json['protonExperimentalApiUrl'] ??
+      'https://api.github.com/repos/ValveSoftware/Proton/releases',
         twitchOAuthUrl: json['twitchOAuthUrl'] ??
             'https://id.twitch.tv/oauth2/token',
         igdbApiBaseUrl: json['igdbApiBaseUrl'] ?? 'https://api.igdb.com/v4',
@@ -117,6 +122,7 @@ class Settings {
     String? wineBuildsApiUrl,
     String? protonGeApiUrl,
     String? kronekProtonApiUrl,
+    String? cachyOSProtonApiUrl,
     String? protonExperimentalApiUrl,
     String? twitchOAuthUrl,
     String? igdbApiBaseUrl,
@@ -135,6 +141,7 @@ class Settings {
       wineBuildsApiUrl: wineBuildsApiUrl ?? this.wineBuildsApiUrl,
       protonGeApiUrl: protonGeApiUrl ?? this.protonGeApiUrl,
       kronekProtonApiUrl: kronekProtonApiUrl ?? this.kronekProtonApiUrl,
+      cachyOSProtonApiUrl: cachyOSProtonApiUrl ?? this.cachyOSProtonApiUrl,
       protonExperimentalApiUrl:
           protonExperimentalApiUrl ?? this.protonExperimentalApiUrl,
       twitchOAuthUrl: twitchOAuthUrl ?? this.twitchOAuthUrl,
@@ -180,12 +187,16 @@ class AppSettings {
       dxvkApiUrl: 'https://api.github.com/repos/doitsujin/dxvk/releases/latest',
       vkd3dApiUrl:
           'https://api.github.com/repos/HansKristian-Work/vkd3d-proton/releases/latest',
-      wineBuildsApiUrl:
-          'https://api.github.com/repos/Kron4ek/Wine-Builds/releases/tags/10.4',
-      protonGeApiUrl:
-          'https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases',
-      protonExperimentalApiUrl:
-          'https://api.github.com/repos/ValveSoftware/Proton/releases',
+    wineBuildsApiUrl:
+      'https://api.github.com/repos/Kron4ek/Wine-Builds/releases/tags/10.15',
+    protonGeApiUrl:
+      'https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases',
+    kronekProtonApiUrl:
+      'https://api.github.com/repos/Kron4ek/Wine-Builds/releases/tags/10.15',
+    cachyOSProtonApiUrl:
+      'https://api.github.com/repos/CachyOS/proton-cachyos/releases',
+    protonExperimentalApiUrl:
+      'https://api.github.com/repos/ValveSoftware/Proton/releases',
       twitchOAuthUrl: 'https://id.twitch.tv/oauth2/token',
       igdbApiBaseUrl: 'https://api.igdb.com/v4',
       igdbImageBaseUrl: 'https://images.igdb.com/igdb/image/upload',

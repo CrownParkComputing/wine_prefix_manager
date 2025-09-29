@@ -546,8 +546,8 @@ class UIActionService {
     final path = prefix.path;
     _logService.log('Attempting to open prefix directory: $path');
     try {
-      // Try to use xdg-open on Linux
-      final result = await Process.run('xdg-open', [path]);
+      // Use thunar file manager directly
+      final result = await Process.run('thunar', [path]);
 
       if (result.exitCode != 0) {
         _logService.log(

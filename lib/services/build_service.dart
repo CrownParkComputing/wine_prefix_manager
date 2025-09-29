@@ -235,6 +235,50 @@ class BuildService {
       // Error fetching Kronek Proton builds
     }
 
+    // --- Fetch CachyOS Proton builds ---
+    try {
+      final cachyOSResponse = await http.get(Uri.parse(settings.cachyOSProtonApiUrl));
+      if (cachyOSResponse.statusCode == 200) {
+        final List<dynamic> releases = json.decode(cachyOSResponse.body);
+        List<ProtonBuild> cachyOSBuilds = [];
+        releases
+            .whereType<Map<String, dynamic>>()
+            .where((release) => release['tag_name'] != null)
+            .take(2) // Limit to latest 2 CachyOS Proton builds
+            .forEach((release) {
+              try {
+                // Look for .tar.xz assets in CachyOS releases
+                final assets = release['assets'] as List;
+                final tarballAsset = assets.firstWhere(
+                  (asset) => asset is Map && asset['name']?.toString().endsWith('.tar.xz') == true,
+                  orElse: () => null,
+                );
+                
+                if (tarballAsset != null) {
+                  final Map<String, dynamic> tarballAssetMap = Map<String, dynamic>.from(tarballAsset);
+                  
+                  cachyOSBuilds.add(ProtonBuild(
+                    name: tarballAssetMap['name'] ?? 'Unknown CachyOS Proton Build',
+                    displayName: 'CachyOS Proton ${release['tag_name']?.toString().replaceFirst('cachyos-', '')}',
+                    downloadUrl: tarballAssetMap['browser_download_url'] ?? '',
+                    version: release['tag_name'] ?? 'unknown',
+                    type: PrefixType.proton,
+                    architecture: 'win64',
+                  ));
+                }
+              } catch (e) {
+                // Error parsing CachyOS Proton release
+              }
+            });
+        builds.addAll(cachyOSBuilds);
+        // Fetched CachyOS Proton builds.
+      } else {
+        // Failed to fetch CachyOS Proton builds
+      }
+    } catch (e) {
+       // Error fetching CachyOS Proton builds
+    }
+
     // --- Fetch Proton-GE builds ---
     try {
       final protonResponse = await http.get(Uri.parse(settings.protonGeApiUrl));
@@ -325,9 +369,10 @@ class BuildService {
     
     // Then filter Proton builds to keep only the latest two versions from each source
     if (buildsByType.containsKey(PrefixType.proton)) {
-      // Separate by source (GE vs Kronek)
+      // Separate by source (GE vs Kronek vs CachyOS)
       List<BaseBuild> geProtonBuilds = [];
       List<BaseBuild> kronekProtonBuilds = [];
+      List<BaseBuild> cachyOSProtonBuilds = [];
       List<BaseBuild> otherProtonBuilds = []; // For Steam Proton or other sources
       
       for (final build in buildsByType[PrefixType.proton]!) {
@@ -335,6 +380,8 @@ class BuildService {
           geProtonBuilds.add(build);
         } else if (build.name.contains('Kronek Proton')) {
           kronekProtonBuilds.add(build);
+        } else if (build.displayName?.contains('CachyOS Proton') == true || build.name.contains('cachyos')) {
+          cachyOSProtonBuilds.add(build);
         } else {
           otherProtonBuilds.add(build);
         }
@@ -344,6 +391,7 @@ class BuildService {
       final List<BaseBuild> filteredProtonBuilds = [
         ...geProtonBuilds.take(2),
         ...kronekProtonBuilds.take(2),
+        ...cachyOSProtonBuilds.take(2),
         ...otherProtonBuilds, // Keep all installed Steam Proton builds
       ];
       

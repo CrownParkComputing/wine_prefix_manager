@@ -518,36 +518,29 @@ class WinePrefixCreationService {
         onStatusUpdate('Error installing VKD3D-Proton.');
       }
 
-      // Install Microsoft Visual C++ 2015-2022 Redistributable (x64)
-      onStatusUpdate('Downloading and installing Microsoft Visual C++ Redistributable (x64)...');
-      _logService.log('Downloading and installing Microsoft Visual C++ Redistributable (x64)...');
-      const vcRedistUrl = 'https://aka.ms/vs/17/release/vc_redist.x64.exe';
-      final tempDirForVcRedist = await Directory.systemTemp.createTemp('vcredist_');
-      final vcRedistPath = path.join(tempDirForVcRedist.path, 'vc_redist.x64.exe');
-
+      // Install comprehensive Microsoft Visual C++ Redistributables (2015-2022 x64 and x86)
+      onStatusUpdate('Installing comprehensive Visual C++ Redistributables...');
+      _logService.log('Installing comprehensive VC++ redistributables with registry entries...');
+      
       try {
-        await _dio.download(vcRedistUrl, vcRedistPath, onReceiveProgress: (received, total) {
-          if (total > 0) {
-            final progressPercent = (received / total * 100).toStringAsFixed(1);
-            onStatusUpdate('Downloading VC++ Redist: $progressPercent%');
-          }
-        });
-        _logService.log('VC++ Redistributable downloaded to $vcRedistPath');
-
-        onStatusUpdate('Installing VC++ Redistributable (this might take a moment)...');
-        final vcInstallArgs = [vcRedistPath, '/install', '/passive', '/norestart'];
-        final vcInstallResult = await winetricksShell.runExecutableArguments(effectiveWineExecutable, vcInstallArgs);
-
-        if (vcInstallResult.exitCode == 0 || vcInstallResult.exitCode == 3010) {
-          _logService.log('VC++ Redistributable (x64) installed successfully. Exit code: ${vcInstallResult.exitCode}');
-          onStatusUpdate('VC++ Redistributable (x64) installed.');
+        final vcInstallSuccess = await _componentInstaller.installAllVcppRedistributablesComprehensive(
+          tempPrefix, 
+          settings, 
+          progressCallback: onStatusUpdate,
+          customWineExecutable: effectiveWineExecutable, 
+          customEnv: fullEnv
+        );
+        
+        if (vcInstallSuccess) {
+          _logService.log('Comprehensive VC++ redistributables installed successfully');
+          onStatusUpdate('Visual C++ Redistributables (x64 & x86) installed with registry entries.');
         } else {
-          _logService.log('VC++ Redistributable (x64) installation failed. Exit code: ${vcInstallResult.exitCode}\nStdOut: ${vcInstallResult.outText}\nStdErr: ${vcInstallResult.errText}', LogLevel.error);
-          onStatusUpdate('Error: VC++ Redistributable (x64) installation failed.');
+          _logService.log('Comprehensive VC++ redistributables installation failed', LogLevel.error);
+          onStatusUpdate('Warning: VC++ redistributables installation failed.');
         }
       } catch (e) {
-        _logService.log('Error downloading or installing VC++ Redistributable (x64): $e', LogLevel.error);
-        onStatusUpdate('Error installing VC++ Redistributable (x64).');
+        _logService.log('Error installing comprehensive VC++ redistributables: $e', LogLevel.error);
+        onStatusUpdate('Error installing VC++ redistributables.');
       }
 
       // Install other gaming-specific Winetricks dependencies

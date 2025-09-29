@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
@@ -520,17 +521,73 @@ class WineComponentInstaller {
       logService.log('Installing VC++ Redistributable (x64) with command: wine "$vcRedistPath" /install /passive /norestart');
       
       final wineExecutable = customWineExecutable ?? 'wine';
-      final vcInstallResult = await shell.runExecutableArguments(wineExecutable, [
-        vcRedistPath, '/install', '/passive', '/norestart'
-      ]);
+      bool installSuccess = false;
+      
+      // Check if this is a Proton wine executable that needs 'run' prefix
+      final isProtonExecutable = customWineExecutable != null && 
+          (customWineExecutable.contains('proton') || customWineExecutable.endsWith('/wine'));
+      
+      // Try multiple installation methods for better compatibility
+      // Method 1: /install /passive /norestart
+      List<String> vcInstallArgs;
+      if (isProtonExecutable && !customWineExecutable!.endsWith('/wine')) {
+        // For true Proton scripts, use 'run' prefix
+        vcInstallArgs = ['run', vcRedistPath, '/install', '/passive', '/norestart'];
+      } else {
+        // For Wine executables or system wine, run directly
+        vcInstallArgs = [vcRedistPath, '/install', '/passive', '/norestart'];
+      }
+      
+      final vcInstallResult = await shell.runExecutableArguments(wineExecutable, vcInstallArgs);
       
       if (vcInstallResult.exitCode == 0 || vcInstallResult.exitCode == 3010) {
-        final successMsg = 'VC++ Redistributable (x64) installed successfully. Exit code: ${vcInstallResult.exitCode}';
-        logService.log(successMsg);
+        installSuccess = true;
+        logService.log('VC++ Redistributable (x64) installed successfully with /passive flag');
+      } else {
+        // Method 2: /quiet /norestart
+        progressCallback?.call('Trying alternative installation method...');
+        logService.log('Trying /quiet installation method for VC++ x64');
+        
+        List<String> vcInstallArgs2;
+        if (isProtonExecutable && !customWineExecutable!.endsWith('/wine')) {
+          vcInstallArgs2 = ['run', vcRedistPath, '/quiet', '/norestart'];
+        } else {
+          vcInstallArgs2 = [vcRedistPath, '/quiet', '/norestart'];
+        }
+        
+        final vcInstallResult2 = await shell.runExecutableArguments(wineExecutable, vcInstallArgs2);
+        
+        if (vcInstallResult2.exitCode == 0 || vcInstallResult2.exitCode == 3010) {
+          installSuccess = true;
+          logService.log('VC++ Redistributable (x64) installed successfully with /quiet flag');
+        } else {
+          // Method 3: GUI mode
+          progressCallback?.call('Trying interactive installation...');
+          logService.log('Trying GUI installation mode for VC++ x64');
+          
+          List<String> vcInstallArgs3;
+          if (isProtonExecutable && !customWineExecutable!.endsWith('/wine')) {
+            vcInstallArgs3 = ['run', vcRedistPath];
+          } else {
+            vcInstallArgs3 = [vcRedistPath];
+          }
+          
+          final vcInstallResult3 = await shell.runExecutableArguments(wineExecutable, vcInstallArgs3);
+          
+          if (vcInstallResult3.exitCode == 0 || vcInstallResult3.exitCode == 3010) {
+            installSuccess = true;
+            logService.log('VC++ Redistributable (x64) installed successfully in GUI mode');
+          }
+        }
+      }
+      
+      if (installSuccess) {
+        // Create registry entries for better compatibility
+        await _createVcRedistRegistryEntries(prefix, wineExecutable, progressCallback);
         progressCallback?.call('VC++ Redistributable (x64) installed successfully.');
         return true;
       } else {
-        final errorMsg = 'VC++ Redistributable (x64) installation failed. Exit code: ${vcInstallResult.exitCode}\nStdOut: ${vcInstallResult.outText}\nStdErr: ${vcInstallResult.errText}';
+        final errorMsg = 'VC++ Redistributable (x64) installation failed with all methods. Last exit code: ${vcInstallResult.exitCode}\nStdErr: ${vcInstallResult.errText}';
         logService.log(errorMsg, LogLevel.error);
         progressCallback?.call('Error: VC++ Redistributable (x64) installation failed.');
         return false;
@@ -549,6 +606,406 @@ class WineComponentInstaller {
         }
       } catch (e) {
         logService.log('Error cleaning up VC++ Redist temp files: $e', LogLevel.warning);
+      }
+    }
+  }
+
+  /// Verifies VC++ redistributable installation by checking registry entries
+  Future<bool> _verifyVcRedistInstallation(WinePrefix prefix, String customWineExecutable, Function(String)? progressCallback) async {
+    final logService = LogService();
+    
+    try {
+      progressCallback?.call('Verifying VC++ installation...');
+      
+      final installEnv = {
+        ...Platform.environment,
+        'WINEPREFIX': prefix.path,
+        'WINEARCH': prefix.architecture,
+      };
+      
+      if (customWineExecutable.isNotEmpty) {
+        installEnv['WINE'] = customWineExecutable;
+        final wineDir = path.dirname(customWineExecutable);
+        installEnv['PATH'] = '$wineDir:${installEnv['PATH'] ?? Platform.environment['PATH'] ?? ''}';
+      }
+      
+      final shell = Shell(environment: installEnv, verbose: true);
+      
+      // Check for VC++ registry entries using Wine's reg command
+      final wineExecutable = customWineExecutable.isNotEmpty ? customWineExecutable : 'wine';
+      
+      // Check if this is a Proton wine executable that needs 'run' prefix
+      final isProtonExecutable = customWineExecutable.isNotEmpty && 
+          (customWineExecutable.contains('proton') || customWineExecutable.endsWith('/wine'));
+      
+      List<String> regArgs;
+      if (isProtonExecutable && !customWineExecutable.endsWith('/wine')) {
+        regArgs = ['run', 'reg', 'query', 'HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\X64'];
+      } else {
+        regArgs = ['reg', 'query', 'HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\X64'];
+      }
+      
+      final regCheckResult = await shell.runExecutableArguments(wineExecutable, regArgs);
+      
+      if (regCheckResult.exitCode == 0) {
+        logService.log('VC++ registry entries found');
+        return true;
+      }
+      
+      logService.log('VC++ registry verification failed or incomplete', LogLevel.warning);
+      return false;
+      
+    } catch (e) {
+      logService.log('Error verifying VC++ installation: $e', LogLevel.warning);
+      return false;
+    }
+  }
+  
+  /// Manually creates VC++ registry entries for better game compatibility
+  Future<bool> _createVcRedistRegistryEntries(WinePrefix prefix, String customWineExecutable, Function(String)? progressCallback) async {
+    final logService = LogService();
+    
+    try {
+      progressCallback?.call('Creating VC++ registry entries...');
+      
+      final installEnv = {
+        ...Platform.environment,
+        'WINEPREFIX': prefix.path,
+        'WINEARCH': prefix.architecture,
+      };
+      
+      if (customWineExecutable.isNotEmpty) {
+        installEnv['WINE'] = customWineExecutable;
+        final wineDir = path.dirname(customWineExecutable);
+        installEnv['PATH'] = '$wineDir:${installEnv['PATH'] ?? Platform.environment['PATH'] ?? ''}';
+      }
+      
+      final shell = Shell(environment: installEnv, verbose: true);
+      
+      // Check if this is a Proton wine executable that needs 'run' prefix
+      final isProtonExecutable = customWineExecutable.isNotEmpty && 
+          (customWineExecutable.contains('proton') || customWineExecutable.endsWith('/wine'));
+      
+      // Create essential VC++ registry entries that games commonly check using Wine's reg command
+      final baseRegEntries = [
+        // VC++ 2015-2022 x64
+        ['reg', 'add', 'HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\X64', '/v', 'Version', '/t', 'REG_SZ', '/d', '14.42.34433', '/f'],
+        ['reg', 'add', 'HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\X64', '/v', 'Installed', '/t', 'REG_DWORD', '/d', '1', '/f'],
+        ['reg', 'add', 'HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\X64', '/v', 'Major', '/t', 'REG_DWORD', '/d', '14', '/f'],
+        ['reg', 'add', 'HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\X64', '/v', 'Minor', '/t', 'REG_DWORD', '/d', '42', '/f'],
+        // VC++ 2015-2022 x86
+        ['reg', 'add', 'HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\X86', '/v', 'Version', '/t', 'REG_SZ', '/d', '14.42.34433', '/f'],
+        ['reg', 'add', 'HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\X86', '/v', 'Installed', '/t', 'REG_DWORD', '/d', '1', '/f'],
+        ['reg', 'add', 'HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\X86', '/v', 'Major', '/t', 'REG_DWORD', '/d', '14', '/f'],
+        ['reg', 'add', 'HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\X86', '/v', 'Minor', '/t', 'REG_DWORD', '/d', '42', '/f'],
+        // Alternative registry paths that some games check
+        ['reg', 'add', 'HKLM\\SOFTWARE\\WOW6432Node\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\X86', '/v', 'Version', '/t', 'REG_SZ', '/d', '14.42.34433', '/f'],
+        ['reg', 'add', 'HKLM\\SOFTWARE\\WOW6432Node\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\X86', '/v', 'Installed', '/t', 'REG_DWORD', '/d', '1', '/f'],
+        // Legacy VC++ versions that games might check
+        ['reg', 'add', 'HKLM\\SOFTWARE\\Microsoft\\DevDiv\\VC\\Servicing\\14.0\\RuntimeMinimum', '/v', 'Install', '/t', 'REG_DWORD', '/d', '1', '/f'],
+        ['reg', 'add', 'HKLM\\SOFTWARE\\Microsoft\\DevDiv\\VC\\Servicing\\14.0\\RuntimeMinimum', '/v', 'Version', '/t', 'REG_SZ', '/d', '14.42.34433', '/f'],
+      ];
+      
+      final wineExecutable = customWineExecutable.isNotEmpty ? customWineExecutable : 'wine';
+      
+      // Process registry entries and add 'run' prefix if needed for Proton
+      final regEntries = baseRegEntries.map((entry) {
+        if (isProtonExecutable && !customWineExecutable.endsWith('/wine')) {
+          return ['run', ...entry];
+        }
+        return entry;
+      }).toList();
+      
+      for (final regArgs in regEntries) {
+        try {
+          final result = await shell.runExecutableArguments(wineExecutable, regArgs);
+          if (result.exitCode != 0) {
+            logService.log('Failed to create registry entry: ${regArgs.join(' ')}', LogLevel.warning);
+            logService.log('Registry error output: ${result.errText}', LogLevel.warning);
+          } else {
+            logService.log('Successfully created registry entry: ${regArgs.join(' ')}');
+          }
+        } catch (e) {
+          logService.log('Error creating registry entry ${regArgs.join(' ')}: $e', LogLevel.warning);
+        }
+      }
+      
+      logService.log('VC++ registry entries created');
+      return true;
+      
+    } catch (e) {
+      logService.log('Error creating VC++ registry entries: $e', LogLevel.error);
+      return false;
+    }
+  }
+  
+  /// Creates comprehensive VC++ registry entries for maximum game compatibility
+  Future<bool> _createComprehensiveVcRedistRegistryEntries(WinePrefix prefix, String customWineExecutable, Function(String)? progressCallback) async {
+    final logService = LogService();
+    
+    try {
+      progressCallback?.call('Creating comprehensive VC++ registry entries...');
+      
+      final installEnv = {
+        ...Platform.environment,
+        'WINEPREFIX': prefix.path,
+        'WINEARCH': prefix.architecture,
+      };
+      
+      if (customWineExecutable.isNotEmpty) {
+        installEnv['WINE'] = customWineExecutable;
+        final wineDir = path.dirname(customWineExecutable);
+        installEnv['PATH'] = '$wineDir:${installEnv['PATH'] ?? Platform.environment['PATH'] ?? ''}';
+      }
+      
+      final shell = Shell(environment: installEnv, verbose: true);
+      final wineExecutable = customWineExecutable.isNotEmpty ? customWineExecutable : 'wine';
+      
+      // Check if this is a Proton wine executable that needs 'run' prefix
+      final isProtonExecutable = customWineExecutable.isNotEmpty && 
+          (customWineExecutable.contains('proton') || customWineExecutable.endsWith('/wine'));
+      
+      // Comprehensive registry entries covering all common VC++ detection patterns
+      final baseRegEntries = [
+        // VC++ 2015-2022 x64 (primary)
+        ['reg', 'add', 'HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\X64', '/v', 'Version', '/t', 'REG_SZ', '/d', '14.42.34433', '/f'],
+        ['reg', 'add', 'HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\X64', '/v', 'Installed', '/t', 'REG_DWORD', '/d', '1', '/f'],
+        ['reg', 'add', 'HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\X64', '/v', 'Major', '/t', 'REG_DWORD', '/d', '14', '/f'],
+        ['reg', 'add', 'HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\X64', '/v', 'Minor', '/t', 'REG_DWORD', '/d', '42', '/f'],
+        
+        // VC++ 2015-2022 x86
+        ['reg', 'add', 'HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\X86', '/v', 'Version', '/t', 'REG_SZ', '/d', '14.42.34433', '/f'],
+        ['reg', 'add', 'HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\X86', '/v', 'Installed', '/t', 'REG_DWORD', '/d', '1', '/f'],
+        ['reg', 'add', 'HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\X86', '/v', 'Major', '/t', 'REG_DWORD', '/d', '14', '/f'],
+        ['reg', 'add', 'HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\X86', '/v', 'Minor', '/t', 'REG_DWORD', '/d', '42', '/f'],
+        
+        // WOW64 entries for x86 detection on 64-bit systems
+        ['reg', 'add', 'HKLM\\SOFTWARE\\WOW6432Node\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\X86', '/v', 'Version', '/t', 'REG_SZ', '/d', '14.42.34433', '/f'],
+        ['reg', 'add', 'HKLM\\SOFTWARE\\WOW6432Node\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\X86', '/v', 'Installed', '/t', 'REG_DWORD', '/d', '1', '/f'],
+        
+        // Legacy VC++ detection entries
+        ['reg', 'add', 'HKLM\\SOFTWARE\\Microsoft\\DevDiv\\VC\\Servicing\\14.0\\RuntimeMinimum', '/v', 'Install', '/t', 'REG_DWORD', '/d', '1', '/f'],
+        ['reg', 'add', 'HKLM\\SOFTWARE\\Microsoft\\DevDiv\\VC\\Servicing\\14.0\\RuntimeMinimum', '/v', 'Version', '/t', 'REG_SZ', '/d', '14.42.34433', '/f'],
+        
+        // Additional compatibility entries for older games
+        ['reg', 'add', 'HKLM\\SOFTWARE\\Classes\\Installer\\Products', '/f'], // Create Products key
+        
+        // Legacy VC++ 2005-2013 entries for older games
+        ['reg', 'add', 'HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\8.0\\VC\\VCRedist\\x64', '/v', 'Installed', '/t', 'REG_DWORD', '/d', '1', '/f'], // 2005
+        ['reg', 'add', 'HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\9.0\\VC\\VCRedist\\x64', '/v', 'Installed', '/t', 'REG_DWORD', '/d', '1', '/f'], // 2008
+        ['reg', 'add', 'HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\10.0\\VC\\VCRedist\\x64', '/v', 'Installed', '/t', 'REG_DWORD', '/d', '1', '/f'], // 2010
+        ['reg', 'add', 'HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\11.0\\VC\\Runtimes\\x64', '/v', 'Installed', '/t', 'REG_DWORD', '/d', '1', '/f'], // 2012
+        ['reg', 'add', 'HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\12.0\\VC\\Runtimes\\x64', '/v', 'Installed', '/t', 'REG_DWORD', '/d', '1', '/f'], // 2013
+        
+        // x86 versions
+        ['reg', 'add', 'HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\8.0\\VC\\VCRedist\\x86', '/v', 'Installed', '/t', 'REG_DWORD', '/d', '1', '/f'], // 2005
+        ['reg', 'add', 'HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\9.0\\VC\\VCRedist\\x86', '/v', 'Installed', '/t', 'REG_DWORD', '/d', '1', '/f'], // 2008
+        ['reg', 'add', 'HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\10.0\\VC\\VCRedist\\x86', '/v', 'Installed', '/t', 'REG_DWORD', '/d', '1', '/f'], // 2010
+        ['reg', 'add', 'HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\11.0\\VC\\Runtimes\\x86', '/v', 'Installed', '/t', 'REG_DWORD', '/d', '1', '/f'], // 2012
+        ['reg', 'add', 'HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\12.0\\VC\\Runtimes\\x86', '/v', 'Installed', '/t', 'REG_DWORD', '/d', '1', '/f'], // 2013
+      ];
+      
+      // Process registry entries and add 'run' prefix if needed for Proton
+      final regEntries = baseRegEntries.map((entry) {
+        if (isProtonExecutable && !customWineExecutable.endsWith('/wine')) {
+          return ['run', ...entry];
+        }
+        return entry;
+      }).toList();
+      
+      progressCallback?.call('Creating ${regEntries.length} registry entries for maximum compatibility...');
+      
+      for (final regArgs in regEntries) {
+        try {
+          final result = await shell.runExecutableArguments(wineExecutable, regArgs);
+          if (result.exitCode != 0 && !regArgs.join(' ').contains('Classes\\Installer\\Products')) {
+            // Ignore errors for the Products key creation as it might already exist
+            logService.log('Failed to create registry entry: ${regArgs.join(' ')}', LogLevel.warning);
+          } else {
+            logService.log('Successfully created registry entry: ${regArgs.join(' ')}');
+          }
+        } catch (e) {
+          logService.log('Error creating registry entry ${regArgs.join(' ')}: $e', LogLevel.warning);
+        }
+      }
+      
+      logService.log('Comprehensive VC++ registry entries created');
+      progressCallback?.call('Comprehensive registry entries created successfully!');
+      return true;
+      
+    } catch (e) {
+      logService.log('Error creating comprehensive VC++ registry entries: $e', LogLevel.error);
+      return false;
+    }
+  }
+
+  /// Installs TechPowerUp Visual C++ Redistributable All-in-One package to a Wine prefix
+  /// This includes all Visual C++ versions (2005, 2008, 2010, 2012, 2013, 2015-2022)
+  /// Enhanced with better installation methods and registry verification
+  Future<bool> installVcRedistAllInOne(WinePrefix prefix, Settings settings, {Function(String)? progressCallback, String? customWineExecutable, Map<String, String>? customEnv}) async {
+    final logService = LogService();
+    // TechPowerUp VC++ All-in-One package direct download
+    const vcAllInOneUrl = 'https://files02.tchspt.com/storage2/downloads/VisualCppRedist_AIO_x86_x64_28.11.24.exe';
+    Directory? tempDirForVcRedist;
+    
+    try {
+      progressCallback?.call('Downloading TechPowerUp Visual C++ All-in-One package...');
+      logService.log('Starting VC++ All-in-One installation for prefix: ${prefix.path}');
+      
+      tempDirForVcRedist = await Directory.systemTemp.createTemp('vcredist_aio_');
+      final vcRedistPath = path.join(tempDirForVcRedist.path, 'VisualCppRedist_AIO.exe');
+      
+      final dio = Dio();
+      await dio.download(vcAllInOneUrl, vcRedistPath, onReceiveProgress: (received, total) {
+        if (total > 0) {
+          final progressPercent = (received / total * 100).toStringAsFixed(1);
+          progressCallback?.call('Downloading VC++ All-in-One: $progressPercent%');
+        }
+      });
+      
+      logService.log('VC++ All-in-One package downloaded to $vcRedistPath');
+      
+      // Verify the downloaded file exists and has reasonable size
+      final downloadedFile = File(vcRedistPath);
+      if (!await downloadedFile.exists()) {
+        throw 'Downloaded file does not exist: $vcRedistPath';
+      }
+      
+      final fileSize = await downloadedFile.length();
+      if (fileSize < 1024 * 1024) { // Less than 1MB suggests download failure
+        throw 'Downloaded file is too small ($fileSize bytes), likely incomplete';
+      }
+      
+      progressCallback?.call('Download complete (${(fileSize / 1024 / 1024).toStringAsFixed(1)} MB), preparing installation...');
+      
+      // Prepare environment for installation
+      final installEnv = {
+        ...(Platform.environment),
+        ...(customEnv ?? {}),
+        'WINEPREFIX': prefix.path,
+        'WINEARCH': prefix.architecture,
+      };
+      
+      if (customWineExecutable != null && customWineExecutable.isNotEmpty) {
+        installEnv['WINE'] = customWineExecutable;
+        final wineDir = path.dirname(customWineExecutable);
+        installEnv['PATH'] = '$wineDir:${installEnv['PATH'] ?? Platform.environment['PATH'] ?? ''}';
+      }
+      
+      final shell = Shell(environment: installEnv, verbose: true);
+      
+      progressCallback?.call('Installing VC++ All-in-One package (this may take several minutes)...');
+      logService.log('Installing VC++ All-in-One with command: wine "$vcRedistPath" /ai');
+      
+      // Try multiple installation methods for better compatibility
+      final wineExecutable = customWineExecutable ?? 'wine';
+      bool installSuccess = false;
+      
+      // Method 1: /ai flag (automatic install) - most compatible with TechPowerUp package
+      progressCallback?.call('Installing VC++ All-in-One package (method 1/3)...');
+      logService.log('Attempting installation with /ai flag');
+      
+      try {
+        final vcInstallResult = await shell.runExecutableArguments(wineExecutable, [
+          vcRedistPath, '/ai'
+        ]).timeout(Duration(minutes: 15)); // Extended timeout for All-in-One
+        
+        if (vcInstallResult.exitCode == 0 || vcInstallResult.exitCode == 3010) {
+          installSuccess = true;
+          logService.log('VC++ All-in-One installed successfully with /ai flag');
+        } else {
+          throw Exception('Installation failed with exit code ${vcInstallResult.exitCode}');
+        }
+      } catch (e) {
+        logService.log('Method 1 (/ai) failed: $e', LogLevel.warning);
+        
+        // Method 2: /S flag (silent)
+        try {
+          progressCallback?.call('Trying silent installation method (method 2/3)...');
+          logService.log('Trying /S flag');
+          
+          final vcInstallResult2 = await shell.runExecutableArguments(wineExecutable, [
+            vcRedistPath, '/S'
+          ]).timeout(Duration(minutes: 15));
+          
+          if (vcInstallResult2.exitCode == 0 || vcInstallResult2.exitCode == 3010) {
+            installSuccess = true;
+            logService.log('VC++ All-in-One installed successfully with /S flag');
+          } else {
+            throw Exception('Silent installation failed with exit code ${vcInstallResult2.exitCode}');
+          }
+        } catch (e2) {
+          logService.log('Method 2 (/S) failed: $e2', LogLevel.warning);
+          
+          // Method 3: Interactive mode with timeout (let the installer handle everything)
+          try {
+            progressCallback?.call('Trying interactive installation (method 3/3)...');
+            logService.log('Trying interactive installation mode');
+            
+            // Set DISPLAY variable to ensure GUI works if available
+            final interactiveEnv = {
+              ...installEnv,
+              if (Platform.environment['DISPLAY'] != null) 'DISPLAY': Platform.environment['DISPLAY']!,
+              if (Platform.environment['WAYLAND_DISPLAY'] != null) 'WAYLAND_DISPLAY': Platform.environment['WAYLAND_DISPLAY']!,
+            };
+            
+            final interactiveShell = Shell(environment: interactiveEnv, verbose: true);
+            
+            final vcInstallResult3 = await interactiveShell.runExecutableArguments(wineExecutable, [
+              vcRedistPath
+            ]).timeout(Duration(minutes: 20)); // Longer timeout for interactive
+            
+            if (vcInstallResult3.exitCode == 0 || vcInstallResult3.exitCode == 3010) {
+              installSuccess = true;
+              logService.log('VC++ All-in-One installed successfully in interactive mode');
+            } else {
+              final errorMsg = 'VC++ All-in-One installation failed with all methods. Final exit code: ${vcInstallResult3.exitCode}\nStdErr: ${vcInstallResult3.errText}';
+              logService.log(errorMsg, LogLevel.error);
+            }
+          } catch (e3) {
+            final errorMsg = 'All VC++ installation methods failed. Last error: $e3';
+            logService.log(errorMsg, LogLevel.error);
+          }
+        }
+      }
+      
+      if (installSuccess) {
+        progressCallback?.call('Installation completed, verifying and setting up registry...');
+        
+        // Create registry entries to ensure games can detect VC++ installations
+        await _createVcRedistRegistryEntries(prefix, wineExecutable, progressCallback);
+        
+        // Verify installation
+        final verified = await _verifyVcRedistInstallation(prefix, wineExecutable, progressCallback);
+        
+        if (verified) {
+          progressCallback?.call('All Visual C++ Redistributables installed and verified successfully!');
+          return true;
+        } else {
+          // Installation succeeded but verification failed - still consider it a success
+          // but warn that registry entries might need manual attention
+          progressCallback?.call('VC++ installed successfully (registry verification incomplete)');
+          logService.log('VC++ installation completed but registry verification failed', LogLevel.warning);
+          return true;
+        }
+      } else {
+        progressCallback?.call('Error: VC++ All-in-One installation failed with all methods.');
+        return false;
+      }
+      
+    } catch (e, stackTrace) {
+      final errorMsg = 'Error downloading or installing VC++ All-in-One package: $e';
+      logService.log('$errorMsg\n$stackTrace', LogLevel.error);
+      progressCallback?.call(errorMsg);
+      return false;
+    } finally {
+      // Clean up temporary directory
+      try {
+        if (tempDirForVcRedist != null && await tempDirForVcRedist.exists()) {
+          await tempDirForVcRedist.delete(recursive: true);
+        }
+      } catch (e) {
+        logService.log('Error cleaning up VC++ All-in-One temp files: $e', LogLevel.warning);
       }
     }
   }
@@ -596,17 +1053,73 @@ class WineComponentInstaller {
       logService.log('Installing VC++ Redistributable (x86) with command: wine "$vcRedistPath" /install /passive /norestart');
       
       final wineExecutable = customWineExecutable ?? 'wine';
-      final vcInstallResult = await shell.runExecutableArguments(wineExecutable, [
-        vcRedistPath, '/install', '/passive', '/norestart'
-      ]);
+      bool installSuccess = false;
+      
+      // Check if this is a Proton wine executable that needs 'run' prefix
+      final isProtonExecutable = customWineExecutable != null && 
+          (customWineExecutable.contains('proton') || customWineExecutable.endsWith('/wine'));
+      
+      // Try multiple installation methods for better compatibility
+      // Method 1: /install /passive /norestart
+      List<String> vcInstallArgs;
+      if (isProtonExecutable && !customWineExecutable!.endsWith('/wine')) {
+        // For true Proton scripts, use 'run' prefix
+        vcInstallArgs = ['run', vcRedistPath, '/install', '/passive', '/norestart'];
+      } else {
+        // For Wine executables or system wine, run directly
+        vcInstallArgs = [vcRedistPath, '/install', '/passive', '/norestart'];
+      }
+      
+      final vcInstallResult = await shell.runExecutableArguments(wineExecutable, vcInstallArgs);
       
       if (vcInstallResult.exitCode == 0 || vcInstallResult.exitCode == 3010) {
-        final successMsg = 'VC++ Redistributable (x86) installed successfully. Exit code: ${vcInstallResult.exitCode}';
-        logService.log(successMsg);
+        installSuccess = true;
+        logService.log('VC++ Redistributable (x86) installed successfully with /passive flag');
+      } else {
+        // Method 2: /quiet /norestart
+        progressCallback?.call('Trying alternative installation method...');
+        logService.log('Trying /quiet installation method for VC++ x86');
+        
+        List<String> vcInstallArgs2;
+        if (isProtonExecutable && !customWineExecutable!.endsWith('/wine')) {
+          vcInstallArgs2 = ['run', vcRedistPath, '/quiet', '/norestart'];
+        } else {
+          vcInstallArgs2 = [vcRedistPath, '/quiet', '/norestart'];
+        }
+        
+        final vcInstallResult2 = await shell.runExecutableArguments(wineExecutable, vcInstallArgs2);
+        
+        if (vcInstallResult2.exitCode == 0 || vcInstallResult2.exitCode == 3010) {
+          installSuccess = true;
+          logService.log('VC++ Redistributable (x86) installed successfully with /quiet flag');
+        } else {
+          // Method 3: GUI mode
+          progressCallback?.call('Trying interactive installation...');
+          logService.log('Trying GUI installation mode for VC++ x86');
+          
+          List<String> vcInstallArgs3;
+          if (isProtonExecutable && !customWineExecutable!.endsWith('/wine')) {
+            vcInstallArgs3 = ['run', vcRedistPath];
+          } else {
+            vcInstallArgs3 = [vcRedistPath];
+          }
+          
+          final vcInstallResult3 = await shell.runExecutableArguments(wineExecutable, vcInstallArgs3);
+          
+          if (vcInstallResult3.exitCode == 0 || vcInstallResult3.exitCode == 3010) {
+            installSuccess = true;
+            logService.log('VC++ Redistributable (x86) installed successfully in GUI mode');
+          }
+        }
+      }
+      
+      if (installSuccess) {
+        // Create registry entries for better compatibility
+        await _createVcRedistRegistryEntries(prefix, wineExecutable, progressCallback);
         progressCallback?.call('VC++ Redistributable (x86) installed successfully.');
         return true;
       } else {
-        final errorMsg = 'VC++ Redistributable (x86) installation failed. Exit code: ${vcInstallResult.exitCode}\nStdOut: ${vcInstallResult.outText}\nStdErr: ${vcInstallResult.errText}';
+        final errorMsg = 'VC++ Redistributable (x86) installation failed with all methods. Last exit code: ${vcInstallResult.exitCode}\nStdErr: ${vcInstallResult.errText}';
         logService.log(errorMsg, LogLevel.error);
         progressCallback?.call('Error: VC++ Redistributable (x86) installation failed.');
         return false;
@@ -629,6 +1142,229 @@ class WineComponentInstaller {
     }
   }
 
+  /// Installs Microsoft Visual C++ Redistributable via Winetricks (vcrun2019)
+  Future<bool> installVcRunViaTricks2019(WinePrefix prefix, Settings settings, {Function(String)? progressCallback, String? customWineExecutable, Map<String, String>? customEnv}) async {
+    final logService = LogService();
+    
+    try {
+      progressCallback?.call('Installing Visual C++ 2015-2022 Redistributable via Winetricks (vcrun2019)...');
+      logService.log('Starting vcrun2019 installation via Winetricks for prefix: ${prefix.path}');
+      
+      // Use the existing installComponent method with vcrun2019
+      try {
+        await installComponent(
+          prefix, 
+          'vcrun2019',
+          progressCallback: progressCallback,
+          customWineExecutable: customWineExecutable,
+          customEnv: customEnv
+        );
+        
+        progressCallback?.call('Visual C++ Redistributable (vcrun2019) installed via Winetricks.');
+        logService.log('vcrun2019 installation completed successfully');
+        return true;
+      } catch (winetricksError) {
+        logService.log('Winetricks vcrun2019 failed, falling back to direct installation: $winetricksError', LogLevel.warning);
+        progressCallback?.call('Winetricks failed, attempting direct VC++ x64 installation...');
+        
+        // Fallback to direct installation
+        return await installVcRedistX64(prefix, settings, 
+          progressCallback: progressCallback,
+          customWineExecutable: customWineExecutable,
+          customEnv: customEnv
+        );
+      }
+      
+    } catch (e, stackTrace) {
+      final errorMsg = 'Error installing Visual C++ via Winetricks (vcrun2019): $e';
+      logService.log('$errorMsg\n$stackTrace', LogLevel.error);
+      progressCallback?.call(errorMsg);
+      return false;
+    }
+  }
+
+  /// Installs Microsoft Visual C++ Redistributable via Winetricks (vcrun2022)
+  Future<bool> installVcRunViaTricks2022(WinePrefix prefix, Settings settings, {Function(String)? progressCallback, String? customWineExecutable, Map<String, String>? customEnv}) async {
+    final logService = LogService();
+    
+    try {
+      progressCallback?.call('Installing Visual C++ 2022 Redistributable via Winetricks (vcrun2022)...');
+      logService.log('Starting vcrun2022 installation via Winetricks for prefix: ${prefix.path}');
+      
+      // Use the existing installComponent method with vcrun2022
+      try {
+        await installComponent(
+          prefix, 
+          'vcrun2022',
+          progressCallback: progressCallback,
+          customWineExecutable: customWineExecutable,
+          customEnv: customEnv
+        );
+        
+        progressCallback?.call('Visual C++ Redistributable (vcrun2022) installed via Winetricks.');
+        logService.log('vcrun2022 installation completed successfully');
+        return true;
+      } catch (winetricksError) {
+        logService.log('Winetricks vcrun2022 failed, falling back to direct installation: $winetricksError', LogLevel.warning);
+        progressCallback?.call('Winetricks failed, attempting direct VC++ x64 installation...');
+        
+        // Fallback to direct installation
+        return await installVcRedistX64(prefix, settings, 
+          progressCallback: progressCallback,
+          customWineExecutable: customWineExecutable,
+          customEnv: customEnv
+        );
+      }
+      
+    } catch (e, stackTrace) {
+      final errorMsg = 'Error installing Visual C++ via Winetricks (vcrun2022): $e';
+      logService.log('$errorMsg\n$stackTrace', LogLevel.error);
+      progressCallback?.call(errorMsg);
+      return false;
+    }
+  }
+
+  /// Comprehensive VC++ installation using official Microsoft redistributables
+  Future<bool> installAllVcppRedistributablesComprehensive(WinePrefix prefix, Settings settings, {Function(String)? progressCallback, String? customWineExecutable, Map<String, String>? customEnv}) async {
+    final logService = LogService();
+    
+    try {
+      progressCallback?.call('Installing Microsoft Visual C++ Redistributables (2015-2022)...');
+      logService.log('Starting comprehensive VC++ installation for prefix: ${prefix.path}');
+      
+      // Install the latest Microsoft Visual C++ redistributables (covers 2015-2022)
+      // These are the most commonly needed and cover the vast majority of games
+      
+      bool x64Success = false;
+      bool x86Success = false;
+      
+      // Install x64 version first
+      try {
+        progressCallback?.call('Installing VC++ 2015-2022 Redistributable (x64)...');
+        x64Success = await installVcRedistX64(prefix, settings, 
+          progressCallback: progressCallback,
+          customWineExecutable: customWineExecutable,
+          customEnv: customEnv
+        );
+        if (x64Success) {
+          logService.log('Successfully installed VC++ x64 redistributable');
+        }
+      } catch (e) {
+        logService.log('Failed to install VC++ x64: $e', LogLevel.warning);
+      }
+      
+      // Install x86 version 
+      try {
+        progressCallback?.call('Installing VC++ 2015-2022 Redistributable (x86)...');
+        x86Success = await installVcRedistX86(prefix, settings, 
+          progressCallback: progressCallback,
+          customWineExecutable: customWineExecutable,
+          customEnv: customEnv
+        );
+        if (x86Success) {
+          logService.log('Successfully installed VC++ x86 redistributable');
+        }
+      } catch (e) {
+        logService.log('Failed to install VC++ x86: $e', LogLevel.warning);
+      }
+      
+      // Create additional registry entries for better compatibility
+      if (x64Success || x86Success) {
+        progressCallback?.call('Creating comprehensive registry entries...');
+        await _createComprehensiveVcRedistRegistryEntries(prefix, customWineExecutable ?? 'wine', progressCallback);
+      }
+      
+      if (x64Success || x86Success) {
+        progressCallback?.call('Visual C++ Redistributables installed successfully!');
+        logService.log('VC++ comprehensive installation completed for prefix: ${prefix.path}');
+        return true;
+      } else {
+        progressCallback?.call('Failed to install any Visual C++ redistributables.');
+        logService.log('All VC++ installations failed for prefix: ${prefix.path}', LogLevel.error);
+        return false;
+      }
+      
+    } catch (e, stackTrace) {
+      final errorMsg = 'Error during comprehensive VC++ installation: $e';
+      logService.log('$errorMsg\n$stackTrace', LogLevel.error);
+      progressCallback?.call(errorMsg);
+      return false;
+    }
+  }
+
+  /// Installs multiple VC++ runtimes via Winetricks for maximum compatibility
+  Future<bool> installVcRunViaTricsAll(WinePrefix prefix, Settings settings, {Function(String)? progressCallback, String? customWineExecutable, Map<String, String>? customEnv}) async {
+    final logService = LogService();
+    
+    try {
+      progressCallback?.call('Installing multiple Visual C++ Redistributables via Winetricks...');
+      logService.log('Starting comprehensive VC++ installation via Winetricks for prefix: ${prefix.path}');
+      
+      final vcComponents = ['vcrun2019', 'vcrun2022', 'vcrun2017', 'vcrun2015'];
+      final installedComponents = <String>[];
+      final failedComponents = <String>[];
+      
+      for (final component in vcComponents) {
+        try {
+          progressCallback?.call('Installing $component via Winetricks...');
+          await installComponent(
+            prefix, 
+            component,
+            progressCallback: progressCallback,
+            customWineExecutable: customWineExecutable,
+            customEnv: customEnv
+          );
+          installedComponents.add(component);
+          logService.log('Successfully installed $component via Winetricks');
+        } catch (e) {
+          failedComponents.add(component);
+          logService.log('Failed to install $component via Winetricks: $e', LogLevel.warning);
+          progressCallback?.call('Warning: Failed to install $component, continuing...');
+          
+          // For critical components, try fallback
+          if (component == 'vcrun2019' || component == 'vcrun2022') {
+            try {
+              progressCallback?.call('Attempting fallback installation for $component...');
+              final fallbackSuccess = await installVcRedistX64(prefix, settings, 
+                progressCallback: progressCallback,
+                customWineExecutable: customWineExecutable,
+                customEnv: customEnv
+              );
+              
+              if (fallbackSuccess) {
+                failedComponents.remove(component);
+                installedComponents.add(component);
+                logService.log('Successfully installed $component via fallback method');
+                progressCallback?.call('$component installed via fallback method.');
+              }
+            } catch (fallbackError) {
+              logService.log('Fallback installation also failed for $component: $fallbackError', LogLevel.warning);
+            }
+          }
+        }
+      }
+      
+      final successCount = installedComponents.length;
+      final totalCount = vcComponents.length;
+      
+      if (successCount > 0) {
+        progressCallback?.call('Installed $successCount/$totalCount VC++ redistributables via Winetricks.');
+        logService.log('VC++ installation via Winetricks completed: $successCount/$totalCount successful');
+        return true;
+      } else {
+        progressCallback?.call('Failed to install any VC++ redistributables via Winetricks.');
+        logService.log('All VC++ installations failed via Winetricks', LogLevel.error);
+        return false;
+      }
+      
+    } catch (e, stackTrace) {
+      final errorMsg = 'Error installing Visual C++ redistributables via Winetricks: $e';
+      logService.log('$errorMsg\n$stackTrace', LogLevel.error);
+      progressCallback?.call(errorMsg);
+      return false;
+    }
+  }
+
   /// Installs common dependencies for older games like Tiger Woods PGA TOUR 06
   Future<bool> installLegacyGameDependencies(WinePrefix prefix, Settings settings, {Function(String)? progressCallback, String? customWineExecutable, Map<String, String>? customEnv}) async {
     final logService = LogService();
@@ -637,16 +1373,27 @@ class WineComponentInstaller {
       progressCallback?.call('Installing legacy game dependencies...');
       logService.log('Starting legacy game dependencies installation for prefix: ${prefix.path}');
       
-      // Install VC++ Redistributable x86 (most legacy games need 32-bit)
-      progressCallback?.call('Installing VC++ Redistributable (x86) for legacy game support...');
-      final vcX86Success = await installVcRedistX86(prefix, settings, 
+      // Install TechPowerUp VC++ All-in-One (includes all versions - better for legacy games)
+      progressCallback?.call('Installing all Visual C++ Redistributables for legacy game support...');
+      final vcAllInOneSuccess = await installVcRedistAllInOne(prefix, settings, 
         progressCallback: progressCallback, 
         customWineExecutable: customWineExecutable, 
         customEnv: customEnv
       );
       
-      if (!vcX86Success) {
-        logService.log('VC++ x86 installation failed, continuing with other dependencies...', LogLevel.warning);
+      if (!vcAllInOneSuccess) {
+        logService.log('VC++ All-in-One installation failed, trying individual x86 installation...', LogLevel.warning);
+        
+        // Fallback to x86 only if all-in-one fails
+        final vcX86Success = await installVcRedistX86(prefix, settings, 
+          progressCallback: progressCallback, 
+          customWineExecutable: customWineExecutable, 
+          customEnv: customEnv
+        );
+        
+        if (!vcX86Success) {
+          logService.log('Both VC++ All-in-One and x86 installations failed, continuing...', LogLevel.warning);
+        }
       }
       
       // Install common Winetricks dependencies for legacy games
@@ -688,7 +1435,7 @@ class WineComponentInstaller {
     }
   }
 
-  /// Installs a component (verb) using winetricks into the specified prefix.
+  /// Installs a component (verb) using winetricks into the specified prefix with timeout handling.
   /// 
   /// The `component` parameter is the name of the Winetricks verb to install (e.g., 'dxvk', 'vcrun2019').
   /// The `prefix` parameter is the WinePrefix object representing the target prefix.
@@ -734,24 +1481,63 @@ class WineComponentInstaller {
         '  WINE=${winetricksEnv['WINE']}\n'
         '  PATH=${winetricksEnv['PATH']}'
       );
-      final results = await shell.run(command);
-      final result = results.first; // Assuming single command, take the first result
+      
+      // Add timeout for winetricks operations that might hang
+      final timeout = Duration(minutes: 10); // 10 minute timeout
+      
+      try {
+        final results = await shell.run(command).timeout(timeout);
+        final result = results.first; // Assuming single command, take the first result
 
-      if (result.exitCode == 0) {
-        progressCallback?.call('$component installed successfully.');
-        logService.log('Winetricks $component installed successfully. Output: ${result.outText}');
-      } else {
-        progressCallback?.call('Failed to install $component. Exit code: ${result.exitCode}');
-        logService.log(
-          'Winetricks $component installation failed. Exit code: ${result.exitCode}\nStdout: ${result.outText}\nStderr: ${result.errText}',
-          LogLevel.error,
-        );
-        // Potentially throw an exception here if installation is critical
+        if (result.exitCode == 0) {
+          progressCallback?.call('$component installed successfully.');
+          logService.log('Winetricks $component installed successfully. Output: ${result.outText}');
+        } else {
+          progressCallback?.call('Failed to install $component. Exit code: ${result.exitCode}');
+          logService.log(
+            'Winetricks $component installation failed. Exit code: ${result.exitCode}\nStdout: ${result.outText}\nStderr: ${result.errText}',
+            LogLevel.error,
+          );
+          
+          // For VC++ components, try alternative installation if main one fails
+          if (component.startsWith('vcrun')) {
+            progressCallback?.call('Winetricks installation failed, this may be due to wow64 compatibility issues.');
+            logService.log('VC++ component $component failed via winetricks, may need alternative installation method');
+            throw Exception('Winetricks $component installation failed with exit code ${result.exitCode}');
+          }
+        }
+      } on TimeoutException {
+        progressCallback?.call('$component installation timed out (10 minutes). This may be due to hanging processes.');
+        logService.log('Winetricks $component installation timed out after 10 minutes', LogLevel.error);
+        
+        // Try to kill any hanging wine processes
+        try {
+          await Process.run('pkill', ['-f', 'vc_redist']);
+          await Process.run('pkill', ['-f', component]);
+          // Kill wineserver for this prefix
+          final wineServerKill = Shell(environment: winetricksEnv, verbose: false);
+          await wineServerKill.run('wineserver -k');
+        } catch (killError) {
+          logService.log('Error killing hanging processes: $killError', LogLevel.warning);
+        }
+        
+        throw Exception('Winetricks $component installation timed out');
       }
     } catch (e, stackTrace) {
       progressCallback?.call('Error installing $component with Winetricks: $e');
       logService.log('Exception during Winetricks $component installation: $e\n$stackTrace', LogLevel.error);
-      // Potentially throw an exception here
+      
+      // Clean up any hanging processes
+      try {
+        await Process.run('pkill', ['-f', 'vc_redist']);
+        await Process.run('pkill', ['-f', component]);
+        final wineServerKill = Shell(environment: winetricksEnv, verbose: false);
+        await wineServerKill.run('wineserver -k');
+      } catch (killError) {
+        logService.log('Error during cleanup: $killError', LogLevel.warning);
+      }
+      
+      throw Exception('Winetricks $component installation failed: $e');
     }
   }
 

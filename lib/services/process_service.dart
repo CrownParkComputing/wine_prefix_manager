@@ -241,7 +241,18 @@ class ProcessService {
         // Set Proton specific environment variables
         baseEnv['STEAM_COMPAT_CLIENT_INSTALL_PATH'] =
             Platform.environment['HOME'] ?? '.'; // Use HOME or fallback
-        baseEnv['STEAM_COMPAT_DATA_PATH'] = prefix.path;
+        
+        // For Proton, STEAM_COMPAT_DATA_PATH should point to the parent directory
+        // of the pfx folder, not the pfx folder itself
+        String compatDataPath = prefix.path;
+        if (prefix.path.endsWith('/pfx') || prefix.path.endsWith('\\pfx')) {
+          // Remove the /pfx suffix to get the parent directory
+          compatDataPath = path.dirname(prefix.path);
+        }
+        baseEnv['STEAM_COMPAT_DATA_PATH'] = compatDataPath;
+        
+        // Set WINEPREFIX to the actual pfx directory for wine commands
+        baseEnv['WINEPREFIX'] = prefix.path;
 
         if (actualExe.steamAppId != null && !isMsi) {
           final steamAppIdStr = actualExe.steamAppId.toString();
@@ -539,14 +550,26 @@ class ProcessService {
       // Working directory
       // Environment keys
 
-      process = await Process.start(
-        finalCommand,
-        finalArguments,
-        workingDirectory: exeDir,
-        environment: fullEnv,
-        runInShell:
-            false, // Set to false for better control, true might be needed sometimes
-      );
+      // Fix for Flutter Linux graphics context issue
+      // Launch the process in a way that doesn't interfere with the graphics context
+      try {
+        process = await Process.start(
+          finalCommand,
+          finalArguments,
+          workingDirectory: exeDir,
+          environment: fullEnv,
+          runInShell: true, // Use shell to avoid graphics context issues
+        );
+      } catch (e) {
+        // Fallback: try with detached mode
+        process = await Process.start(
+          'setsid',
+          [finalCommand, ...finalArguments],
+          workingDirectory: exeDir,
+          environment: fullEnv,
+          mode: ProcessStartMode.detached,
+        );
+      }
 
       onProcessStart(actualExe.path, process.pid);
 

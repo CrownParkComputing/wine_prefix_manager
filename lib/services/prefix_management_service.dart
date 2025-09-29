@@ -826,6 +826,57 @@ class PrefixManagementService {
     return {}; // Placeholder return, actual implementation needed
   }
 
+  /// Checks for various installed components in a Wine prefix
+  Future<Map<String, dynamic>> checkInstalledComponents(WinePrefix prefix) async {
+    try {
+      _logService.log('Checking installed components for prefix: ${prefix.name}');
+      final env = await _prepareEnvironment(prefix);
+      
+      final result = {
+        'dxvk': false,
+        'vkd3d': false,
+        'vcrun2019': false,
+        'vcrun2022': false,
+        'vcredist_x64': false,
+        'vcredist_x86': false,
+        'vcredist_legacy': false,
+        'winetricks_list': <String>[],
+      };
+      
+      // Check DirectX components (existing logic)
+      final directXComponents = await checkDirectXSupportComponents(prefix);
+      result['dxvk'] = directXComponents['dxvk'] ?? false;
+      result['vkd3d'] = directXComponents['vkd3d'] ?? false;
+      
+      // Check VC++ redistributables via registry
+      final vcppStatus = await _checkVcppRedistributablesRegistry(prefix, env);
+      result.addAll(vcppStatus);
+      
+      // Check winetricks installed components
+      final winetricksComponents = await _checkWinetricksInstalledComponents(prefix, env);
+      result['winetricks_list'] = winetricksComponents;
+      
+      // Check specific winetricks VC++ runtimes
+      result['vcrun2019'] = winetricksComponents.contains('vcrun2019');
+      result['vcrun2022'] = winetricksComponents.contains('vcrun2022');
+      
+      _logService.log('Component check completed for "${prefix.name}"');
+      return result;
+    } catch (e) {
+      _logService.log('Error checking installed components: $e', LogLevel.error);
+      return {
+        'dxvk': false,
+        'vkd3d': false,
+        'vcrun2019': false,
+        'vcrun2022': false,
+        'vcredist_x64': false,
+        'vcredist_x86': false,
+        'vcredist_legacy': false,
+        'winetricks_list': <String>[],
+      };
+    }
+  }
+
   /// Determines if a prefix has DXVK and VKD3D-Proton properly installed
   Future<Map<String, bool>> checkDirectXSupportComponents(WinePrefix prefix) async {
     try {
@@ -1311,5 +1362,142 @@ class PrefixManagementService {
       _logService.log('Error checking if wineserver is running: $e', LogLevel.error);
       return false;
     }
+  }
+
+  /// Checks VC++ redistributables installation via registry (comprehensive check for 2005-2022)
+  Future<Map<String, bool>> _checkVcppRedistributablesRegistry(WinePrefix prefix, Map<String, String> env) async {
+    final result = {
+      'vcredist_x64': false,
+      'vcredist_x86': false,
+      'vcredist_legacy': false,
+    };
+    
+    try {
+      final winePath = env['WINE'] ?? 'wine';
+      final shell = Shell(environment: env, verbose: false);
+      
+      // Registry paths to check for different VC++ versions
+      final registryChecks = [
+        // VC++ 2015-2022 (current)
+        'HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\X64',
+        'HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\X86',
+        'HKLM\\SOFTWARE\\WOW6432Node\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\X86',
+        'HKLM\\SOFTWARE\\Microsoft\\DevDiv\\VC\\Servicing\\14.0\\RuntimeMinimum',
+        
+        // VC++ 2013
+        'HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\12.0\\VC\\Runtimes\\x64',
+        'HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\12.0\\VC\\Runtimes\\x86',
+        
+        // VC++ 2012
+        'HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\11.0\\VC\\Runtimes\\x64',
+        'HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\11.0\\VC\\Runtimes\\x86',
+        
+        // VC++ 2010
+        'HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\10.0\\VC\\VCRedist\\x64',
+        'HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\10.0\\VC\\VCRedist\\x86',
+        
+        // VC++ 2008
+        'HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\9.0\\VC\\VCRedist\\x64',
+        'HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\9.0\\VC\\VCRedist\\x86',
+        
+        // VC++ 2005
+        'HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\8.0\\VC\\VCRedist\\x64',
+        'HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\8.0\\VC\\VCRedist\\x86',
+      ];
+      
+      int detectedX64 = 0;
+      int detectedX86 = 0;
+      int detectedLegacy = 0;
+      
+      for (final regPath in registryChecks) {
+        try {
+          final regCheck = await shell.runExecutableArguments(winePath, [
+            'reg', 'query', regPath
+          ]);
+          
+          if (regCheck.exitCode == 0) {
+            final isX64 = regPath.contains('X64') || regPath.contains('x64');
+            final isX86 = regPath.contains('X86') || regPath.contains('x86');
+            final isLegacy = regPath.contains('8.0') || regPath.contains('9.0') || 
+                           regPath.contains('10.0') || regPath.contains('11.0') || 
+                           regPath.contains('12.0');
+            
+            if (isX64) detectedX64++;
+            if (isX86) detectedX86++;
+            if (isLegacy) detectedLegacy++;
+            
+            _logService.log('VC++ registry entry detected: $regPath');
+          }
+        } catch (e) {
+          // Continue checking other paths
+          continue;
+        }
+      }
+      
+      // Set results based on detections
+      result['vcredist_x64'] = detectedX64 > 0;
+      result['vcredist_x86'] = detectedX86 > 0;
+      result['vcredist_legacy'] = detectedLegacy > 0;
+      
+      _logService.log('VC++ detection summary: x64: $detectedX64, x86: $detectedX86, legacy: $detectedLegacy');
+      
+    } catch (e) {
+      _logService.log('Error checking VC++ registry: $e', LogLevel.warning);
+    }
+    
+    return result;
+  }
+  
+  /// Checks winetricks installed components by reading the winetricks cache/log
+  Future<List<String>> _checkWinetricksInstalledComponents(WinePrefix prefix, Map<String, String> env) async {
+    final installedComponents = <String>[];
+    
+    try {
+      // Check winetricks cache directory for installed verbs
+      final cacheDir = path.join(prefix.path, 'drive_c', 'windows', 'Installer');
+      final cacheDirectory = Directory(cacheDir);
+      
+      if (await cacheDirectory.exists()) {
+        await for (final entity in cacheDirectory.list()) {
+          if (entity is Directory) {
+            final dirName = path.basename(entity.path);
+            // Common winetricks patterns
+            if (dirName.startsWith('vcrun') || 
+                dirName.startsWith('dotnet') ||
+                dirName.startsWith('directx') ||
+                dirName.startsWith('xna') ||
+                dirName.contains('redist')) {
+              installedComponents.add(dirName);
+            }
+          }
+        }
+      }
+      
+      // Also check for winetricks log file
+      final winetricksLog = File(path.join(prefix.path, 'winetricks.log'));
+      if (await winetricksLog.exists()) {
+        final logContent = await winetricksLog.readAsString();
+        final logLines = logContent.split('\n');
+        
+        for (final line in logLines) {
+          if (line.contains('Installing') && line.contains('verb')) {
+            final match = RegExp(r'Installing (\w+)').firstMatch(line);
+            if (match != null) {
+              final component = match.group(1)!;
+              if (!installedComponents.contains(component)) {
+                installedComponents.add(component);
+              }
+            }
+          }
+        }
+      }
+      
+      _logService.log('Detected winetricks components: ${installedComponents.join(', ')}');
+      
+    } catch (e) {
+      _logService.log('Error checking winetricks components: $e', LogLevel.warning);
+    }
+    
+    return installedComponents;
   }
 }

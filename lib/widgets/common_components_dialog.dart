@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as path;
 import '../models/prefix_models.dart';
 import '../models/settings.dart';
 import '../services/wine_component_installer.dart';
@@ -65,6 +67,12 @@ class _CommonComponentsDialogState extends State<CommonComponentsDialog> {
   bool _isInstalling = false;
   bool _hasDXVK = false;
   bool _hasVKD3D = false;
+  bool _hasVcRun2019 = false;
+  bool _hasVcRun2022 = false;
+  bool _hasVcRedistX64 = false;
+  bool _hasVcRedistX86 = false;
+  bool _hasVcRedistLegacy = false;
+  List<String> _winetricksComponents = [];
   bool _isLoading = true;
 
   @override
@@ -76,19 +84,30 @@ class _CommonComponentsDialogState extends State<CommonComponentsDialog> {
   Future<void> _checkDirectXComponents() async {
     setState(() {
       _isLoading = true;
-      _statusMessage = 'Checking DirectX components...';
+      _statusMessage = 'Checking installed components...';
     });
     
     try {
-      final componentStatus = await _prefixService.checkDirectXSupportComponents(widget.prefix);
+      final componentStatus = await _prefixService.checkInstalledComponents(widget.prefix);
       
       if (mounted) {
         setState(() {
           _hasDXVK = componentStatus['dxvk'] ?? false;
           _hasVKD3D = componentStatus['vkd3d'] ?? false;
+          _hasVcRun2019 = componentStatus['vcrun2019'] ?? false;
+          _hasVcRun2022 = componentStatus['vcrun2022'] ?? false;
+          _hasVcRedistX64 = componentStatus['vcredist_x64'] ?? false;
+          _hasVcRedistX86 = componentStatus['vcredist_x86'] ?? false;
+          _hasVcRedistLegacy = componentStatus['vcredist_legacy'] ?? false;
+          _winetricksComponents = List<String>.from(componentStatus['winetricks_list'] ?? []);
           _isLoading = false;
-          _statusMessage = 'DXVK: ${_hasDXVK ? 'Installed ✓' : 'Not Installed ✕'}, '
-                         'VKD3D (DX12): ${_hasVKD3D ? 'Installed ✓' : 'Not Installed ✕'}';
+          
+          // Build status message
+          final dxvkStatus = _hasDXVK ? 'Installed ✓' : 'Not Installed ✕';
+          final vkd3dStatus = _hasVKD3D ? 'Installed ✓' : 'Not Installed ✕';
+          final vcppStatus = (_hasVcRedistX64 || _hasVcRedistX86 || _hasVcRedistLegacy || _hasVcRun2019 || _hasVcRun2022) ? 'Some Installed ✓' : 'None Installed ✕';
+          
+          _statusMessage = 'DXVK: $dxvkStatus, VKD3D: $vkd3dStatus, VC++: $vcppStatus';
         });
       }
     } catch (e) {
@@ -108,8 +127,54 @@ class _CommonComponentsDialogState extends State<CommonComponentsDialog> {
       });
     }
   }
+  
+  /// Gets the Proton wine executable path for a Proton prefix
+  Future<String?> _getProtonWineExecutable(WinePrefix prefix) async {
+    if (prefix.type != PrefixType.proton) return null;
+    
+    try {
+      // Try to find the proton script first
+      final protonScript = path.join(prefix.wineBuildPath, 'proton');
+      if (await File(protonScript).exists()) {
+        return protonScript;
+      }
+      
+      // Try proton.sh as alternative
+      final protonShScript = path.join(prefix.wineBuildPath, 'proton.sh');
+      if (await File(protonShScript).exists()) {
+        return protonShScript;
+      }
+      
+      // For Kronek/Wine-Proton builds, look for wine executable
+      final wineExecutable = path.join(prefix.wineBuildPath, 'bin', 'wine');
+      if (await File(wineExecutable).exists()) {
+        return wineExecutable;
+      }
+      
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+  
+  /// Gets the Proton environment variables for a Proton prefix
+  Future<Map<String, String>?> _getProtonEnvironment(WinePrefix prefix) async {
+    if (prefix.type != PrefixType.proton) return null;
+    
+    final buildPath = prefix.wineBuildPath;
+    
+    return {
+      'WINEPREFIX': prefix.path,
+      'STEAM_COMPAT_DATA_PATH': prefix.path,
+      'STEAM_COMPAT_CLIENT_INSTALL_PATH': Platform.environment['HOME'] ?? '/tmp',
+      'PROTON_LOG': '1',
+      'PATH': '$buildPath/bin:$buildPath/files/bin:${Platform.environment['PATH']}',
+      'LD_LIBRARY_PATH': '$buildPath/lib64:$buildPath/lib:$buildPath/files/lib64:$buildPath/files/lib:${Platform.environment['LD_LIBRARY_PATH'] ?? ''}',
+      'WINEDLLOVERRIDES': 'winemenubuilder.exe=d',
+    };
+  }
 
-  Future<void> _installComponent(Future<bool> Function(WinePrefix, Settings, {Function(String)? progressCallback}) installFunction) async {
+  Future<void> _installComponent(Future<bool> Function(WinePrefix, Settings, {Function(String)? progressCallback, String? customWineExecutable, Map<String, String>? customEnv}) installFunction) async {
     if (_isInstalling) return;
 
     setState(() {
@@ -118,10 +183,21 @@ class _CommonComponentsDialogState extends State<CommonComponentsDialog> {
     });
 
     try {
+      // Get proper wine executable and environment for Proton prefixes
+      String? customWineExecutable;
+      Map<String, String>? customEnv;
+      
+      if (widget.prefix.type == PrefixType.proton) {
+        customWineExecutable = await _getProtonWineExecutable(widget.prefix);
+        customEnv = await _getProtonEnvironment(widget.prefix);
+      }
+      
       final success = await installFunction(
         widget.prefix,
         widget.settings,
         progressCallback: _updateStatus,
+        customWineExecutable: customWineExecutable,
+        customEnv: customEnv,
       );
 
       if (mounted) {
@@ -362,6 +438,55 @@ class _CommonComponentsDialogState extends State<CommonComponentsDialog> {
     }
   }
 
+  Future<void> _installVcRedistAllInOne() async {
+    if (_isInstalling) return;
+
+    setState(() {
+      _isInstalling = true;
+      _statusMessage = 'Installing TechPowerUp Visual C++ All-in-One package...';
+    });
+
+    try {
+      final success = await _installer.installVcRedistAllInOne(
+        widget.prefix,
+        widget.settings,
+        progressCallback: _updateStatus,
+      );
+
+      if (mounted) {
+        setState(() {
+          _statusMessage = success 
+            ? 'TechPowerUp Visual C++ All-in-One package installed successfully!' 
+            : 'TechPowerUp Visual C++ All-in-One installation failed. Check logs.';
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_statusMessage),
+            backgroundColor: success ? Colors.green : Colors.orange,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _statusMessage = 'Error during VC++ All-in-One installation: $e';
+        });
+         ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isInstalling = false;
+        });
+      }
+    }
+  }
+
   Future<void> _installLegacyGameDependencies() async {
     if (_isInstalling) return;
 
@@ -411,6 +536,174 @@ class _CommonComponentsDialogState extends State<CommonComponentsDialog> {
     }
   }
 
+  // Add methods for Winetricks-based VC++ installation
+  Future<void> _installVcRun2019() async {
+    if (_isInstalling) return;
+
+    setState(() {
+      _isInstalling = true;
+      _statusMessage = 'Installing VC++ 2019 via Winetricks...';
+    });
+
+    try {
+      final success = await _installer.installVcRunViaTricks2019(
+        widget.prefix,
+        widget.settings,
+        progressCallback: _updateStatus,
+      );
+
+      if (mounted) {
+        setState(() {
+          _statusMessage = success 
+            ? 'VC++ 2019 (Winetricks) installed successfully!' 
+            : 'VC++ 2019 (Winetricks) installation failed. Check logs.';
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_statusMessage),
+            backgroundColor: success ? Colors.green : Colors.orange,
+          ),
+        );
+        
+        // Check components again after installation
+        await _checkDirectXComponents();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _statusMessage = 'Error during VC++ 2019 (Winetricks) installation: $e';
+        });
+         ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isInstalling = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _installVcRun2022() async {
+    if (_isInstalling) return;
+
+    setState(() {
+      _isInstalling = true;
+      _statusMessage = 'Installing VC++ 2022 via Winetricks...';
+    });
+
+    try {
+      final success = await _installer.installVcRunViaTricks2022(
+        widget.prefix,
+        widget.settings,
+        progressCallback: _updateStatus,
+      );
+
+      if (mounted) {
+        setState(() {
+          _statusMessage = success 
+            ? 'VC++ 2022 (Winetricks) installed successfully!' 
+            : 'VC++ 2022 (Winetricks) installation failed. Check logs.';
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_statusMessage),
+            backgroundColor: success ? Colors.green : Colors.orange,
+          ),
+        );
+        
+        // Check components again after installation
+        await _checkDirectXComponents();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _statusMessage = 'Error during VC++ 2022 (Winetricks) installation: $e';
+        });
+         ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isInstalling = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _installVcRedistComprehensive() async {
+    if (_isInstalling) return;
+
+    setState(() {
+      _isInstalling = true;
+      _statusMessage = 'Starting comprehensive VC++ installation (2005-2022)...';
+    });
+
+    try {
+      // Get proper wine executable and environment for Proton prefixes
+      String? customWineExecutable;
+      Map<String, String>? customEnv;
+      
+      if (widget.prefix.type == PrefixType.proton) {
+        customWineExecutable = await _getProtonWineExecutable(widget.prefix);
+        customEnv = await _getProtonEnvironment(widget.prefix);
+      }
+      
+      final success = await _installer.installAllVcppRedistributablesComprehensive(
+        widget.prefix,
+        widget.settings,
+        progressCallback: _updateStatus,
+        customWineExecutable: customWineExecutable,
+        customEnv: customEnv,
+      );
+
+      if (mounted) {
+        setState(() {
+          _statusMessage = success 
+            ? 'All Visual C++ Redistributables (2005-2022) installed successfully!' 
+            : 'VC++ comprehensive installation failed. Check logs.';
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_statusMessage),
+            backgroundColor: success ? Colors.green : Colors.orange,
+          ),
+        );
+        
+        // Check components again after installation
+        await _checkDirectXComponents();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _statusMessage = 'Error during comprehensive VC++ installation: $e';
+        });
+         ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isInstalling = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final bool isProtonPrefix = widget.prefix.type == PrefixType.proton;
@@ -422,11 +715,13 @@ class _CommonComponentsDialogState extends State<CommonComponentsDialog> {
     return AlertDialog(
       title: Text('Install Components for "${widget.prefix.name}"'),
       content: SizedBox(
-        width: 450, // Increased width for more space 
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+        width: 450, // Increased width for more space
+        height: 500, // Set a fixed height to prevent overflow
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
             Text(
               'Install necessary components like DXVK, VKD3D-Proton, or Visual C++ Redistributables into the selected Wine prefix.',
               style: Theme.of(context).textTheme.bodyMedium,
@@ -474,6 +769,83 @@ class _CommonComponentsDialogState extends State<CommonComponentsDialog> {
                               const Text('VKD3D-Proton (DirectX 12 → Vulkan)'),
                             ],
                           ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Visual C++ Redistributables:',
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              Icon(
+                                _hasVcRedistX64 ? Icons.check_circle : Icons.cancel,
+                                color: _hasVcRedistX64 ? Colors.green : Colors.red,
+                                size: 14,
+                              ),
+                              const SizedBox(width: 6),
+                              const Text('VC++ x64 (Direct Install)', style: TextStyle(fontSize: 12)),
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          Row(
+                            children: [
+                              Icon(
+                                _hasVcRedistX86 ? Icons.check_circle : Icons.cancel,
+                                color: _hasVcRedistX86 ? Colors.green : Colors.red,
+                                size: 14,
+                              ),
+                              const SizedBox(width: 6),
+                              const Text('VC++ x86 (Direct Install)', style: TextStyle(fontSize: 12)),
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          Row(
+                            children: [
+                              Icon(
+                                _hasVcRun2019 ? Icons.check_circle : Icons.cancel,
+                                color: _hasVcRun2019 ? Colors.green : Colors.red,
+                                size: 14,
+                              ),
+                              const SizedBox(width: 6),
+                              const Text('vcrun2019 (Winetricks)', style: TextStyle(fontSize: 12)),
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          Row(
+                            children: [
+                              Icon(
+                                _hasVcRun2022 ? Icons.check_circle : Icons.cancel,
+                                color: _hasVcRun2022 ? Colors.green : Colors.red,
+                                size: 14,
+                              ),
+                              const SizedBox(width: 6),
+                              const Text('vcrun2022 (Winetricks)', style: TextStyle(fontSize: 12)),
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          Row(
+                            children: [
+                              Icon(
+                                _hasVcRedistLegacy ? Icons.check_circle : Icons.cancel,
+                                color: _hasVcRedistLegacy ? Colors.green : Colors.red,
+                                size: 14,
+                              ),
+                              const SizedBox(width: 6),
+                              const Text('Legacy VC++ (2005-2013)', style: TextStyle(fontSize: 12)),
+                            ],
+                          ),
+                          if (_winetricksComponents.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              'Other Winetricks components: ${_winetricksComponents.take(3).join(', ')}${_winetricksComponents.length > 3 ? '...' : ''}',
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ],
@@ -570,48 +942,45 @@ class _CommonComponentsDialogState extends State<CommonComponentsDialog> {
             
             // Visual C++ Redistributables Section
             Text(
-              'Visual C++ Redistributables (2015-2022)',
+              'Visual C++ Redistributables (All Versions)',
               style: Theme.of(context).textTheme.titleSmall,
             ),
             const SizedBox(height: 8),
             Text(
-              'Required for many games and applications. Install x86 for legacy 32-bit games.',
+              'Required for many games and applications.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: 12),
             
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    icon: const Icon(Icons.download, size: 18),
-                    label: const Text('VC++ x86', style: TextStyle(fontSize: 13)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Theme.of(context).colorScheme.secondaryContainer,
-                      foregroundColor: Theme.of(context).colorScheme.onSecondaryContainer,
-                      padding: const EdgeInsets.symmetric(vertical: 10.0),
-                    ),
-                    onPressed: _isInstalling ? null : _installVcRedistX86,
+            // Comprehensive VC++ installer (single, reliable option)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8.0),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  icon: const Icon(Icons.auto_awesome),
+                  label: const Text('Install All Visual C++ Redistributables (2005-2022)'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Theme.of(context).colorScheme.tertiary,
+                    foregroundColor: Theme.of(context).colorScheme.onTertiary,
+                    padding: const EdgeInsets.symmetric(vertical: 12.0),
+                    textStyle: const TextStyle(fontWeight: FontWeight.bold),
                   ),
+                  onPressed: _isInstalling ? null : _installVcRedistComprehensive,
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    icon: const Icon(Icons.download, size: 18),
-                    label: const Text('VC++ x64', style: TextStyle(fontSize: 13)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Theme.of(context).colorScheme.secondaryContainer,
-                      foregroundColor: Theme.of(context).colorScheme.onSecondaryContainer,
-                      padding: const EdgeInsets.symmetric(vertical: 10.0),
-                    ),
-                    onPressed: _isInstalling ? null : _installVcRedistX64,
-                  ),
-                ),
-              ],
+              ),
             ),
             
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
+            Text(
+              'This will install Microsoft Visual C++ 2015-2022 Redistributables (x64 and x86) and create comprehensive registry entries for maximum compatibility with games requiring VC++ 2005-2022.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                fontSize: 11,
+              ),
+            ),
+            
+            const SizedBox(height: 16),
             
             // Legacy Game Dependencies Button
             SizedBox(
@@ -659,6 +1028,7 @@ class _CommonComponentsDialogState extends State<CommonComponentsDialog> {
               ],
             ),
           ],
+          ),
         ),
       ),
       actions: [

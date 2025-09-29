@@ -73,11 +73,11 @@ class PrefixDetailActions extends StatelessWidget {
           //   label: 'Winetricks Verbs',
           //   onPressed: () => onShowWinetricksVerbs(context, prefix, settings!),
           // ), // Removed
-          // ActionButton(
-          //   icon: Icons.extension_outlined,
-          //   label: 'Common Components',
-          //   onPressed: () => onShowCommonComponents(context, prefix),
-          // ), // Removed Common Components button
+          ActionButton(
+            icon: Icons.extension_outlined,
+            label: 'Common Components',
+            onPressed: () => onShowCommonComponents(context, prefix),
+          ),
           ActionButton(
             icon: Icons.rule_folder_outlined, // Changed icon to be more generic
             label: 'Install Software',

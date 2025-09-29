@@ -609,36 +609,39 @@ class ProtonPrefixCreationService {
         _logService.log('Proton-GE build detected - only installing VC++ Redistributable (other components are built-in).');
         onStatusUpdate('Installing VC++ Redistributable for Proton-GE...');
 
-        // Install Microsoft Visual C++ 2015-2022 Redistributable (x64)
-        onStatusUpdate('Downloading and installing Microsoft Visual C++ Redistributable (x64)...');
-        _logService.log('Downloading and installing Microsoft Visual C++ Redistributable (x64) for Proton-GE...');
-        const vcRedistUrl = 'https://aka.ms/vs/17/release/vc_redist.x64.exe';
-        final tempDirForVcRedist = await Directory.systemTemp.createTemp('vcredist_');
-        final vcRedistPath = path.join(tempDirForVcRedist.path, 'vc_redist.x64.exe');
-
+        // Install comprehensive Microsoft Visual C++ Redistributables for Proton-GE
+        onStatusUpdate('Installing comprehensive Visual C++ Redistributables for Proton-GE...');
+        _logService.log('Installing comprehensive VC++ redistributables with registry entries for Proton-GE...');
+        
+        // Create temporary WinePrefix object for the component installer
+        final tempPrefix = WinePrefix(
+          name: path.basename(prefixPath),
+          path: prefixPath,
+          wineBuildPath: buildPath,
+          type: PrefixType.proton,
+          architecture: architecture,
+          exeEntries: [],
+        );
+        
         try {
-          await _dio.download(vcRedistUrl, vcRedistPath, onReceiveProgress: (received, total) {
-            if (total > 0) {
-              final progressPercent = (received / total * 100).toStringAsFixed(1);
-              onStatusUpdate('Downloading VC++ Redist: $progressPercent%');
-            }
-          });
-          _logService.log('VC++ Redistributable downloaded to $vcRedistPath');
-
-          onStatusUpdate('Installing VC++ Redistributable (this might take a moment)...');
-          final vcInstallArgs = [vcRedistPath, '/install', '/passive', '/norestart'];
-          final vcInstallResult = await setupShell.runExecutableArguments(protonRunScript, vcInstallArgs);
-
-          if (vcInstallResult.exitCode == 0 || vcInstallResult.exitCode == 3010) {
-            _logService.log('VC++ Redistributable (x64) installed successfully for Proton-GE. Exit code: ${vcInstallResult.exitCode}');
-            onStatusUpdate('VC++ Redistributable (x64) installed.');
+          final vcInstallSuccess = await _componentInstaller.installAllVcppRedistributablesComprehensive(
+            tempPrefix, 
+            settings, 
+            progressCallback: onStatusUpdate,
+            customWineExecutable: protonRunScript, 
+            customEnv: fullEnv
+          );
+          
+          if (vcInstallSuccess) {
+            _logService.log('Comprehensive VC++ redistributables installed successfully for Proton-GE');
+            onStatusUpdate('Visual C++ Redistributables (x64 & x86) installed with registry entries.');
           } else {
-            _logService.log('VC++ Redistributable (x64) installation failed for Proton-GE. Exit code: ${vcInstallResult.exitCode}\nStdOut: ${vcInstallResult.stdout}\nStdErr: ${vcInstallResult.stderr}', LogLevel.error);
-            onStatusUpdate('Error: VC++ Redistributable (x64) installation failed.');
+            _logService.log('Comprehensive VC++ redistributables installation failed for Proton-GE', LogLevel.error);
+            onStatusUpdate('Warning: VC++ redistributables installation failed.');
           }
         } catch (e) {
-          _logService.log('Error downloading or installing VC++ Redistributable (x64) for Proton-GE: $e', LogLevel.error);
-          onStatusUpdate('Error installing VC++ Redistributable (x64).');
+          _logService.log('Error installing comprehensive VC++ redistributables for Proton-GE: $e', LogLevel.error);
+          onStatusUpdate('Error installing VC++ redistributables.');
         }
 
         _logService.log('VC++ Redistributable installation completed for Proton-GE.');

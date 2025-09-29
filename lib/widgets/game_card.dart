@@ -78,75 +78,44 @@ class GameCard extends StatelessWidget {
           left: _getIconAreaSize() + 8, // Start after info icon area
           right: _getIconAreaSize() + 8, // End before settings icon area
           child: Center(
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Compressed game indicator
-                if (game.exe.isCompressed)
-                  Container(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: _getSmallPadding(),
-                      vertical: _getSmallPadding() / 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.blue.withOpacity(0.9),
-                      borderRadius: BorderRadius.circular(_getBorderRadius()),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.archive,
-                          color: Colors.white,
-                          size: _getSmallIconSize(),
-                        ),
-                        SizedBox(width: _getSmallPadding() / 2),
-                        Text(
-                          'COMPRESSED',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: _getSmallTextSize(),
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                // Not working warning icon
-                if (game.exe.notWorking == true) ...[
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Compressed game indicator
                   if (game.exe.isCompressed)
-                    SizedBox(width: _getSmallPadding()),
-                  Container(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: _getSmallPadding(),
-                      vertical: _getSmallPadding() / 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.withOpacity(0.9),
-                      borderRadius: BorderRadius.circular(_getBorderRadius()),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.warning,
-                          color: Colors.white,
-                          size: _getSmallIconSize(),
-                        ),
-                        SizedBox(width: _getSmallPadding() / 2),
-                        Text(
-                          'NOT WORKING',
-                          style: TextStyle(
+                    Container(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: _getSmallPadding(),
+                        vertical: _getSmallPadding() / 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withOpacity(0.9),
+                        borderRadius: BorderRadius.circular(_getBorderRadius()),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.archive,
                             color: Colors.white,
-                            fontSize: _getSmallTextSize(),
-                            fontWeight: FontWeight.bold,
+                            size: _getSmallIconSize(),
                           ),
-                        ),
-                      ],
+                          SizedBox(width: _getSmallPadding() / 2),
+                          Text(
+                            'ZIP',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: _getSmallTextSize(),
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
                 ],
-              ],
+              ),
             ),
           ),
         ),
