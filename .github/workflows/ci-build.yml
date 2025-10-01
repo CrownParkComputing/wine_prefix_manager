@@ -21,7 +21,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
-          flutter-version: '3.35.5'
+          cache: true
 
       - name: Install Linux build dependencies
         run: |
@@ -32,7 +32,10 @@ jobs:
           pkg-config --exists gtk+-3.0 && echo "GTK+3.0 found" || echo "GTK+3.0 not found"
 
       - name: Install Flutter dependencies
-        run: flutter pub get
+        run: |
+          flutter clean
+          flutter pub cache repair
+          flutter pub get
 
       - name: Analyze project source
         run: |
