@@ -189,46 +189,11 @@ class GameCard extends StatelessWidget {
           ),
         ),
 
-        // Delete icon - bottom-right (if delete callback is provided)
-        if (onDelete != null)
-          Positioned(
-            bottom: _getTopPadding(),
-            right: _getTopPadding(),
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.red.withValues(alpha:0.8),
-                borderRadius: BorderRadius.circular(_getBorderRadius() + 2),
-                border: Border.all(
-                  color: Colors.white.withValues(alpha:0.3),
-                  width: 1,
-                ),
-              ),
-              child: IconButton(
-                onPressed: () {
-                  logDebug(
-                      'Delete icon tapped for ${game.exe.name}'); // Debug print
-                  onDelete?.call(game);
-                },
-                icon: Icon(
-                  Icons.delete_outline,
-                  color: Colors.white,
-                  size: _getCornerIconSize(),
-                ),
-                tooltip: 'Delete Game',
-                padding: EdgeInsets.all(_getCornerIconSize() * 0.3),
-                constraints: BoxConstraints(
-                  minWidth: _getCornerIconSize() + 8,
-                  minHeight: _getCornerIconSize() + 8,
-                ),
-              ),
-            ),
-          ),
-
-        // Game title text - bottom
+        // Game title text - bottom (avoid overlapping with delete icon)
         Positioned(
           bottom: 0,
           left: 0,
-          right: 0,
+          right: onDelete != null ? _getIconAreaSize() : 0, // Leave space for delete icon if present
           child: Container(
             padding: EdgeInsets.all(_getSmallPadding()),
             child: Text(
@@ -304,11 +269,9 @@ class GameCard extends StatelessWidget {
         // Launch area (excluding corners where icons are)
         Positioned(
           left: _getIconAreaSize(), // Exclude left corner area for info icon
-          right:
-              _getIconAreaSize(), // Exclude right corner area for settings icon and delete icon
+          right: _getIconAreaSize(), // Exclude right corner area for settings icon and delete icon
           top: _getIconAreaSize() - 10, // Exclude top area where icons are
-          bottom: _getIconAreaSize() -
-              10, // Exclude bottom area where delete icon is
+          bottom: _getIconAreaSize(), // Exclude bottom area where delete icon is (increased exclusion)
           child: Material(
             color: Colors.transparent,
             child: InkWell(
@@ -327,6 +290,41 @@ class GameCard extends StatelessWidget {
         Center(
           child: _buildCenterActionWidget(),
         ),
+
+        // Delete icon - bottom-right (if delete callback is provided) - MUST be last for proper touch handling
+        if (onDelete != null)
+          Positioned(
+            bottom: _getTopPadding(),
+            right: _getTopPadding(),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha:0.8),
+                borderRadius: BorderRadius.circular(_getBorderRadius() + 2),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha:0.3),
+                  width: 1,
+                ),
+              ),
+              child: IconButton(
+                onPressed: () {
+                  logDebug(
+                      'Delete icon tapped for ${game.exe.name}'); // Debug print
+                  onDelete?.call(game);
+                },
+                icon: Icon(
+                  Icons.delete_outline,
+                  color: Colors.white,
+                  size: _getCornerIconSize(),
+                ),
+                tooltip: 'Delete Game',
+                padding: EdgeInsets.all(_getCornerIconSize() * 0.3),
+                constraints: BoxConstraints(
+                  minWidth: _getCornerIconSize() + 8,
+                  minHeight: _getCornerIconSize() + 8,
+                ),
+              ),
+            ),
+          ),
       ],
     );
   }

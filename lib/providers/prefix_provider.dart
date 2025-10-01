@@ -338,6 +338,8 @@ class PrefixProvider with ChangeNotifier {
            _updateStatus('Executable "${exeToDelete.name}" deleted.');
            // debugPrint('Deleted executable via Provider: ${exeToDelete.path} from prefix: ${prefix.path}');
            await savePrefixes();
+           // Add a small delay to allow UI to settle before rebuilding
+           await Future.delayed(const Duration(milliseconds: 50));
            notifyListeners();
         } else {
            _updateStatus('Error deleting executable: Executable not found.');

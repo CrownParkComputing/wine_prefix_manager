@@ -357,16 +357,22 @@ class _HomePageState extends State<HomePage> with WindowListener {
     try {
       final prefixProvider =
           Provider.of<PrefixProvider>(context, listen: false);
+      
+      // Store the mounted context before async operation
+      final capturedContext = context;
+      
       await prefixProvider.deleteExecutable(game.prefix, game.exe);
 
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+      // Check if context is still mounted after async operation
+      if (capturedContext.mounted) {
+        ScaffoldMessenger.of(capturedContext).showSnackBar(
           SnackBar(
               content:
                   Text('${game.exe.name} deleted from ${game.prefix.name}')),
         );
       }
     } catch (e) {
+      // Check if context is still mounted before showing error
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
