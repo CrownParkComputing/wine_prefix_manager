@@ -65,7 +65,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
-          flutter-version: '3.x'
+          flutter-version: '3.35.5'
 
       - name: Install Linux build dependencies
         run: |
@@ -424,7 +424,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
-          flutter-version: '3.x'
+          flutter-version: '3.35.5'
       
       - name: Install Flutter dependencies
         run: |

@@ -6,6 +6,7 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:file_saver/file_saver.dart';
+import 'package:cross_file/cross_file.dart';
 
 class LogsPage extends StatefulWidget {
   const LogsPage({Key? key}) : super(key: key);
@@ -64,9 +65,9 @@ class _LogsPageState extends State<LogsPage> {
       } else {
         // For desktop platforms, save to file
         await FileSaver.instance.saveFile(
-          name: 'wine_prefix_manager_logs.txt',
+          name: 'wine_prefix_manager_logs',
           bytes: Uint8List.fromList(logsText.codeUnits),
-          ext: 'txt',
+          mimeType: MimeType.text,
         );
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Logs exported successfully')),
