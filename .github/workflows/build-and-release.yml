@@ -72,6 +72,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y cmake ninja-build clang pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev fuse libfuse2
           sudo apt-get install -y dpkg-dev debhelper rpm librsvg2-bin
+          sudo apt-get install -y libgtk-3-0 libgtk-3-common libgtk-3-dev gtk+3.0 libglib2.0-dev libgdk-pixbuf2.0-dev libcairo2-dev libpango1.0-dev libatk1.0-dev
+          # Verify GTK installation
+          pkg-config --exists gtk+-3.0 && echo "GTK+3.0 found" || echo "GTK+3.0 not found"
+          pkg-config --modversion gtk+-3.0 || echo "Could not get GTK version"
 
       - name: Set version from global job
         id: version
