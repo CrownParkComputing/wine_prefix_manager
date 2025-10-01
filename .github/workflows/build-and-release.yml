@@ -72,10 +72,16 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y cmake ninja-build clang pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev fuse libfuse2
           sudo apt-get install -y dpkg-dev debhelper rpm librsvg2-bin
-          sudo apt-get install -y libgtk-3-0 libgtk-3-common libgtk-3-dev gtk+3.0 libglib2.0-dev libgdk-pixbuf2.0-dev libcairo2-dev libpango1.0-dev libatk1.0-dev
-          # Verify GTK installation
+          sudo apt-get install -y libgtk-3-0 libgtk-3-common libgtk-3-dev libglib2.0-dev libgdk-pixbuf2.0-dev libcairo2-dev libpango1.0-dev libatk1.0-dev
+          # Set PKG_CONFIG_PATH and verify GTK installation
+          echo "PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig:\$PKG_CONFIG_PATH" >> $GITHUB_ENV
+          export PKG_CONFIG_PATH="/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig:$PKG_CONFIG_PATH"
+          echo "PKG_CONFIG_PATH: $PKG_CONFIG_PATH"
           pkg-config --exists gtk+-3.0 && echo "GTK+3.0 found" || echo "GTK+3.0 not found"
           pkg-config --modversion gtk+-3.0 || echo "Could not get GTK version"
+          pkg-config --cflags gtk+-3.0 || echo "Could not get GTK cflags"
+          pkg-config --libs gtk+-3.0 || echo "Could not get GTK libs"
+          ls -la /usr/lib/x86_64-linux-gnu/pkgconfig/gtk*.pc || echo "No GTK pc files found"
 
       - name: Set version from global job
         id: version
@@ -144,7 +150,13 @@ jobs:
           rm -f .analyze_temp_options.yaml real_errors.txt
 
       - name: Build Linux application
-        run: flutter build linux --release
+        env:
+          PKG_CONFIG_PATH: "/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig"
+        run: |
+          echo "PKG_CONFIG_PATH: $PKG_CONFIG_PATH"
+          # Verify CMake can find GTK before building
+          pkg-config --exists gtk+-3.0 && echo "GTK+3.0 still accessible" || echo "GTK+3.0 not accessible"
+          flutter build linux --release
 
       - name: Create release directory
         run: |
