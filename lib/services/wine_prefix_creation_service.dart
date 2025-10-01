@@ -9,6 +9,7 @@ import '../models/prefix_models.dart';
 import 'log_service.dart';
 import 'wine_component_installer.dart';
 import 'prefix_management_service.dart';
+import '../utils/logger.dart';
 
 typedef StatusCallback = void Function(String status);
 typedef ProgressCallback = void Function(double progress);
@@ -54,9 +55,9 @@ class WinePrefixCreationService {
       return null;
     }
 
-    print('CREATE_PREFIX_DEBUG: (PRINT) selectedBuild.name = ${selectedBuild.name}');
-    print('CREATE_PREFIX_DEBUG: (PRINT) selectedBuild.downloadUrl = ${selectedBuild.downloadUrl}');
-    print('CREATE_PREFIX_DEBUG: (PRINT) selectedBuild.installPath = ${selectedBuild.installPath}');
+    logDebug('CREATE_PREFIX_DEBUG: (PRINT) selectedBuild.name = ${selectedBuild.name}');
+    logDebug('CREATE_PREFIX_DEBUG: (PRINT) selectedBuild.downloadUrl = ${selectedBuild.downloadUrl}');
+    logDebug('CREATE_PREFIX_DEBUG: (PRINT) selectedBuild.installPath = ${selectedBuild.installPath}');
 
     // Verify the build is a Wine build
     if (selectedBuild.type != PrefixType.wine) {
@@ -114,11 +115,11 @@ class WinePrefixCreationService {
       final String extractedFolderName = _getExtractedFolderName(baseArchiveName);
       extractedDir = path.join(downloadDir, extractedFolderName);
 
-      print('CREATE_PREFIX_DEBUG: (PRINT) downloadDir = $downloadDir');
-      print('CREATE_PREFIX_DEBUG: (PRINT) baseArchiveName = $baseArchiveName');
-      print('CREATE_PREFIX_DEBUG: (PRINT) filePath = $filePath');
-      print('CREATE_PREFIX_DEBUG: (PRINT) extractedFolderName = $extractedFolderName');
-      print('CREATE_PREFIX_DEBUG: (PRINT) (target) extractedDir = $extractedDir');
+      logDebug('CREATE_PREFIX_DEBUG: (PRINT) downloadDir = $downloadDir');
+      logDebug('CREATE_PREFIX_DEBUG: (PRINT) baseArchiveName = $baseArchiveName');
+      logDebug('CREATE_PREFIX_DEBUG: (PRINT) filePath = $filePath');
+      logDebug('CREATE_PREFIX_DEBUG: (PRINT) extractedFolderName = $extractedFolderName');
+      logDebug('CREATE_PREFIX_DEBUG: (PRINT) (target) extractedDir = $extractedDir');
 
       if (!File(filePath).existsSync()) {
         _logService.log('Starting download to $filePath');
@@ -186,7 +187,7 @@ class WinePrefixCreationService {
 
       // 5. Initialize Prefix
       onStatusUpdate('Initializing prefix ($architecture, this might take a moment)...');
-      print('CREATE_PREFIX_DEBUG: (PRINT) Calling _initializeWinePrefix with buildPath = $extractedDir');
+      logDebug('CREATE_PREFIX_DEBUG: (PRINT) Calling _initializeWinePrefix with buildPath = $extractedDir');
       await _initializeWinePrefix(prefixPath, extractedDir, architecture, settings, onStatusUpdate, selectedBuild);
       _logService.log('Wine prefix initialized.');
 
@@ -315,39 +316,39 @@ class WinePrefixCreationService {
   }
 
   Future<void> _initializeWinePrefix(String prefixPath, String buildPath, String architecture, Settings settings, StatusCallback onStatusUpdate, BaseBuild selectedBuild) async {
-    print('INIT_PREFIX_DEBUG: (PRINT) Received buildPath = $buildPath');
-    print('INIT_PREFIX_DEBUG: (PRINT) selectedBuild.name for proton check = ${selectedBuild.name}');
+    logDebug('INIT_PREFIX_DEBUG: (PRINT) Received buildPath = $buildPath');
+    logDebug('INIT_PREFIX_DEBUG: (PRINT) selectedBuild.name for proton check = ${selectedBuild.name}');
 
     final bool isProton = selectedBuild.name.toLowerCase().contains('proton') || await File(path.join(buildPath, 'proton')).exists() || await File(path.join(buildPath, 'proton.sh')).exists();
     String effectiveWineExecutable;
     String protonScriptFileName = 'proton'; // Default to 'proton'
     
     if (isProton) {
-      print('INIT_PREFIX_DEBUG: (PRINT) Proton build detected at $buildPath.');
+      logDebug('INIT_PREFIX_DEBUG: (PRINT) Proton build detected at $buildPath.');
       if (await File(path.join(buildPath, 'proton')).exists()) {
         effectiveWineExecutable = path.join(buildPath, 'proton');
         protonScriptFileName = 'proton';
       } else if (await File(path.join(buildPath, 'proton.sh')).exists()) {
         effectiveWineExecutable = path.join(buildPath, 'proton.sh');
         protonScriptFileName = 'proton.sh';
-        print('INIT_PREFIX_DEBUG: (PRINT) Using proton.sh as proton script.');
+        logDebug('INIT_PREFIX_DEBUG: (PRINT) Using proton.sh as proton script.');
       } else {
         // This case should ideally be caught by the isProton check above, but as a safeguard:
         final errorMsg = 'Proton build detected, but neither "proton" nor "proton.sh" script found in $buildPath. This should not happen if isProton was true due to file existence.';
         _logService.log(errorMsg, LogLevel.error);
         throw Exception(errorMsg);
       }
-       print('INIT_PREFIX_DEBUG: (PRINT) Proton identified. Script: $protonScriptFileName in $buildPath');
+       logDebug('INIT_PREFIX_DEBUG: (PRINT) Proton identified. Script: $protonScriptFileName in $buildPath');
     } else {
       effectiveWineExecutable = path.join(buildPath, 'bin', 'wine');
-      print('INIT_PREFIX_DEBUG: (PRINT) Standard Wine build. Executable: $effectiveWineExecutable');
+      logDebug('INIT_PREFIX_DEBUG: (PRINT) Standard Wine build. Executable: $effectiveWineExecutable');
     }
     
-    print('INIT_PREFIX_DEBUG: (PRINT) Effective Wine/Proton executable = $effectiveWineExecutable');
+    logDebug('INIT_PREFIX_DEBUG: (PRINT) Effective Wine/Proton executable = $effectiveWineExecutable');
 
     Map<String, String> ldLibraryPathEntry = {};
     if (isProton) {
-      print('Proton build: Clearing LD_LIBRARY_PATH to let Proton script manage it.');
+      logDebug('Proton build: Clearing LD_LIBRARY_PATH to let Proton script manage it.');
       ldLibraryPathEntry = {'LD_LIBRARY_PATH': ''}; // Clear it for Proton
     } else {
       ldLibraryPathEntry = {'LD_LIBRARY_PATH': '$buildPath/lib64:$buildPath/lib:${Platform.environment['LD_LIBRARY_PATH'] ?? ''}'};
@@ -373,9 +374,6 @@ class WinePrefixCreationService {
     // The existing setupShell for wineboot and winecfg is fine as it runs wineExecutablePath directly.
     final setupShell = Shell(environment: fullEnv, verbose: false);
     
-    // Get an instance of PrefixManagementService for controller fix
-    final prefixManagementService = PrefixManagementService(); 
-
     _logService.log('Initializing Wine prefix using build from $buildPath');
 
     if (!await File(effectiveWineExecutable).exists()) {

@@ -4,9 +4,9 @@ import 'package:path/path.dart' as path; // Import path package
 import '../models/prefix_models.dart';
 import '../models/settings.dart'; // Import Settings model
 import '../utils/path_utils.dart'; // Import the new utility
+import '../utils/logger.dart';
 
 class PrefixStorageService {
-  static const String _appName = 'wine_prefix_manager'; // Match AppSettings
   static const String _defaultGameLibraryFileName = 'game_library.json'; // Match AppSettings
 
   /// Determines the path for the prefix data file.
@@ -21,7 +21,7 @@ class PrefixStorageService {
         }
         return settings.gameLibraryPath!;
       } catch (e) {
-        print('Warning: Could not create directory for custom game library path: ${settings.gameLibraryPath}. Error: $e');
+        logWarning('Warning: Could not create directory for custom game library path: ${settings.gameLibraryPath}. Error: $e');
         // Fallback to default path if directory creation for custom path fails
         return _getDefaultConfigPath();
       }
@@ -41,7 +41,7 @@ class PrefixStorageService {
         await dir.create(recursive: true);
       }
     } catch (e) {
-       print('Warning: Could not create directory for default game library path: $gameLibPath. Error: $e');
+       logWarning('Warning: Could not create directory for default game library path: $gameLibPath. Error: $e');
        // If it fails, it will likely fail on write later, but we try to be proactive.
     }
     return gameLibPath;

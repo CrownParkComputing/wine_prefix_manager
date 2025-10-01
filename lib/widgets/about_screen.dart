@@ -14,12 +14,12 @@ class AboutScreen extends StatefulWidget {
   // final VoidCallback onNavigateToSettings;
   
   const AboutScreen({
-    Key? key,
+    super.key,
     // required this.prefixes,
     // required this.settings,
     // required this.onNavigateToCreatePrefix,
     // required this.onNavigateToSettings,
-  }) : super(key: key);
+  });
 
   @override
   State<AboutScreen> createState() => _AboutScreenState();
@@ -107,7 +107,7 @@ class _AboutScreenState extends State<AboutScreen> {
               Text(
                 'Version $version',
                 style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onSurface.withOpacity(0.6),
+                  color: theme.colorScheme.onSurface.withValues(alpha:0.6),
                 ),
               ),
               const SizedBox(height: 48),
@@ -217,7 +217,7 @@ class _AboutScreenState extends State<AboutScreen> {
                   Text(
                     value,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha:0.7),
                     ),
                   ),
                 ],
@@ -226,7 +226,7 @@ class _AboutScreenState extends State<AboutScreen> {
             if (isClickable) Icon(
               Icons.arrow_forward_ios,
               size: 16,
-              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
+              color: Theme.of(context).colorScheme.onSurface.withValues(alpha:0.5),
             ),
           ],
         ),

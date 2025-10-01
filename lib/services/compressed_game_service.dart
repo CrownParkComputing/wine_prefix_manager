@@ -142,9 +142,6 @@ echo "Extraction complete!"
       String compressCommand;
       final fileName = p.basename(archivePath).toLowerCase();
       
-      // Build list of paths to include
-      final pathsToInclude = [extractPath, ...additionalPaths];
-      
       if (fileName.endsWith('.tar.zst')) {
         compressCommand = '''
           cd "${p.dirname(extractPath)}"

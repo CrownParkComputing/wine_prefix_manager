@@ -7,9 +7,9 @@ class EnvVariablesDialog extends StatefulWidget {
   final WinePrefix prefix;
 
   const EnvVariablesDialog({
-    Key? key,
+    super.key,
     required this.prefix,
-  }) : super(key: key);
+  });
 
   @override
   State<EnvVariablesDialog> createState() => _EnvVariablesDialogState();

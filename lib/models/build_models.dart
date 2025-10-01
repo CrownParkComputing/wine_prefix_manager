@@ -59,11 +59,11 @@ class ProtonBuild extends BaseBuild {
     super.displayName,
     super.downloadUrl, // Can be null for installed Steam Proton
     required super.version,
-    required PrefixType type, // Keep type for consistency, but it will be Proton for installed
+    required super.type, // Keep type for consistency, but it will be Proton for installed
     super.installPath, // Pass installPath to base
     // Proton is generally win64, so we can default it here or in the factory
-    String? architecture = 'win64', 
-  }) : super(type: type, architecture: architecture);
+    super.architecture = 'win64', 
+  });
 
   // Factory for downloadable Proton-GE builds
   factory ProtonBuild.fromGitHubRelease(Map<String, dynamic> release, PrefixType type) {

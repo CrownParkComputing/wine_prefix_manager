@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../models/settings.dart';
 import '../providers/settings_provider.dart';
 import '../services/log_service.dart';
 
 class WineComponentSettingsDialog extends StatefulWidget {
-  const WineComponentSettingsDialog({Key? key}) : super(key: key);
+  const WineComponentSettingsDialog({super.key});
 
   @override
   State<WineComponentSettingsDialog> createState() => _WineComponentSettingsDialogState();
@@ -13,7 +12,6 @@ class WineComponentSettingsDialog extends StatefulWidget {
 
 class _WineComponentSettingsDialogState extends State<WineComponentSettingsDialog> {
   final _formKey = GlobalKey<FormState>();
-  Settings? _settings;
   bool _isLoading = true;
 
   // Controllers for URL settings
@@ -57,7 +55,6 @@ class _WineComponentSettingsDialogState extends State<WineComponentSettingsDialo
 
     if (!mounted) return;
     setState(() {
-      _settings = currentSettings;
       _dxvkApiUrlController.text = currentSettings.dxvkApiUrl;
       _vkd3dApiUrlController.text = currentSettings.vkd3dApiUrl;
       _wineBuildsApiUrlController.text = currentSettings.wineBuildsApiUrl;

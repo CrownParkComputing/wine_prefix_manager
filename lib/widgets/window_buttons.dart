@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 
 class WindowButtons extends StatelessWidget {
-  const WindowButtons({Key? key}) : super(key: key);
+  const WindowButtons({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -59,7 +59,7 @@ class _WindowButton extends StatelessWidget {
           color: Colors.transparent,
           child: InkWell(
             onTap: onPressed,
-            hoverColor: isClose ? Colors.red : Colors.grey.withOpacity(0.2),
+            hoverColor: isClose ? Colors.red : Colors.grey.withValues(alpha:0.2),
             child: Icon(
               icon,
               size: 16,

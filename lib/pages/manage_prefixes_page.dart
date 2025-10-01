@@ -9,6 +9,7 @@ import '../widgets/prefix_list_tile.dart';
 import '../widgets/prefix_detail_actions.dart';
 import '../widgets/executable_list_tile.dart';
 import '../widgets/prefix_creation_form.dart';
+import '../utils/logger.dart';
 
 // Define callback types needed by child widgets, to be passed from main.dart
 typedef OnExeAction = Future<void> Function(WinePrefix prefix, ExeEntry exe);
@@ -34,7 +35,7 @@ class ManagePrefixesPage extends StatefulWidget {
   final PrefixContextActionCallback onEditEnvVariables;
 
   const ManagePrefixesPage({
-    Key? key,
+    super.key,
     required this.settings,
     required this.onAddExecutable,
     required this.onShowCommonComponents,
@@ -50,7 +51,7 @@ class ManagePrefixesPage extends StatefulWidget {
     required this.onRenamePrefix,
     required this.onApplyControllerFix,
     required this.onEditEnvVariables,
-  }) : super(key: key);
+  });
 
   @override
   State<ManagePrefixesPage> createState() => _ManagePrefixesPageState();
@@ -190,7 +191,7 @@ class _ManagePrefixesPageState extends State<ManagePrefixesPage> with SingleTick
         bottom: TabBar(
           controller: _tabController,
           labelColor: Theme.of(context).colorScheme.primary,
-          unselectedLabelColor: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+          unselectedLabelColor: Theme.of(context).colorScheme.onSurface.withValues(alpha:0.6),
           indicatorColor: Theme.of(context).colorScheme.primary,
           tabs: const [
             Tab(
@@ -233,23 +234,23 @@ class _ManagePrefixesPageState extends State<ManagePrefixesPage> with SingleTick
   Widget _buildPrefixList(PrefixType type) {
     return Consumer<PrefixProvider>(
       builder: (context, prefixProvider, child) {
-        print('[DEBUG ManagePrefixesPage] _buildPrefixList called for type: ${type.name}');
-        print('[DEBUG ManagePrefixesPage] PrefixProvider has ${prefixProvider.prefixes.length} total prefixes');
+        logDebug('[DEBUG ManagePrefixesPage] _buildPrefixList called for type: ${type.name}');
+        logDebug('[DEBUG ManagePrefixesPage] PrefixProvider has ${prefixProvider.prefixes.length} total prefixes');
         for (final prefix in prefixProvider.prefixes) {
-          print('[DEBUG ManagePrefixesPage] - Available: ${prefix.name} (${prefix.type.name})');
+          logDebug('[DEBUG ManagePrefixesPage] - Available: ${prefix.name} (${prefix.type.name})');
         }
         
         final prefixes = prefixProvider.prefixes
             .where((prefix) => prefix.type == type)
             .toList();
             
-        print('[DEBUG ManagePrefixesPage] After filtering for ${type.name}: ${prefixes.length} prefixes');
+        logDebug('[DEBUG ManagePrefixesPage] After filtering for ${type.name}: ${prefixes.length} prefixes');
         for (final prefix in prefixes) {
-          print('[DEBUG ManagePrefixesPage] - Filtered: ${prefix.name}');
+          logDebug('[DEBUG ManagePrefixesPage] - Filtered: ${prefix.name}');
         }
 
         if (prefixes.isEmpty) {
-          print('[DEBUG ManagePrefixesPage] Showing empty state for ${type.name}');
+          logDebug('[DEBUG ManagePrefixesPage] Showing empty state for ${type.name}');
           return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -275,7 +276,7 @@ class _ManagePrefixesPageState extends State<ManagePrefixesPage> with SingleTick
           );
         }
 
-        print('[DEBUG ManagePrefixesPage] Building ListView with ${prefixes.length} prefixes');
+        logDebug('[DEBUG ManagePrefixesPage] Building ListView with ${prefixes.length} prefixes');
         return ListView.builder(
           padding: const EdgeInsets.all(8.0),
           itemCount: prefixes.length,

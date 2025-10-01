@@ -9,12 +9,12 @@ class GameCarousel extends StatelessWidget {
   final Function(GameEntry) onLaunch;
 
   const GameCarousel({
-    Key? key,
+    super.key,
     required this.games,
     required this.onGameTap,
     required this.onShowDetails,
     required this.onLaunch,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

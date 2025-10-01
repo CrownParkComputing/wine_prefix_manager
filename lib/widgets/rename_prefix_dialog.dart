@@ -8,10 +8,10 @@ class RenamePrefixDialog extends StatefulWidget {
   final Function(String newName) onConfirmRename;
 
   const RenamePrefixDialog({
-    Key? key,
+    super.key,
     required this.prefixToRename,
     required this.onConfirmRename,
-  }) : super(key: key);
+  });
 
   @override
   State<RenamePrefixDialog> createState() => _RenamePrefixDialogState();

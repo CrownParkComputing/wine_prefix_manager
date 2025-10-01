@@ -18,7 +18,7 @@ String sanitizeFileName(String name) {
 class FileManagerPage extends StatefulWidget {
   final GameEntry? game;
 
-  const FileManagerPage({Key? key, this.game}) : super(key: key);
+  const FileManagerPage({super.key, this.game});
 
   @override
   State<FileManagerPage> createState() => _FileManagerPageState();
@@ -208,6 +208,28 @@ class _FileManagerPageState extends State<FileManagerPage> {
     });
   }
 
+  Widget _buildBackupItem(String label, String value, ThemeData theme) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 24, top: 4),
+      child: Row(
+        children: [
+          Icon(Icons.check_circle, size: 14, color: theme.colorScheme.primary),
+          const SizedBox(width: 8),
+          Text(
+            '$label: ',
+            style: theme.textTheme.bodySmall?.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          Text(
+            value,
+            style: theme.textTheme.bodySmall,
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<int> _calculateTotalSize(List<String> paths) async {
     int totalSize = 0;
 
@@ -250,16 +272,24 @@ class _FileManagerPageState extends State<FileManagerPage> {
 
     // Prepare list of all paths to backup
     final List<String> pathsToBackup = [sourceFolderPath];
+    
+    // Add the Wine prefix if we have a selected game
+    if (selectedGame != null) {
+      pathsToBackup.add(selectedGame!.prefix.path);
+    }
+    
+    // Add any additional save data paths
     pathsToBackup.addAll(saveDataPaths);
 
     final folderName = p.basename(sourceFolderPath);
+    final prefixName = selectedGame?.prefix.name ?? 'NoPrefix';
     final timestamp = DateTime.now()
         .toString()
         .replaceAll(':', '-')
         .replaceAll(' ', '_')
         .split('.')
         .first;
-    final backupName = '${folderName}_$timestamp.tar.zst';
+    final backupName = '${folderName}_${prefixName}_$timestamp.tar.zst';
     final outputPath = p.join(backupFolderPath, backupName);
 
     setState(() {
@@ -267,14 +297,29 @@ class _FileManagerPageState extends State<FileManagerPage> {
       backupProgress = 0.0;
       backupStatus = 'Calculating backup size...';
       processedFileSize = 0;
+      error = ''; // Clear any previous errors
     });
 
+    debugPrint('[Backup] Starting backup process');
+    debugPrint('[Backup] Source folder: $sourceFolderPath');
+    debugPrint('[Backup] Additional save paths: $saveDataPaths');
+    debugPrint('[Backup] Backup destination: $outputPath');
+
     try {
+      // Ensure backup directory exists
+      final backupDir = Directory(backupFolderPath);
+      if (!await backupDir.exists()) {
+        debugPrint('[Backup] Creating backup directory: $backupFolderPath');
+        await backupDir.create(recursive: true);
+      }
+
       // Calculate total size for progress tracking
+      debugPrint('[Backup] Calculating total size...');
       totalFileSize = await _calculateTotalSize(pathsToBackup);
+      debugPrint('[Backup] Total size to backup: ${(totalFileSize / 1024 / 1024).toStringAsFixed(2)} MB');
 
       setState(() {
-        backupStatus = 'Creating backup archive...';
+        backupStatus = 'Creating backup archive... (${(totalFileSize / 1024 / 1024).toStringAsFixed(2)} MB)';
       });
 
       // Create temporary script to handle multiple paths and progress
@@ -297,7 +342,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
             ['--exclude=*/config/*', '--exclude=*.ini', '--exclude=*.cfg']);
       }
 
-      // Create backup script that handles multiple directories
+      // Create backup script that handles multiple directories with verbose output
       String scriptContent = '''#!/bin/bash
 set -e
 
@@ -306,49 +351,80 @@ add_to_tar() {
     local path="\$1"
     local base_name="\$2"
     if [ -d "\$path" ]; then
-        echo "Adding: \$path"
-        tar rf "\$temp_tar" -C "\$(dirname "\$path")" ${excludes.join(' ')} "\$base_name" 2>/dev/null || true
+        echo "Adding directory: \$base_name"
+        tar rvf "\$temp_tar" -C "\$(dirname "\$path")" ${excludes.join(' ')} "\$base_name" 2>&1 | grep -v "Removing leading"
     fi
 }
 
 temp_tar="${tempDir.path}/backup.tar"
 rm -f "\$temp_tar"
 
+# Initialize empty tar
+tar cf "\$temp_tar" -T /dev/null 2>/dev/null || true
+
 # Add main game folder
+echo "Adding main game folder..."
 add_to_tar "$sourceFolderPath" "${p.basename(sourceFolderPath)}"
 
 ''';
 
+      // Add Wine prefix if available
+      if (selectedGame != null) {
+        final prefixPath = selectedGame!.prefix.path;
+        final prefixName = selectedGame!.prefix.name;
+        scriptContent += '''
+# Add Wine prefix
+echo "Adding Wine prefix: $prefixName"
+add_to_tar "$prefixPath" "$prefixName"
+
+''';
+      }
+
       // Add save data folders to script
-      for (final savePath in saveDataPaths) {
+      for (int i = 0; i < saveDataPaths.length; i++) {
+        final savePath = saveDataPaths[i];
         final relativePath = p.relative(savePath, from: p.dirname(savePath));
         scriptContent += '''
-# Add save data folder
+# Add save data folder ${i + 1}
+echo "Adding save data folder: $relativePath"
 add_to_tar "$savePath" "$relativePath"
 
 ''';
       }
 
-      // Complete script with compression
+      // Complete script with compression and progress
       scriptContent += '''
-# Compress with progress monitoring
-echo "Compressing archive..."
-pv "\$temp_tar" | zstd -$compressionLevel --threads=$compressionThreads > "$outputPath"
+# Get tar file size
+tar_size=\$(stat -f%z "\$temp_tar" 2>/dev/null || stat -c%s "\$temp_tar" 2>/dev/null)
+echo "Archive size: \$((tar_size / 1024 / 1024)) MB"
+
+# Compress with progress monitoring (if pv is available, otherwise use zstd directly)
+echo "Compressing archive with zstd (level $compressionLevel, threads: ${compressionThreads == 0 ? 'auto' : compressionThreads})..."
+if command -v pv &> /dev/null; then
+    pv -s \$tar_size "\$temp_tar" | zstd -$compressionLevel --threads=$compressionThreads > "$outputPath"
+else
+    echo "Note: Install 'pv' for progress bar during compression"
+    zstd -$compressionLevel --threads=$compressionThreads -v "\$temp_tar" -o "$outputPath"
+fi
 
 # Cleanup
 rm -f "\$temp_tar"
-echo "Backup complete!"
+echo "Backup complete: $backupName"
 ''';
 
       // Write script
       await File(scriptPath).writeAsString(scriptContent);
       await Process.run('chmod', ['+x', scriptPath]);
 
+      debugPrint('[Backup] Created backup script at: $scriptPath');
+      debugPrint('[Backup] Script content:\n$scriptContent');
+
       // Start backup process
       final process = await Process.start('bash', [scriptPath]);
 
-      // Monitor progress using file size
-      Timer.periodic(const Duration(milliseconds: 500), (timer) async {
+      // Monitor progress using file size with better tracking
+      Timer? progressTimer;
+      progressTimer = Timer.periodic(const Duration(milliseconds: 500), (timer) async {
         if (!backupInProgress) {
           timer.cancel();
           return;
@@ -361,15 +437,18 @@ echo "Backup complete!"
             // Estimate progress based on compression ratio (rough estimate)
             final estimatedProgress =
                 (currentSize * 3) / totalFileSize; // Assume 3:1 compression
-            setState(() {
-              backupProgress = estimatedProgress.clamp(
-                  0.0, 0.95); // Don't show 100% until done
-              backupStatus =
-                  'Creating backup... ${(backupProgress * 100).toStringAsFixed(1)}%';
-            });
+            if (mounted) {
+              setState(() {
+                backupProgress = estimatedProgress.clamp(
+                    0.0, 0.95); // Don't show 100% until done
+                backupStatus =
+                    'Creating backup... ${(backupProgress * 100).toStringAsFixed(1)}%';
+              });
+            }
           }
         } catch (e) {
           // Ignore errors during progress monitoring
+          debugPrint('Progress monitoring error: $e');
         }
       });
 
@@ -378,25 +457,57 @@ echo "Backup complete!"
         debugPrint('Backup output: $data');
         if (mounted) {
           setState(() {
-            backupStatus = data.trim().isNotEmpty ? data.trim() : backupStatus;
+            if (data.trim().isNotEmpty) {
+              backupStatus = data.trim();
+            }
           });
         }
       });
 
       process.stderr.transform(const SystemEncoding().decoder).listen((data) {
-        debugPrint('Backup error: $data');
+        debugPrint('Backup stderr: $data');
+        if (mounted && data.trim().isNotEmpty) {
+          // zstd sends progress info to stderr, so check if it's actually an error
+          final trimmedData = data.trim();
+          if (trimmedData.contains('Error') || 
+              trimmedData.contains('error') || 
+              trimmedData.contains('failed') ||
+              trimmedData.contains('Failed')) {
+            setState(() {
+              error = 'Backup error: $trimmedData';
+            });
+          } else if (trimmedData.contains('%')) {
+            // Parse progress from zstd output: "32.17% (94.0 MiB => 30.3 MiB)"
+            final percentMatch = RegExp(r'(\d+\.?\d*)%').firstMatch(trimmedData);
+            if (percentMatch != null) {
+              final percent = double.tryParse(percentMatch.group(1) ?? '0') ?? 0;
+              setState(() {
+                backupProgress = (percent / 100).clamp(0.0, 1.0);
+                backupStatus = 'Compressing: ${trimmedData.split('(').first.trim()}';
+              });
+            }
+          } else if (trimmedData.contains('MiB')) {
+            // This is progress information from zstd
+            setState(() {
+              backupStatus = trimmedData;
+            });
+          }
+        }
       });
 
       final exitCode = await process.exitCode;
+      progressTimer.cancel();
 
       if (exitCode != 0) {
         throw Exception('Backup process failed with exit code $exitCode');
       }
 
-      setState(() {
-        backupProgress = 1.0;
-        backupStatus = 'Backup completed successfully!';
-      });
+      if (mounted) {
+        setState(() {
+          backupProgress = 1.0;
+          backupStatus = 'Backup completed successfully!';
+        });
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -407,10 +518,12 @@ echo "Backup complete!"
       // Cleanup temp directory
       await tempDir.delete(recursive: true);
     } catch (e) {
-      setState(() {
-        error = 'Backup error: $e';
-        backupStatus = 'Backup failed: $e';
-      });
+      if (mounted) {
+        setState(() {
+          error = 'Backup error: $e';
+          backupStatus = 'Backup failed: $e';
+        });
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -420,88 +533,14 @@ echo "Backup complete!"
         );
       }
     } finally {
-      setState(() {
-        backupInProgress = false;
-      });
-    }
-  }
-
-  Future<void> _decompressFile(String filePath) async {
-    // Ask for destination directory
-    final String? destinationDir = await FilePicker.platform.getDirectoryPath(
-      initialDirectory: p.dirname(filePath),
-    );
-
-    if (destinationDir == null) return;
-
-    setState(() {
-      backupInProgress = true;
-      backupProgress = 0.0;
-    });
-
-    try {
-      final fileName = p.basename(filePath);
-
-      // Create command based on file type
-      String cmd;
-      if (fileName.endsWith('.tar.zst')) {
-        cmd =
-            'pv -n "$filePath" | zstd -d --threads=$compressionThreads | tar xf - -C "$destinationDir"';
-      } else if (fileName.endsWith('.zst')) {
-        final outFile =
-            p.join(destinationDir, p.basenameWithoutExtension(fileName));
-        cmd =
-            'pv -n "$filePath" | zstd -d --threads=$compressionThreads > "$outFile"';
-      } else {
-        throw Exception('Unsupported file format');
+      if (mounted) {
+        setState(() {
+          backupInProgress = false;
+        });
       }
-
-      final process = await Process.start('sh', ['-c', cmd]);
-
-      // Listen to stderr for pv progress
-      process.stderr.transform(const SystemEncoding().decoder).listen((data) {
-        try {
-          final progress = double.parse(data.trim()) / 100.0;
-          setState(() {
-            backupProgress = progress.clamp(0.0, 1.0);
-          });
-        } catch (_) {}
-      });
-
-      final exitCode = await process.exitCode;
-
-      if (exitCode != 0) {
-        throw Exception('Extraction failed with exit code $exitCode');
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('File extracted to $destinationDir')),
-      );
-    } catch (e) {
-      setState(() {
-        error = 'Extraction error: $e';
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error extracting file: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    } finally {
-      setState(() {
-        backupInProgress = false;
-      });
     }
   }
 
-  String _formatFileSize(int bytes) {
-    if (bytes < 1024) return '${bytes}B';
-    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)}KB';
-    if (bytes < 1024 * 1024 * 1024) {
-      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)}MB';
-    }
-    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)}GB';
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -547,16 +586,17 @@ echo "Backup complete!"
                         ],
                       ),
                     );
-                  }).toList(),
+                  }),
                 ];
               },
             ),
         ],
       ),
-      body: Column(
-        children: [
-          // Top half - Game folder selection and backup options
-          Container(
+      body: SingleChildScrollView(
+        child: Column(
+          children: [
+            // Top half - Game folder selection and backup options
+            Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: theme.colorScheme.surface,
@@ -683,14 +723,14 @@ echo "Backup complete!"
                     decoration: BoxDecoration(
                       border: Border.all(color: theme.dividerColor),
                       borderRadius: BorderRadius.circular(4),
-                      color: theme.colorScheme.surface.withOpacity(0.5),
+                      color: theme.colorScheme.surface.withValues(alpha:0.5),
                     ),
                     child: Row(
                       children: [
                         Icon(Icons.info_outline,
                             size: 16,
                             color:
-                                theme.colorScheme.onSurface.withOpacity(0.6)),
+                                theme.colorScheme.onSurface.withValues(alpha:0.6)),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
@@ -728,7 +768,7 @@ echo "Backup complete!"
                               fontFamily: 'monospace',
                               fontSize: 11,
                               color:
-                                  theme.colorScheme.onSurface.withOpacity(0.7),
+                                  theme.colorScheme.onSurface.withValues(alpha:0.7),
                             ),
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -745,6 +785,43 @@ echo "Backup complete!"
                     ),
                   ),
                 const SizedBox(height: 16),
+
+                // What will be backed up summary
+                if (sourceFolderPath.isNotEmpty) ...[
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primaryContainer.withValues(alpha: 0.3),
+                      border: Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.5)),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.info_outline, size: 16, color: theme.colorScheme.primary),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Backup will include:',
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: theme.colorScheme.primary,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        _buildBackupItem('Game Folder', p.basename(sourceFolderPath), theme),
+                        if (selectedGame != null)
+                          _buildBackupItem('Wine Prefix', selectedGame!.prefix.name, theme),
+                        if (saveDataPaths.isNotEmpty)
+                          _buildBackupItem('Save Data', '${saveDataPaths.length} folder(s)', theme),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
 
                 // Backup options
                 Text(
@@ -905,7 +982,7 @@ echo "Backup complete!"
           if (error.isNotEmpty)
             Container(
               padding: const EdgeInsets.all(8),
-              color: Colors.red.withOpacity(0.1),
+              color: Colors.red.withValues(alpha:0.1),
               child: Row(
                 children: [
                   const Icon(Icons.error, color: Colors.red, size: 16),
@@ -923,7 +1000,8 @@ echo "Backup complete!"
                 ],
               ),
             ),
-        ],
+          ],
+        ),
       ),
     );
   }

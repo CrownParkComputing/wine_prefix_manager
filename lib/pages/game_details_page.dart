@@ -138,7 +138,7 @@ class _GameDetailsPageState extends State<GameDetailsPage> with SingleTickerProv
                 borderRadius: BorderRadius.circular(12),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.3),
+                    color: Colors.black.withValues(alpha:0.3),
                     blurRadius: 10,
                     offset: const Offset(0, 5),
                   ),
@@ -213,7 +213,7 @@ class _GameDetailsPageState extends State<GameDetailsPage> with SingleTickerProv
                 builder: (context, settingsProvider, child) {
                   final categories = settingsProvider.settings.categories;
                   return DropdownButtonFormField<String?>(
-                    value: _selectedCategory,
+                    initialValue: _selectedCategory,
                     decoration: const InputDecoration(
                       labelText: 'Category',
                       border: OutlineInputBorder(),
@@ -430,7 +430,7 @@ class _GameDetailsPageState extends State<GameDetailsPage> with SingleTickerProv
             width: double.infinity,
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Theme.of(context).primaryColor.withOpacity(0.1),
+              color: Theme.of(context).primaryColor.withValues(alpha:0.1),
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(4),
                 topRight: Radius.circular(4),

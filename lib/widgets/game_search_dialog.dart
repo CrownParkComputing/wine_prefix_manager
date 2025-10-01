@@ -7,10 +7,10 @@ class GameSearchDialog extends StatefulWidget {
   final Future<Map<String, dynamic>> Function(String query) onSearch;
 
   const GameSearchDialog({
-    Key? key,
+    super.key,
     required this.initialQuery,
     required this.onSearch,
-  }) : super(key: key);
+  });
 
   @override
   State<GameSearchDialog> createState() => _GameSearchDialogState();

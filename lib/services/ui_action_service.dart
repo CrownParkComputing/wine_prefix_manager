@@ -2,8 +2,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:path/path.dart' as p;
-import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 // Models
 import '../models/prefix_models.dart';
@@ -20,7 +18,6 @@ import '../providers/prefix_provider.dart';
 import 'log_service.dart';
 import 'igdb_service.dart';
 import 'process_service.dart';
-import 'prefix_management_service.dart';
 import '../config/api_keys.dart';
 
 // Widgets & Dialogs
@@ -36,9 +33,6 @@ import '../widgets/text_input_dialog.dart';
 // For now, keeping only the ones that are clearly generic dialog widgets used by this service.
 // If specific page-based dialogs are needed, they are usually invoked via Navigator.push with the page route.
 
-// TODO: Create a Winetricks Verbs Dialog widget
-// import '../widgets/winetricks_verbs_dialog.dart';
-
 class UIActionService {
   final LogService _logService;
   // Keep references to other services needed by the methods
@@ -46,8 +40,6 @@ class UIActionService {
   final ProcessService _processService;
   final PrefixProvider _prefixProvider; // Need provider for updates
   final Settings _settings; // Need settings
-  // Add PrefixManagementService if needed by runWinecfg later
-  final PrefixManagementService _prefixManagementService; // Added
 
   // Constructor updated to accept necessary services/providers/settings
   UIActionService({
@@ -56,16 +48,11 @@ class UIActionService {
     required ProcessService processService,
     required PrefixProvider prefixProvider,
     required Settings settings,
-    // Inject PrefixManagementService
-    PrefixManagementService? prefixManagementService, // Make optional for now
   })  : _logService = logService,
         _igdbService = igdbService,
         _processService = processService,
         _prefixProvider = prefixProvider,
-        _settings = settings,
-        // Initialize, potentially with a default instance if not provided
-        _prefixManagementService =
-            prefixManagementService ?? PrefixManagementService();
+        _settings = settings;
 
   // Removed _addLog helper, using _logService.log directly
 
@@ -77,9 +64,20 @@ class UIActionService {
     final rootContext = Navigator.of(context, rootNavigator: true).context;
 
     try {
-      final typeGroup =
-          const XTypeGroup(label: 'Executables', extensions: ['exe', 'msi', 'bat']);
-      final result = await openFile(acceptedTypeGroups: [typeGroup]);
+      // Configure type groups to show executable files and allow all files
+      const executableTypeGroup = XTypeGroup(
+        label: 'Executable files',
+        extensions: ['exe', 'msi', 'bat'],
+      );
+      const allFilesTypeGroup = XTypeGroup(
+        label: 'All files',
+        extensions: ['*'],
+      );
+      
+      final result = await openFile(
+        confirmButtonText: 'Select Executable',
+        acceptedTypeGroups: [executableTypeGroup, allFilesTypeGroup],
+      );
 
       if (result == null) {
         _logService.log('Executable selection cancelled.');
@@ -88,7 +86,26 @@ class UIActionService {
 
       final filePath = result.path;
       final fileName = p.basename(filePath);
+      final fileExtension = p.extension(fileName).toLowerCase();
+      
+      // Validate that the selected file is actually an executable
+      if (!['.exe', '.msi', '.bat'].contains(fileExtension)) {
+        _logService.log('Invalid file type selected: $fileExtension for file: $fileName');
+        if (rootContext.mounted) {
+          ScaffoldMessenger.of(rootContext).showSnackBar(
+            const SnackBar(
+              content: Text('Please select an executable file (.exe, .msi, or .bat)'),
+              duration: Duration(seconds: 3),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
+      
       final exeName = p.basenameWithoutExtension(fileName);
+
+      _logService.log('Selected executable: $filePath');
 
       // Check if executable already exists in this prefix
       if (_prefixProvider.prefixes
@@ -108,6 +125,8 @@ class UIActionService {
       }
 
       // --- Ask if it's a game ---
+      // Check if context is still mounted before showing dialog
+      if (!rootContext.mounted) return;
       final isGame = await showDialog<bool>(
         context: rootContext,
         barrierDismissible: false,
@@ -136,6 +155,8 @@ class UIActionService {
 
       if (isGame) {
         // --- Get Game Name for Search ---
+        // Check if context is still mounted before showing dialog
+        if (!rootContext.mounted) return;
         final gameNameToSearch = await showDialog<String>(
           context: rootContext,
           builder: (dialogContext) => TextInputDialog(
@@ -170,8 +191,7 @@ class UIActionService {
                   gameNameToSearch, _settings, token);
 
               if (searchResults.isNotEmpty) {
-                // TODO: Potentially show a selection dialog if multiple results?
-                // For now, just take the first result.
+                // Take the first result from search
                 final IgdbGame firstMatch = searchResults.first;
                 _logService.log(
                     'Found IGDB match: ${firstMatch.name} (ID: ${firstMatch.id})');
@@ -242,10 +262,15 @@ class UIActionService {
     } catch (e) {
       _logService.log('Error adding executable: $e', LogLevel.error);
       if (rootContext.mounted) {
+        final errorMessage = e.toString().contains('file') || e.toString().contains('picker') || e.toString().contains('dialog')
+            ? 'Error opening file picker. Please ensure GTK file dialogs are working properly. Error: $e'
+            : 'Error adding executable: $e';
+        
         ScaffoldMessenger.of(rootContext).showSnackBar(
           SnackBar(
-              content: Text('Error adding executable: $e'),
-              duration: const Duration(seconds: 3)),
+              content: Text(errorMessage),
+              duration: const Duration(seconds: 5),
+              backgroundColor: Colors.red),
         );
       }
     }
@@ -324,18 +349,45 @@ class UIActionService {
           await launchGame(entry);
         },
         onEditExePath: (gameEntry) async {
-          // FIX: Rename parameter to onEditExePath
-          final typeGroup = const XTypeGroup(
-              label: 'Executables', extensions: ['exe', 'msi', 'bat']);
+          // Configure type groups to show executable files and allow all files
+          const executableTypeGroup = XTypeGroup(
+            label: 'Executable files',
+            extensions: ['exe', 'msi', 'bat'],
+          );
+          const allFilesTypeGroup = XTypeGroup(
+            label: 'All files',
+            extensions: ['*'],
+          );
+          
           final result = await openFile(
-              acceptedTypeGroups: [typeGroup],
-              initialDirectory: p.dirname(gameEntry.exe.path));
+              confirmButtonText: 'Select New Executable',
+              initialDirectory: p.dirname(gameEntry.exe.path),
+              acceptedTypeGroups: [executableTypeGroup, allFilesTypeGroup]);
+          
           if (result != null) {
             final newPath = result.path;
+            final fileName = p.basename(newPath);
+            final fileExtension = p.extension(fileName).toLowerCase();
+            
+            // Validate the selected file is an executable
+            if (!['.exe', '.msi', '.bat'].contains(fileExtension)) {
+              _logService.log('Invalid file type selected for exe path: $fileExtension for file: $fileName');
+              if (dialogContext.mounted) {
+                ScaffoldMessenger.of(dialogContext).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please select an executable file (.exe, .msi, or .bat)'),
+                    duration: Duration(seconds: 3),
+                    backgroundColor: Colors.orange,
+                  ),
+                );
+              }
+              return;
+            }
+            
             // Use injected PrefixProvider instance
             await _prefixProvider.updateExecutablePath(
                 gameEntry.prefix, gameEntry.exe, newPath); // Use gameEntry
-            if (Navigator.of(dialogContext).canPop()) {
+            if (dialogContext.mounted && Navigator.of(dialogContext).canPop()) {
               Navigator.of(dialogContext).pop();
             }
           }
@@ -421,7 +473,7 @@ class UIActionService {
                 'Updated metadata for ${gameEntry.exe.name} from search.'); // Use log
 
             // Pop the details dialog
-            if (Navigator.of(dialogContext).canPop()) {
+            if (dialogContext.mounted && Navigator.of(dialogContext).canPop()) {
               Navigator.of(dialogContext).pop();
             }
           }
@@ -479,12 +531,40 @@ class UIActionService {
   Future<void> runInstallerInPrefix(
       BuildContext context, WinePrefix prefix) async {
     try {
-      final typeGroup =
-          const XTypeGroup(label: 'Installers', extensions: ['exe', 'msi']);
-      final result = await openFile(acceptedTypeGroups: [typeGroup]);
+      // Configure type groups to show installer files and allow all files
+      const installerTypeGroup = XTypeGroup(
+        label: 'Installer files',
+        extensions: ['exe', 'msi', 'bat', 'setup'],
+      );
+      const allFilesTypeGroup = XTypeGroup(
+        label: 'All files',
+        extensions: ['*'],
+      );
+      
+      final result = await openFile(
+        confirmButtonText: 'Select Installer',
+        acceptedTypeGroups: [installerTypeGroup, allFilesTypeGroup],
+      );
+      
       if (result != null) {
         final installerPath = result.path;
         final installerName = p.basename(installerPath);
+        final fileExtension = p.extension(installerName).toLowerCase();
+        
+        // Validate installer file type
+        if (!['.exe', '.msi'].contains(fileExtension)) {
+          _logService.log('Invalid installer type selected: $fileExtension for file: $installerName');
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Please select an installer file (.exe or .msi)'),
+                duration: Duration(seconds: 3),
+                backgroundColor: Colors.orange,
+              ),
+            );
+          }
+          return;
+        }
 
         _logService.log(
             'Attempting to run installer "$installerName" in prefix "${prefix.name}"...');
@@ -653,7 +733,7 @@ class UIActionService {
         .toList();
 
     // Show dialog with a stateful builder to manage state
-    bool? result = await showDialog<bool>(
+    await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
         return StatefulBuilder(

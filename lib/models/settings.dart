@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:path/path.dart' as path;
 import '../utils/path_utils.dart';
+import '../utils/logger.dart';
 
 enum CoverSize {
   small,
@@ -154,7 +155,6 @@ class Settings {
 }
 
 class AppSettings {
-  static const String _appName = 'wine_prefix_manager';
   static const String _settingsFileName = 'settings.json';
   static const String _defaultPrefixesSubDir = 'prefixes';
   static const String _defaultGameLibraryFileName = 'game_library.json';
@@ -172,7 +172,7 @@ class AppSettings {
         }
       }
     } catch (e) {
-      print('Error loading settings from $settingsFilePath: $e');
+      logError('Error loading settings from $settingsFilePath', e);
     }
 
     // Fallback to default settings
@@ -211,7 +211,7 @@ class AppSettings {
       final dir = Directory(baseAppDataPath);
       if (!await dir.exists()) {
         await dir.create(recursive: true);
-        print('Created base app data directory: $baseAppDataPath');
+        logInfo('Created base app data directory: $baseAppDataPath');
       }
 
       final file = File(settingsFilePath);
@@ -253,19 +253,19 @@ class AppSettings {
             if (existingGameLibraryPath != null && existingGameLibraryPath.isNotEmpty) {
               // If an old valid path exists and current settings has it null, preserve it.
               // This might be for settings loaded before path consolidation.
-              print('Preserving existing gameLibraryPath from file: $existingGameLibraryPath over current null value.');
+              logInfo('Preserving existing gameLibraryPath from file: $existingGameLibraryPath over current null value.');
               settingsToSave = settingsToSave.copyWith(gameLibraryPath: existingGameLibraryPath);
             }
           }
         } catch (e) {
-          print('Error trying to preserve gameLibraryPath from disk: $e');
+          logError('Error trying to preserve gameLibraryPath from disk', e);
         }
       }
 
 
       await file.writeAsString(jsonEncode(settingsToSave.toJson()));
     } catch (e) {
-      print('Error saving settings to $settingsFilePath: $e');
+      logError('Error saving settings to $settingsFilePath', e);
     }
   }
 

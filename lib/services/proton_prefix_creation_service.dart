@@ -8,7 +8,7 @@ import '../models/wine_build.dart';
 import '../models/prefix_models.dart';
 import 'log_service.dart';
 import 'wine_component_installer.dart';
-import 'prefix_management_service.dart';
+import '../utils/logger.dart';
 
 typedef StatusCallback = void Function(String status);
 typedef ProgressCallback = void Function(double progress);
@@ -21,7 +21,6 @@ class ProtonPrefixCreationService {
   final Shell _shell = Shell(verbose: false);
   final LogService _logService = LogService();
   final WineComponentInstaller _componentInstaller = WineComponentInstaller();
-  final PrefixManagementService _prefixManagementService = PrefixManagementService();
 
   // Add a field to track the selected build for directory organization
   BaseBuild? _lastSelectedBuild;
@@ -40,9 +39,9 @@ class ProtonPrefixCreationService {
     onStatusUpdate('Starting Proton prefix creation for "$prefixName" ($architecture)...');
     _logService.log('Starting Proton prefix creation for "$prefixName" ($architecture)...');
 
-    print('CREATE_PREFIX_DEBUG: (PRINT) [PROTON] selectedBuild.name = ${selectedBuild?.name}');
-    print('CREATE_PREFIX_DEBUG: (PRINT) [PROTON] selectedBuild.downloadUrl = ${selectedBuild?.downloadUrl}');
-    print('CREATE_PREFIX_DEBUG: (PRINT) [PROTON] selectedBuild.installPath = ${selectedBuild?.installPath}');
+    logDebug('CREATE_PREFIX_DEBUG: (PRINT) [PROTON] selectedBuild.name = ${selectedBuild?.name}');
+    logDebug('CREATE_PREFIX_DEBUG: (PRINT) [PROTON] selectedBuild.downloadUrl = ${selectedBuild?.downloadUrl}');
+    logDebug('CREATE_PREFIX_DEBUG: (PRINT) [PROTON] selectedBuild.installPath = ${selectedBuild?.installPath}');
 
     if (selectedBuild == null) {
       onStatusUpdate('Error: A build must be selected for Proton prefixes.');
@@ -87,9 +86,9 @@ class ProtonPrefixCreationService {
       final fileName = selectedBuild.name;
       final filePath = path.join(downloadDir, fileName);
 
-      print('CREATE_PREFIX_DEBUG: (PRINT) [PROTON] downloadDir = $downloadDir');
-      print('CREATE_PREFIX_DEBUG: (PRINT) [PROTON] fileName = $fileName');
-      print('CREATE_PREFIX_DEBUG: (PRINT) [PROTON] filePath = $filePath');
+      logDebug('CREATE_PREFIX_DEBUG: (PRINT) [PROTON] downloadDir = $downloadDir');
+      logDebug('CREATE_PREFIX_DEBUG: (PRINT) [PROTON] fileName = $fileName');
+      logDebug('CREATE_PREFIX_DEBUG: (PRINT) [PROTON] filePath = $filePath');
 
       if (!File(filePath).existsSync()) {
         _logService.log('Starting download to $filePath');
@@ -127,8 +126,8 @@ class ProtonPrefixCreationService {
       extractedName = extractedName.replaceAll('.tar.xz', '').replaceAll('.tar.gz', '').replaceAll('.tar.bz2', '').replaceAll('.tar.zst', '');
       extractedDir = path.join(downloadDir, extractedName);
 
-      print('CREATE_PREFIX_DEBUG: (PRINT) [PROTON] extractedName = $extractedName');
-      print('CREATE_PREFIX_DEBUG: (PRINT) [PROTON] (initial) extractedDir = $extractedDir');
+      logDebug('CREATE_PREFIX_DEBUG: (PRINT) [PROTON] extractedName = $extractedName');
+      logDebug('CREATE_PREFIX_DEBUG: (PRINT) [PROTON] (initial) extractedDir = $extractedDir');
 
       // Check if extraction is needed
       if (!await Directory(extractedDir).exists() || await Directory(extractedDir).list().isEmpty) {
@@ -248,7 +247,7 @@ class ProtonPrefixCreationService {
 
       // 5. Initialize Prefix
       onStatusUpdate('Initializing prefix ($architecture, this might take a moment)...');
-      print('CREATE_PREFIX_DEBUG: (PRINT) [PROTON] Calling _initializeProtonPrefix with buildPath = $extractedDir');
+      logDebug('CREATE_PREFIX_DEBUG: (PRINT) [PROTON] Calling _initializeProtonPrefix with buildPath = $extractedDir');
       await _initializeProtonPrefix(prefixPath, extractedDir, architecture, settings, onStatusUpdate, selectedBuild);
       _logService.log('Proton prefix initialized.');
 
@@ -392,13 +391,13 @@ class ProtonPrefixCreationService {
     StatusCallback onStatusUpdate,
     BaseBuild? selectedBuild
   ) async {
-    print('INIT_PREFIX_DEBUG: (PRINT) [PROTON] Received buildPath = $buildPath');
+    logDebug('INIT_PREFIX_DEBUG: (PRINT) [PROTON] Received buildPath = $buildPath');
     
     _logService.log('Initializing Proton prefix at $prefixPath using build from $buildPath');
 
     // Find the Proton run script (e.g., proton, wine, or a specific script)
     String protonRunScript = await _findProtonRunScript(buildPath);
-    print('INIT_PREFIX_DEBUG: (PRINT) [PROTON] Found protonRunScript = $protonRunScript');
+    logDebug('INIT_PREFIX_DEBUG: (PRINT) [PROTON] Found protonRunScript = $protonRunScript');
     
     _logService.log('Using Proton run script: $protonRunScript');
 

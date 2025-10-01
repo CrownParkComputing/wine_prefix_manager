@@ -7,7 +7,7 @@ import '../models/prefix_models.dart';
 class CreatePrefixPage extends StatefulWidget {
   final VoidCallback? onSuccess;
 
-  const CreatePrefixPage({Key? key, this.onSuccess}) : super(key: key);
+  const CreatePrefixPage({super.key, this.onSuccess});
 
   @override
   State<CreatePrefixPage> createState() => _CreatePrefixPageState();

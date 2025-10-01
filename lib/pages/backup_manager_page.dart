@@ -7,7 +7,7 @@ import 'package:file_picker/file_picker.dart';
 import '../models/settings.dart';
 
 class BackupManagerPage extends StatefulWidget {
-  const BackupManagerPage({Key? key}) : super(key: key);
+  const BackupManagerPage({super.key});
 
   @override
   State<BackupManagerPage> createState() => _BackupManagerPageState();
@@ -522,7 +522,7 @@ class _BackupManagerPageState extends State<BackupManagerPage> {
           if (error.isNotEmpty)
             Container(
               padding: const EdgeInsets.all(8),
-              color: Colors.red.withOpacity(0.1),
+              color: Colors.red.withValues(alpha:0.1),
               child: Row(
                 children: [
                   const Icon(Icons.error, color: Colors.red, size: 16),
@@ -531,6 +531,8 @@ class _BackupManagerPageState extends State<BackupManagerPage> {
                     child: Text(
                       error,
                       style: const TextStyle(color: Colors.red),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   IconButton(
@@ -546,11 +548,14 @@ class _BackupManagerPageState extends State<BackupManagerPage> {
             Container(
               padding: const EdgeInsets.all(16),
               child: Column(
+                mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     extractStatus,
                     style: theme.textTheme.bodyMedium,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 8),
                   LinearProgressIndicator(
@@ -586,20 +591,20 @@ class _BackupManagerPageState extends State<BackupManagerPage> {
                                 Icon(
                                   Icons.folder_open,
                                   size: 64,
-                                  color: theme.colorScheme.onSurface.withOpacity(0.5),
+                                  color: theme.colorScheme.onSurface.withValues(alpha:0.5),
                                 ),
                                 const SizedBox(height: 16),
                                 Text(
                                   'No backups found',
                                   style: theme.textTheme.headlineSmall?.copyWith(
-                                    color: theme.colorScheme.onSurface.withOpacity(0.5),
+                                    color: theme.colorScheme.onSurface.withValues(alpha:0.5),
                                   ),
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
                                   'Create backups from the Files tab or change the backup folder',
                                   style: theme.textTheme.bodyMedium?.copyWith(
-                                    color: theme.colorScheme.onSurface.withOpacity(0.7),
+                                    color: theme.colorScheme.onSurface.withValues(alpha:0.7),
                                   ),
                                   textAlign: TextAlign.center,
                                 ),

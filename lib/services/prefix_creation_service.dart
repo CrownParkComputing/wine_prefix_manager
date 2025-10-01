@@ -1,5 +1,3 @@
-import 'package:dio/dio.dart';
-import 'package:process_run/shell.dart';
 import '../models/settings.dart';
 import '../models/wine_build.dart';
 import '../models/prefix_models.dart';
@@ -12,8 +10,6 @@ typedef ProgressCallback = void Function(double progress); // Progress 0.0 to 1.
 
 /// Main prefix creation service that delegates to specialized services based on prefix type
 class PrefixCreationService {
-  final Dio _dio = Dio();
-  final Shell _shell = Shell(verbose: false);
   final LogService _logService = LogService();
   
   // Specialized services

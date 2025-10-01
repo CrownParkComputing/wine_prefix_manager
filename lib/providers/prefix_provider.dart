@@ -6,9 +6,9 @@ import '../models/settings.dart';
 import '../services/prefix_storage_service.dart';
 import '../services/prefix_management_service.dart';
 import '../services/cover_art_service.dart';
-import '../services/igdb_service.dart'; // Import IgdbService
 // Import IgdbGame model
 import 'package:flutter/material.dart';
+import '../utils/logger.dart';
 
 class PrefixProvider with ChangeNotifier {
   List<WinePrefix> _prefixes = [];
@@ -20,8 +20,6 @@ class PrefixProvider with ChangeNotifier {
   final PrefixStorageService _storageService = PrefixStorageService();
   final PrefixManagementService _managementService = PrefixManagementService();
   final CoverArtService _coverArtService = CoverArtService();
-  final PrefixStorageService _prefixStorageService = PrefixStorageService();
-  final IgdbService _igdbService = IgdbService(); // Add IgdbService instance
 
   List<WinePrefix> get prefixes => List.unmodifiable(_prefixes);
   bool get isLoading => _isLoading;
@@ -63,7 +61,7 @@ class PrefixProvider with ChangeNotifier {
     if (_isLoading && !forceReload) return;
     
     _setLoading(true, forceReload ? "Refreshing prefixes..." : "Loading prefixes...");
-    print('[DEBUG PrefixProvider] Starting loadPrefixes');
+    logDebug('[DEBUG PrefixProvider] Starting loadPrefixes');
     try {
       if (_settings == null) throw Exception("Settings not loaded before loading prefixes.");
       
@@ -71,9 +69,9 @@ class PrefixProvider with ChangeNotifier {
       // await _cleanupInvalidPrefixes();
       
       List<WinePrefix> loadedPrefixes = await _storageService.loadPrefixes(_settings!);
-      print('[DEBUG PrefixProvider] Loaded ${loadedPrefixes.length} prefixes from storage');
+      logDebug('[DEBUG PrefixProvider] Loaded ${loadedPrefixes.length} prefixes from storage');
       for (final prefix in loadedPrefixes) {
-        print('[DEBUG PrefixProvider] - Storage: ${prefix.name} (${prefix.type.name}) at ${prefix.path}');
+        logDebug('[DEBUG PrefixProvider] - Storage: ${prefix.name} (${prefix.type.name}) at ${prefix.path}');
       }
 
       // Clean up orphaned JSON entries (prefixes that no longer have directories)
@@ -81,7 +79,7 @@ class PrefixProvider with ChangeNotifier {
       
       // Reload after cleanup
       loadedPrefixes = await _storageService.loadPrefixes(_settings!);
-      print('[DEBUG PrefixProvider] After cleanup: ${loadedPrefixes.length} prefixes');
+      logDebug('[DEBUG PrefixProvider] After cleanup: ${loadedPrefixes.length} prefixes');
 
       bool prefixesUpdated = false;
       List<WinePrefix> checkedPrefixes = [];
@@ -107,9 +105,9 @@ class PrefixProvider with ChangeNotifier {
       }
 
       _prefixes = checkedPrefixes;
-      print('[DEBUG PrefixProvider] Set _prefixes to ${_prefixes.length} items');
+      logDebug('[DEBUG PrefixProvider] Set _prefixes to ${_prefixes.length} items');
       for (final prefix in _prefixes) {
-        print('[DEBUG PrefixProvider] - Final: ${prefix.name} (${prefix.type.name}) with ${prefix.exeEntries.length} executables');
+        logDebug('[DEBUG PrefixProvider] - Final: ${prefix.name} (${prefix.type.name}) with ${prefix.exeEntries.length} executables');
       }
 
       if (prefixesUpdated) {
@@ -120,62 +118,20 @@ class PrefixProvider with ChangeNotifier {
       }
 
       await checkAndDownloadMissingImages(); // Check images after loading
-      print('[DEBUG PrefixProvider] About to call notifyListeners()');
+      logDebug('[DEBUG PrefixProvider] About to call notifyListeners()');
       notifyListeners();
-      print('[DEBUG PrefixProvider] Called notifyListeners()');
+      logDebug('[DEBUG PrefixProvider] Called notifyListeners()');
     } catch (e) {
       _updateStatus('Error loading prefixes: $e');
-      print('[DEBUG PrefixProvider] Error loading prefixes: $e');
+      logError('[DEBUG PrefixProvider] Error loading prefixes', e);
       // debugPrint('Error loading prefixes: $e');
     } finally {
       _setLoading(false);
-      print('[DEBUG PrefixProvider] loadPrefixes completed');
+      logDebug('[DEBUG PrefixProvider] loadPrefixes completed');
     }
   }
 
   /// Cleans up any prefix folders that don't have a system.reg file
-  Future<void> _cleanupInvalidPrefixes() async {
-    try {
-      if (_settings == null) return;
-      
-      final prefixesDir = Directory(_settings!.prefixDirectory);
-      if (!await prefixesDir.exists()) return;
-
-      final entities = await prefixesDir.list().toList();
-      int cleanedCount = 0;
-
-      for (final entity in entities) {
-        if (entity is Directory) {
-          // Only consider cleaning directories that look like Wine prefixes
-          // A Wine prefix should have drive_c folder
-          final driveCFolder = Directory(p.join(entity.path, 'drive_c'));
-          final systemRegFile = File(p.join(entity.path, 'system.reg'));
-          
-          // Only clean up if:
-          // 1. It has a drive_c folder (looks like a Wine prefix)
-          // 2. But is missing system.reg (incomplete/corrupted prefix)
-          if (await driveCFolder.exists() && !await systemRegFile.exists()) {
-            try {
-              // This looks like an incomplete Wine prefix, remove it
-              await entity.delete(recursive: true);
-              cleanedCount++;
-              print('Cleaned up incomplete Wine prefix: ${p.basename(entity.path)}');
-            } catch (e) {
-              print('Failed to clean up incomplete prefix ${p.basename(entity.path)}: $e');
-            }
-          }
-          // If it doesn't have drive_c, it's probably not a Wine prefix - leave it alone
-        }
-      }
-
-      if (cleanedCount > 0) {
-        print('Startup cleanup: Removed $cleanedCount incomplete Wine prefix folder(s)');
-      }
-    } catch (e) {
-      print('Error during prefix cleanup: $e');
-    }
-  }
-
   Future<void> savePrefixes() async {
     if (_settings == null) {
        _updateStatus('Error saving prefixes: Settings not loaded.');
@@ -479,8 +435,6 @@ class PrefixProvider with ChangeNotifier {
     // debugPrint("[checkAndDownloadMissingImages] Starting check for missing local images (forceCheck: $forceCheck)...");
     bool requiresSave = false;
     // Removed fetchedCovers/fetchedScreenshots counters
-    int downloadedCovers = 0;
-    int downloadedScreenshots = 0;
 
     List<WinePrefix> updatedPrefixesList = List.from(_prefixes);
     // Removed token variable
@@ -512,7 +466,7 @@ class PrefixProvider with ChangeNotifier {
            if (localPath != null && localPath != entry.localCoverPath) {
               // debugPrint("[checkAndDownloadMissingImages] Downloaded/Verified cover at: $localPath");
               currentUpdatedEntry = currentUpdatedEntry.copyWith(localCoverPath: localPath);
-              if (coverMissingLocally) downloadedCovers++;
+              // Downloaded cover art
               requiresSave = true;
               entryUpdated = true;
            } else if (localPath != null) {
@@ -534,7 +488,7 @@ class PrefixProvider with ChangeNotifier {
            if (localPaths.isNotEmpty && !_listEquals(localPaths, entry.localScreenshotPaths)) {
                  // debugPrint("[checkAndDownloadMissingImages] Downloaded/Verified ${localPaths.length} screenshots.");
                  currentUpdatedEntry = currentUpdatedEntry.copyWith(localScreenshotPaths: localPaths);
-                 if (screenshotsMissingLocally) downloadedScreenshots += localPaths.length;
+                 // Downloaded screenshots
                  requiresSave = true;
                  entryUpdated = true;
               } else if (localPaths.isNotEmpty) {
@@ -674,17 +628,17 @@ class PrefixProvider with ChangeNotifier {
           validPrefixes.add(prefix);
         } else {
           needsCleanup = true;
-          print('Removing orphaned prefix entry: ${prefix.name} (directory no longer exists)');
+          logInfo('Removing orphaned prefix entry: ${prefix.name} (directory no longer exists)');
         }
       }
       
       if (needsCleanup) {
         // Save the cleaned list back to JSON
         await _storageService.savePrefixes(validPrefixes, _settings!);
-        print('JSON cleanup: Removed ${loadedPrefixes.length - validPrefixes.length} orphaned prefix entries');
+        logInfo('JSON cleanup: Removed ${loadedPrefixes.length - validPrefixes.length} orphaned prefix entries');
       }
     } catch (e) {
-      print('Error during JSON cleanup: $e');
+      logError('Error during JSON cleanup', e);
     }
   }
 }

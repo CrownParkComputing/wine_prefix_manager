@@ -10,14 +10,15 @@ import '../services/power_management_service.dart'; // Import PowerManagementSer
 import '../theme/theme_provider.dart';
 import '../providers/settings_provider.dart';
 import '../widgets/json_viewer_page.dart'; // Import the JSON viewer
+import '../utils/logger.dart';
 
 class SettingsPage extends StatefulWidget {
   final Function? onSettingsChanged;
 
-  const SettingsPage({Key? key, this.onSettingsChanged}) : super(key: key);
+  const SettingsPage({super.key, this.onSettingsChanged});
 
   @override
-  _SettingsPageState createState() => _SettingsPageState();
+  State<SettingsPage> createState() => _SettingsPageState();
 }
 
 class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderStateMixin {
@@ -34,7 +35,6 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
 
   bool _isLoading = true;
   CoverSize _selectedCoverSize = CoverSize.medium;
-  String _imageCachePath = 'Loading...';
 
   // Create a dummy settings instance to access default URL values
   final _defaultSettingsInstance = Settings(
@@ -83,9 +83,8 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
 
     final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
     final settings = settingsProvider.settings;
-    String cachePath = 'Error loading path';
     try {
-      cachePath = await CoverArtService().getImageCacheDirectoryPath();
+      await CoverArtService().getImageCacheDirectoryPath(); // Load cache path but don't store it
     } catch (e) {
       // Error getting image cache path
     }
@@ -97,7 +96,7 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
       _selectedCoverSize = settings.coverSize;
       _gameLibraryPathController.text = settings.gameLibraryPath ?? '';
       _backupPathController.text = settings.backupPath ?? ''; // Add backup path to the initialization
-      _imageCachePath = cachePath;
+      // Image cache path loaded but not stored since field was removed
       _twitchOAuthUrlController.text = settings.twitchOAuthUrl;
       _igdbApiBaseUrlController.text = settings.igdbApiBaseUrl;
       _igdbImageBaseUrlController.text = settings.igdbImageBaseUrl;
@@ -307,7 +306,7 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
                       // The viewer will report if the file isn't found.
                     }
                   } catch (e) {
-                    print('Error accessing directory for game library path: $e');
+                    logError('Error accessing directory for game library path', e);
                   }
                 }
 
@@ -458,35 +457,6 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
     );
   }
 
-  Widget _buildUrlSettingField({
-    required TextEditingController controller,
-    required String label,
-    required String hint,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: TextFormField(
-        controller: controller,
-        decoration: InputDecoration(
-          labelText: label,
-          hintText: hint,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8.0),
-          ),
-        ),
-        validator: (value) {
-          if (value != null && value.trim().isNotEmpty) {
-            // Corrected Uri.isAbsolute check
-            if (!(Uri.tryParse(value.trim())?.isAbsolute == true)) {
-              return 'Please enter a valid URL';
-            }
-          }
-          return null; // Allow empty if it's optional, or add specific empty check if required
-        },
-      ),
-    );
-  }
-
   Widget _buildDirectoryPicker({
     required String label,
     required TextEditingController controller,
@@ -556,7 +526,7 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
           : TabBar(
               controller: _tabController,
               labelColor: Theme.of(context).colorScheme.primary,
-              unselectedLabelColor: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+              unselectedLabelColor: Theme.of(context).colorScheme.onSurface.withValues(alpha:0.7),
               indicatorSize: TabBarIndicatorSize.tab,
               indicatorWeight: 3,
               indicatorColor: Theme.of(context).colorScheme.primary,

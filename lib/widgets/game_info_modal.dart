@@ -91,7 +91,7 @@ class _GameInfoModalState extends State<GameInfoModal> {
                             borderRadius: BorderRadius.circular(8),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.3),
+                                color: Colors.black.withValues(alpha:0.3),
                                 blurRadius: 8,
                                 offset: const Offset(0, 4),
                               ),
@@ -386,7 +386,7 @@ class _GameInfoModalState extends State<GameInfoModal> {
                               borderRadius: BorderRadius.circular(8),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withOpacity(0.2),
+                                  color: Colors.black.withValues(alpha:0.2),
                                   blurRadius: 4,
                                   offset: const Offset(0, 2),
                                 ),
@@ -405,7 +405,7 @@ class _GameInfoModalState extends State<GameInfoModal> {
                                     child: Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                       decoration: BoxDecoration(
-                                        color: Colors.black.withOpacity(0.7),
+                                        color: Colors.black.withValues(alpha:0.7),
                                         borderRadius: BorderRadius.circular(12),
                                       ),
                                       child: Text(
@@ -425,7 +425,7 @@ class _GameInfoModalState extends State<GameInfoModal> {
                                     child: Container(
                                       padding: const EdgeInsets.all(4),
                                       decoration: BoxDecoration(
-                                        color: Colors.black.withOpacity(0.7),
+                                        color: Colors.black.withValues(alpha:0.7),
                                         borderRadius: BorderRadius.circular(12),
                                       ),
                                       child: const Icon(
@@ -443,7 +443,7 @@ class _GameInfoModalState extends State<GameInfoModal> {
                                       child: Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                         decoration: BoxDecoration(
-                                          color: Colors.blue.withOpacity(0.8),
+                                          color: Colors.blue.withValues(alpha:0.8),
                                           borderRadius: BorderRadius.circular(8),
                                         ),
                                         child: const Text(
@@ -479,7 +479,7 @@ class _GameInfoModalState extends State<GameInfoModal> {
                         begin: Alignment.centerLeft,
                         end: Alignment.centerRight,
                         colors: [
-                          Colors.white.withOpacity(0.3),
+                          Colors.white.withValues(alpha:0.3),
                           Colors.transparent,
                         ],
                       ),
@@ -506,7 +506,7 @@ class _GameInfoModalState extends State<GameInfoModal> {
                         begin: Alignment.centerRight,
                         end: Alignment.centerLeft,
                         colors: [
-                          Colors.white.withOpacity(0.3),
+                          Colors.white.withValues(alpha:0.3),
                           Colors.transparent,
                         ],
                       ),
@@ -654,7 +654,7 @@ class _ExpandedImageDialogState extends State<_ExpandedImageDialog> {
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    Colors.black.withOpacity(0.7),
+                    Colors.black.withValues(alpha:0.7),
                     Colors.transparent,
                   ],
                 ),
@@ -697,7 +697,7 @@ class _ExpandedImageDialogState extends State<_ExpandedImageDialog> {
                   begin: Alignment.bottomCenter,
                   end: Alignment.topCenter,
                   colors: [
-                    Colors.black.withOpacity(0.7),
+                    Colors.black.withValues(alpha:0.7),
                     Colors.transparent,
                   ],
                 ),
@@ -728,7 +728,7 @@ class _ExpandedImageDialogState extends State<_ExpandedImageDialog> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.8),
+                        color: Colors.black.withValues(alpha:0.8),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(

@@ -82,8 +82,6 @@ class WineComponentInstaller {
 
   /// Extracts a tar.zst file to a specific directory
   Future<void> _extractTarZst(String filePath, String targetDir) async {
-    final bytes = File(filePath).readAsBytesSync();
-
     // Decompress the zst file
     // Note: Dart's 'archive' package doesn't support Zstandard directly.
     // We'll use the system's `tar` command for this as a workaround.
@@ -530,7 +528,7 @@ class WineComponentInstaller {
       // Try multiple installation methods for better compatibility
       // Method 1: /install /passive /norestart
       List<String> vcInstallArgs;
-      if (isProtonExecutable && !customWineExecutable!.endsWith('/wine')) {
+      if (isProtonExecutable && !customWineExecutable.endsWith('/wine')) {
         // For true Proton scripts, use 'run' prefix
         vcInstallArgs = ['run', vcRedistPath, '/install', '/passive', '/norestart'];
       } else {
@@ -549,7 +547,7 @@ class WineComponentInstaller {
         logService.log('Trying /quiet installation method for VC++ x64');
         
         List<String> vcInstallArgs2;
-        if (isProtonExecutable && !customWineExecutable!.endsWith('/wine')) {
+        if (isProtonExecutable && !customWineExecutable.endsWith('/wine')) {
           vcInstallArgs2 = ['run', vcRedistPath, '/quiet', '/norestart'];
         } else {
           vcInstallArgs2 = [vcRedistPath, '/quiet', '/norestart'];
@@ -566,7 +564,7 @@ class WineComponentInstaller {
           logService.log('Trying GUI installation mode for VC++ x64');
           
           List<String> vcInstallArgs3;
-          if (isProtonExecutable && !customWineExecutable!.endsWith('/wine')) {
+          if (isProtonExecutable && !customWineExecutable.endsWith('/wine')) {
             vcInstallArgs3 = ['run', vcRedistPath];
           } else {
             vcInstallArgs3 = [vcRedistPath];
@@ -1062,7 +1060,7 @@ class WineComponentInstaller {
       // Try multiple installation methods for better compatibility
       // Method 1: /install /passive /norestart
       List<String> vcInstallArgs;
-      if (isProtonExecutable && !customWineExecutable!.endsWith('/wine')) {
+      if (isProtonExecutable && !customWineExecutable.endsWith('/wine')) {
         // For true Proton scripts, use 'run' prefix
         vcInstallArgs = ['run', vcRedistPath, '/install', '/passive', '/norestart'];
       } else {
@@ -1081,7 +1079,7 @@ class WineComponentInstaller {
         logService.log('Trying /quiet installation method for VC++ x86');
         
         List<String> vcInstallArgs2;
-        if (isProtonExecutable && !customWineExecutable!.endsWith('/wine')) {
+        if (isProtonExecutable && !customWineExecutable.endsWith('/wine')) {
           vcInstallArgs2 = ['run', vcRedistPath, '/quiet', '/norestart'];
         } else {
           vcInstallArgs2 = [vcRedistPath, '/quiet', '/norestart'];
@@ -1098,7 +1096,7 @@ class WineComponentInstaller {
           logService.log('Trying GUI installation mode for VC++ x86');
           
           List<String> vcInstallArgs3;
-          if (isProtonExecutable && !customWineExecutable!.endsWith('/wine')) {
+          if (isProtonExecutable && !customWineExecutable.endsWith('/wine')) {
             vcInstallArgs3 = ['run', vcRedistPath];
           } else {
             vcInstallArgs3 = [vcRedistPath];

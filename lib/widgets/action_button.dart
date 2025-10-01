@@ -8,13 +8,13 @@ class ActionButton extends StatelessWidget {
   final bool isDestructive;
 
   const ActionButton({
-    Key? key,
+    super.key,
     required this.label,
     required this.icon,
     required this.onPressed,
     this.tooltip,
     this.isDestructive = false,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

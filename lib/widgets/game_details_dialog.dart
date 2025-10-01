@@ -3,16 +3,13 @@ import 'package:flutter/material.dart';
 // import 'package:flutter/services.dart'; // No longer needed for Steam ID
 // Removed url_launcher import as we're using Process.run instead
 import 'package:intl/intl.dart'; // For date formatting
-import 'package:provider/provider.dart'; // Import Provider
 import '../models/prefix_models.dart';
 import '../models/settings.dart';
 // import '../providers/prefix_provider.dart'; // No longer needed for dynamic categories
-import '../widgets/common_components_dialog.dart'; // Import for confirmation dialog
-import '../providers/settings_provider.dart'; // Add SettingsProvider import
 
 class GameDetailsDialog extends StatefulWidget {
   final GameEntry game;
-  Settings settings; // Remove final to make it mutable
+  final Settings settings; // Make final to fix immutable class warning
   final List<WinePrefix>
       availablePrefixes; // Keep for prefix change dropdown if needed later
   final VoidCallback onLaunchGame;
@@ -24,9 +21,9 @@ class GameDetailsDialog extends StatefulWidget {
   final Function(GameEntry, String?)
       onSaveLaunchOptions; // Callback for launch options
 
-  // Remove const since settings is now mutable
-  GameDetailsDialog({
-    Key? key,
+  // Make const since all fields are final
+  const GameDetailsDialog({
+    super.key,
     required this.game,
     required this.settings,
     required this.availablePrefixes,
@@ -36,7 +33,7 @@ class GameDetailsDialog extends StatefulWidget {
     required this.onEditExePath,
     required this.onUpdateMetadata,
     required this.onSaveLaunchOptions,
-  }) : super(key: key);
+  });
 
   @override
   State<GameDetailsDialog> createState() => _GameDetailsDialogState();
@@ -73,11 +70,7 @@ class _GameDetailsDialogState extends State<GameDetailsDialog>
       // Update selected category to match current game's category
       _selectedCategory = widget.game.exe.category;
 
-      // Get fresh settings with latest categories
-      final settingsProvider =
-          Provider.of<SettingsProvider>(context, listen: false);
-      widget.settings = settingsProvider.settings;
-      setState(() {}); // Trigger a rebuild to refresh categories
+      // Get fresh settings with latest categories\n      final settingsProvider =\n          Provider.of<SettingsProvider>(context, listen: false);\n      // Use the fresh settings from provider instead of reassigning\n      setState(() {}); // Trigger a rebuild to refresh categories
     });
   }
 
@@ -163,7 +156,7 @@ class _GameDetailsDialogState extends State<GameDetailsDialog>
 
             // Tab Bar - Modified to show only icons
             Container(
-              color: Theme.of(context).primaryColor.withOpacity(0.8),
+              color: Theme.of(context).primaryColor.withValues(alpha:0.8),
               child: TabBar(
                 controller: _tabController,
                 labelColor: Colors.white,
@@ -587,7 +580,7 @@ class _GameDetailsDialogState extends State<GameDetailsDialog>
                           shape: BoxShape.circle,
                           color: _currentScreenshotIndex == index
                               ? Theme.of(context).primaryColor
-                              : Colors.grey.withOpacity(0.5),
+                              : Colors.grey.withValues(alpha:0.5),
                         ),
                       );
                     }),
@@ -727,7 +720,7 @@ class _GameDetailsDialogState extends State<GameDetailsDialog>
         return StatefulBuilder(
           builder: (stfContext, stfSetState) {
             return Dialog(
-              backgroundColor: Colors.black.withOpacity(0.8),
+              backgroundColor: Colors.black.withValues(alpha:0.8),
               insetPadding: EdgeInsets.zero, // Full screen
               child: Stack(
                 alignment: Alignment.center,

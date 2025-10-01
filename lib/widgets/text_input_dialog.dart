@@ -8,13 +8,13 @@ class TextInputDialog extends StatefulWidget {
   final String? Function(String?)? validator; // Optional validator
 
   const TextInputDialog({
-    Key? key,
+    super.key,
     required this.title,
     required this.labelText,
     this.initialValue,
     this.confirmButtonText = 'Confirm',
     this.validator,
-  }) : super(key: key);
+  });
 
   @override
   State<TextInputDialog> createState() => _TextInputDialogState();

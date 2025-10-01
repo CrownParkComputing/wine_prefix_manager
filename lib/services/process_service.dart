@@ -117,13 +117,12 @@ class ProcessService {
 
           // Wrap the onProcessExit callback to handle compressed game cleanup
           final originalOnProcessExit = onProcessExit;
-          final wrappedOnProcessExit =
-              (String exePath, int exitCode, List<String> errors) {
+          void wrappedOnProcessExit(String exePath, int exitCode, List<String> errors) {
             // Call the original callback first
             originalOnProcessExit(exePath, exitCode, errors);
             // Handle compressed game post-processing asynchronously
             _compressedGameService?.handleGameExit(exe, prefix);
-          };
+          }
 
           // Use the wrapped callback
           onProcessExit = wrappedOnProcessExit;

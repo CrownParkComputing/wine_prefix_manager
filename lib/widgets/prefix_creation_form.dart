@@ -15,11 +15,11 @@ class PrefixCreationForm extends StatefulWidget {
   final VoidCallback? onSuccess; // <<<< Added this
 
   const PrefixCreationForm({
-    Key? key, 
+    super.key, 
     required this.settings,
     this.initialPrefixType, // Optional parameter
     this.onSuccess, // <<<< Added this
-  }) : super(key: key);
+  });
 
   @override
   State<PrefixCreationForm> createState() => _PrefixCreationFormState();
@@ -229,7 +229,7 @@ class _PrefixCreationFormState extends State<PrefixCreationForm> with TickerProv
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                         filled: true,
                       ),
-                      value: _selectedArchitecture,
+                      initialValue: _selectedArchitecture,
                       items: const [
                         DropdownMenuItem(value: 'win64', child: Text('64-bit (win64)')),
                         DropdownMenuItem(value: 'win32', child: Text('32-bit (win32)')),

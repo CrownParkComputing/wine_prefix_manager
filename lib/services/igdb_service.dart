@@ -7,15 +7,27 @@ import '../models/settings.dart';
 import '../models/igdb_models.dart';
 import '../providers/settings_provider.dart';
 import '../config/api_keys.dart'; // Import the new api_keys file
+import '../utils/logger.dart';
 
 class IgdbService {
 
   Future<Map<String, dynamic>?> getIgdbToken(Settings settings) async {
     // Use global constants for Client ID and Secret
+    logDebug('[IgdbService] Checking IGDB credentials - ClientID length: ${globalIgdbClientId.length}, Secret length: ${globalIgdbClientSecret.length}');
+    
     if (globalIgdbClientId.isEmpty || globalIgdbClientSecret.isEmpty) {
-      // debugPrint('[IgdbService] Global IGDB credentials not set.');
+      logError('[IgdbService] Global IGDB credentials not set. ClientID: ${globalIgdbClientId.isEmpty ? "empty" : "set"}, Secret: ${globalIgdbClientSecret.isEmpty ? "empty" : "set"}', null);
       return null;
     }
+    
+    // Log partial credentials for debugging (first 4 and last 4 chars only)
+    final clientIdPreview = globalIgdbClientId.length >= 8 
+        ? '${globalIgdbClientId.substring(0, 4)}...${globalIgdbClientId.substring(globalIgdbClientId.length - 4)}'
+        : 'too short';
+    final secretPreview = globalIgdbClientSecret.length >= 8
+        ? '${globalIgdbClientSecret.substring(0, 4)}...${globalIgdbClientSecret.substring(globalIgdbClientSecret.length - 4)}'
+        : 'too short';
+    logDebug('[IgdbService] ClientID preview: $clientIdPreview, Secret preview: $secretPreview');
 
     if (settings.igdbAccessToken != null &&
         settings.igdbTokenExpiry != null &&
@@ -28,7 +40,7 @@ class IgdbService {
       };
     }
 
-    // debugPrint('[IgdbService] Fetching new IGDB token...');
+    logInfo('[IgdbService] Fetching new IGDB token from ${settings.twitchOAuthUrl}...');
     try {
       final response = await http.post(
         Uri.parse(settings.twitchOAuthUrl), // Use settings URL
@@ -39,22 +51,24 @@ class IgdbService {
         },
       );
 
+      logDebug('[IgdbService] Token request response status: ${response.statusCode}');
+      
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         final token = data['access_token'] as String;
         final expiresIn = Duration(seconds: data['expires_in'] as int);
         final expiryTime = DateTime.now().add(expiresIn);
-        // debugPrint('[IgdbService] Successfully fetched new IGDB token.');
+        logInfo('[IgdbService] Successfully fetched new IGDB token. Expires in ${expiresIn.inHours} hours.');
         return {
           'token': token,
           'expiry': expiryTime,
           'isNew': true,
         };
       } else {
-        // debugPrint('[IgdbService] Failed to get IGDB token: ${response.statusCode} ${response.body}');
+        logError('[IgdbService] Failed to get IGDB token. Status: ${response.statusCode}, Body: ${response.body}', null);
       }
-    } catch (e) {
-      // debugPrint('[IgdbService] Error getting IGDB token: $e');
+    } catch (e, stackTrace) {
+      logError('[IgdbService] Exception getting IGDB token: $e', stackTrace);
     }
     return null;
   }

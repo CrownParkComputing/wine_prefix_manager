@@ -7,11 +7,11 @@ class ChangePrefixDialog extends StatefulWidget {
   final Function(WinePrefix) onPrefixSelected; // Callback when confirmed
 
   const ChangePrefixDialog({
-    Key? key,
+    super.key,
     required this.gameEntry,
     required this.allPrefixes,
     required this.onPrefixSelected,
-  }) : super(key: key);
+  });
 
   @override
   State<ChangePrefixDialog> createState() => _ChangePrefixDialogState();

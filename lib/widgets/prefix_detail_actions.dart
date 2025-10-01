@@ -25,7 +25,7 @@ class PrefixDetailActions extends StatelessWidget {
   final PrefixContextActionCallback onEditEnvVariables; // Added callback for environment variables
 
   const PrefixDetailActions({
-    Key? key,
+    super.key,
     required this.prefix,
     required this.settings,
     required this.onAddExecutable,
@@ -39,7 +39,7 @@ class PrefixDetailActions extends StatelessWidget {
     required this.onRenamePrefix, // Added rename callback
     required this.onApplyControllerFix, // Added controller fix callback
     required this.onEditEnvVariables, // Added env variables callback
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

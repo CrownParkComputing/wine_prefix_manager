@@ -219,7 +219,7 @@ class GameLibraryPage extends StatelessWidget {
                             shrinkWrap: true, // Important for GridView inside ListView
                             physics: const NeverScrollableScrollPhysics(), // Disable GridView scrolling
                             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: _getCrossAxisCount(context, coverSize),
+                              crossAxisCount: _calculateCrossAxisCount(MediaQuery.of(context).size.width, coverSize),
                               childAspectRatio: _getAspectRatio(coverSize),
                               crossAxisSpacing: 16,
                               mainAxisSpacing: 16,
@@ -257,11 +257,7 @@ class GameLibraryPage extends StatelessWidget {
     );
   }
 
-  int _getCrossAxisCount(BuildContext context, CoverSize coverSize) {
-    final width = MediaQuery.of(context).size.width;
-    
-    // Base counts for each cover size
-    int baseCount;
+  int _calculateCrossAxisCount(double width, CoverSize coverSize) {
     switch (coverSize) {
       case CoverSize.small:
         if (width > 1400) return 8;
@@ -294,51 +290,6 @@ class GameLibraryPage extends StatelessWidget {
       case CoverSize.large:
         return 0.9;
     }
-  }
-
-  void _showFilterDialog(BuildContext context, String? selectedGenre, Function(String?)? onGenreSelected) {
-    // Extract unique categories from games
-    final categories = games
-        .map((game) => game.exe.category)
-        .toSet()
-        .toList()
-      ..sort((a, b) => (a ?? 'Uncategorized').compareTo(b ?? 'Uncategorized'));
-    
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Filter by Category'),
-          content: SizedBox(
-            width: double.maxFinite,
-            height: 300, // Fixed height for scrollable list
-            child: ListView.builder(
-              itemCount: categories.length,
-              itemBuilder: (context, index) {
-                final category = categories[index];
-                final isSelected = category == selectedGenre;
-                return ListTile(
-                  title: Text(category ?? 'Uncategorized'),
-                  tileColor: isSelected ? Colors.blue.withOpacity(0.2) : null,
-                  onTap: () {
-                    if (onGenreSelected != null) onGenreSelected(category);
-                    Navigator.pop(context);
-                  },
-                );
-              },
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-              },
-              child: const Text('Cancel'),
-            ),
-          ],
-        );
-      },
-    );
   }
 
   // Method to add executable to a specific prefix - uses the same UIActionService method

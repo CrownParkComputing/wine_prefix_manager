@@ -16,6 +16,9 @@ migrate_working_dir/
 .env.production
 .env.development
 
+# API keys and secrets
+lib/config/api_keys.dart
+
 # IntelliJ related
 *.iml
 *.ipr

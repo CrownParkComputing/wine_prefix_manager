@@ -6,10 +6,10 @@ class PrefixListTile extends StatelessWidget {
   final VoidCallback? onTap; // Optional callback for tapping the tile itself
 
   const PrefixListTile({
-    Key? key,
+    super.key,
     required this.prefix,
     this.onTap,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

@@ -2,6 +2,7 @@ import 'dart:io'; // Import for File class
 import 'package:flutter/material.dart';
 import '../models/prefix_models.dart';
 import '../models/settings.dart'; // Import for CoverSize enum
+import '../utils/logger.dart';
 
 // Enum to represent the launch state of a game
 // Renamed 'loading' to 'launching' for clarity
@@ -19,7 +20,7 @@ class GameCard extends StatelessWidget {
   final GameLaunchState launchState; // Current state of the game
 
   const GameCard({
-    Key? key,
+    super.key,
     required this.game,
     this.coverSize = CoverSize.medium, // Default to medium size
     this.onShowInfo, // Changed from onTap
@@ -28,7 +29,7 @@ class GameCard extends StatelessWidget {
     this.onStop,
     this.onDelete, // Add delete callback
     this.launchState = GameLaunchState.idle, // Default to idle
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -65,7 +66,7 @@ class GameCard extends StatelessWidget {
                 end: Alignment.bottomCenter,
                 colors: [
                   Colors.transparent,
-                  Colors.black.withOpacity(0.7),
+                  Colors.black.withValues(alpha:0.7),
                 ],
               ),
             ),
@@ -91,7 +92,7 @@ class GameCard extends StatelessWidget {
                         vertical: _getSmallPadding() / 2,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.blue.withOpacity(0.9),
+                        color: Colors.blue.withValues(alpha:0.9),
                         borderRadius: BorderRadius.circular(_getBorderRadius()),
                       ),
                       child: Row(
@@ -126,29 +127,29 @@ class GameCard extends StatelessWidget {
           left: _getTopPadding(),
           child: Container(
             decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.8),
+              color: Colors.black.withValues(alpha:0.8),
               borderRadius: BorderRadius.circular(_getBorderRadius() + 2),
               border: Border.all(
-                color: Colors.white.withOpacity(0.3),
+                color: Colors.white.withValues(alpha:0.3),
                 width: 1,
               ),
             ),
             child: IconButton(
               onPressed: () {
-                print(
+                logDebug(
                     'Details icon tapped for ${game.exe.name}'); // Debug print
                 onShowInfo?.call(game);
               },
-              icon: const Icon(
+              icon: Icon(
                 Icons.info_outline,
                 color: Colors.white,
-                size: 16,
+                size: _getCornerIconSize(),
               ),
               tooltip: 'Game Details',
-              padding: EdgeInsets.all(_getSmallPadding() - 2),
+              padding: EdgeInsets.all(_getCornerIconSize() * 0.3),
               constraints: BoxConstraints(
-                minWidth: _getIconAreaSize() - 12,
-                minHeight: _getIconAreaSize() - 12,
+                minWidth: _getCornerIconSize() + 8,
+                minHeight: _getCornerIconSize() + 8,
               ),
             ),
           ),
@@ -160,29 +161,29 @@ class GameCard extends StatelessWidget {
           right: _getTopPadding(),
           child: Container(
             decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.8),
+              color: Colors.black.withValues(alpha:0.8),
               borderRadius: BorderRadius.circular(_getBorderRadius() + 2),
               border: Border.all(
-                color: Colors.white.withOpacity(0.3),
+                color: Colors.white.withValues(alpha:0.3),
                 width: 1,
               ),
             ),
             child: IconButton(
               onPressed: () {
-                print(
+                logDebug(
                     'Settings icon tapped for ${game.exe.name}'); // Debug print
                 onShowSettings?.call(game);
               },
-              icon: const Icon(
+              icon: Icon(
                 Icons.settings,
                 color: Colors.white,
-                size: 16,
+                size: _getCornerIconSize(),
               ),
               tooltip: 'Game Settings',
-              padding: EdgeInsets.all(_getSmallPadding() - 2),
+              padding: EdgeInsets.all(_getCornerIconSize() * 0.3),
               constraints: BoxConstraints(
-                minWidth: _getIconAreaSize() - 12,
-                minHeight: _getIconAreaSize() - 12,
+                minWidth: _getCornerIconSize() + 8,
+                minHeight: _getCornerIconSize() + 8,
               ),
             ),
           ),
@@ -195,29 +196,29 @@ class GameCard extends StatelessWidget {
             right: _getTopPadding(),
             child: Container(
               decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.8),
+                color: Colors.red.withValues(alpha:0.8),
                 borderRadius: BorderRadius.circular(_getBorderRadius() + 2),
                 border: Border.all(
-                  color: Colors.white.withOpacity(0.3),
+                  color: Colors.white.withValues(alpha:0.3),
                   width: 1,
                 ),
               ),
               child: IconButton(
                 onPressed: () {
-                  print(
+                  logDebug(
                       'Delete icon tapped for ${game.exe.name}'); // Debug print
                   onDelete?.call(game);
                 },
-                icon: const Icon(
+                icon: Icon(
                   Icons.delete_outline,
                   color: Colors.white,
-                  size: 16,
+                  size: _getCornerIconSize(),
                 ),
                 tooltip: 'Delete Game',
-                padding: EdgeInsets.all(_getSmallPadding() - 2),
+                padding: EdgeInsets.all(_getCornerIconSize() * 0.3),
                 constraints: BoxConstraints(
-                  minWidth: _getIconAreaSize() - 12,
-                  minHeight: _getIconAreaSize() - 12,
+                  minWidth: _getCornerIconSize() + 8,
+                  minHeight: _getCornerIconSize() + 8,
                 ),
               ),
             ),
@@ -258,17 +259,17 @@ class GameCard extends StatelessWidget {
           child: Container(
             decoration: BoxDecoration(
               color: game.exe.isCompressed
-                  ? Colors.blue.withOpacity(0.8)
-                  : Colors.green.withOpacity(0.8),
+                  ? Colors.blue.withValues(alpha:0.8)
+                  : Colors.green.withValues(alpha:0.8),
               borderRadius: BorderRadius.circular(14),
               border: Border.all(
-                color: Colors.white.withOpacity(0.3),
+                color: Colors.white.withValues(alpha:0.3),
                 width: 1,
               ),
             ),
             child: IconButton(
               onPressed: () {
-                print('Play icon tapped for ${game.exe.name}'); // Debug print
+                logDebug('Play icon tapped for ${game.exe.name}'); // Debug print
                 onLaunch(game);
               },
               icon: Icon(
@@ -280,7 +281,7 @@ class GameCard extends StatelessWidget {
                             ? Icons.error_outline
                             : Icons.play_arrow,
                 color: Colors.white,
-                size: 16,
+                size: _getCornerIconSize() + 2, // Slightly larger than corner icons but still proportional
               ),
               tooltip: launchState == GameLaunchState.running
                   ? 'Stop Game'
@@ -291,10 +292,10 @@ class GameCard extends StatelessWidget {
                           : game.exe.isCompressed
                               ? 'Extract & Launch Game'
                               : 'Launch Game',
-              padding: const EdgeInsets.all(4),
-              constraints: const BoxConstraints(
-                minWidth: 28,
-                minHeight: 28,
+              padding: EdgeInsets.all(_getSmallPadding() * 0.4),
+              constraints: BoxConstraints(
+                minWidth: _getCornerIconSize() + 10,
+                minHeight: _getCornerIconSize() + 10,
               ),
             ),
           ),
@@ -313,11 +314,11 @@ class GameCard extends StatelessWidget {
             child: InkWell(
               onTap: () {
                 // This area is for launching the game
-                print('Launch area tapped for ${game.exe.name}'); // Debug print
+                logDebug('Launch area tapped for ${game.exe.name}'); // Debug print
                 onLaunch(game);
               },
-              splashColor: Colors.white.withOpacity(0.1),
-              highlightColor: Colors.white.withOpacity(0.05),
+              splashColor: Colors.white.withValues(alpha:0.1),
+              highlightColor: Colors.white.withValues(alpha:0.05),
             ),
           ),
         ),
@@ -336,7 +337,7 @@ class GameCard extends StatelessWidget {
         return Container(
           padding: EdgeInsets.all(_getSmallPadding() * 2),
           decoration: BoxDecoration(
-            color: Colors.green.withOpacity(0.2),
+            color: Colors.green.withValues(alpha:0.2),
             shape: BoxShape.circle,
           ),
           child: SizedBox(
@@ -352,12 +353,12 @@ class GameCard extends StatelessWidget {
         return Container(
           padding: EdgeInsets.all(_getSmallPadding() * 2),
           decoration: BoxDecoration(
-            color: Colors.red.withOpacity(0.2),
+            color: Colors.red.withValues(alpha:0.2),
             shape: BoxShape.circle,
           ),
           child: IconButton(
             onPressed: () {
-              print('Stop icon tapped for ${game.exe.name}'); // Debug print
+              logDebug('Stop icon tapped for ${game.exe.name}'); // Debug print
               onStop?.call(game);
             },
             icon: Icon(
@@ -372,7 +373,7 @@ class GameCard extends StatelessWidget {
         return Container(
           padding: EdgeInsets.all(_getSmallPadding() * 2),
           decoration: BoxDecoration(
-            color: Colors.orange.withOpacity(0.2),
+            color: Colors.orange.withValues(alpha:0.2),
             shape: BoxShape.circle,
           ),
           child: Icon(
@@ -386,12 +387,12 @@ class GameCard extends StatelessWidget {
         return Container(
           padding: EdgeInsets.all(_getSmallPadding()),
           decoration: BoxDecoration(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withValues(alpha:0.1),
             shape: BoxShape.circle,
           ),
           child: Icon(
             Icons.gamepad,
-            color: Colors.white.withOpacity(0.3),
+            color: Colors.white.withValues(alpha:0.3),
             size: _getCenterIconSize() * 0.8,
           ),
         );
@@ -418,16 +419,6 @@ class GameCard extends StatelessWidget {
   }
 
   // Helper method to format play time
-  String _formatPlayTime(int minutes) {
-    if (minutes < 60) {
-      return '$minutes min';
-    } else {
-      final hours = minutes ~/ 60;
-      final remainingMinutes = minutes % 60;
-      return '$hours h ${remainingMinutes > 0 ? '$remainingMinutes m' : ''}';
-    }
-  }
-
   double _getBottomGradientHeight() {
     switch (coverSize) {
       case CoverSize.small:
@@ -505,14 +496,14 @@ class GameCard extends StatelessWidget {
     }
   }
 
-  double _getRegularIconSize() {
+  double _getCornerIconSize() {
     switch (coverSize) {
       case CoverSize.small:
-        return 20.0;
+        return 8.0;
       case CoverSize.medium:
-        return 24.0;
+        return 9.0;
       case CoverSize.large:
-        return 28.0;
+        return 12.0;
     }
   }
 

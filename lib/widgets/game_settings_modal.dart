@@ -242,7 +242,7 @@ class _GameSettingsModalState extends State<GameSettingsModal> {
                           builder: (context, settingsProvider, child) {
                             final categories = settingsProvider.settings.categories;
                             return DropdownButtonFormField<String?>(
-                              value: _selectedCategory,
+                              initialValue: _selectedCategory,
                               decoration: const InputDecoration(
                                 border: OutlineInputBorder(),
                                 labelText: 'Game Category',
@@ -343,7 +343,7 @@ class _GameSettingsModalState extends State<GameSettingsModal> {
                                 decoration: BoxDecoration(
                                   border: Border.all(color: Theme.of(context).dividerColor),
                                   borderRadius: BorderRadius.circular(4),
-                                  color: Colors.grey.withOpacity(0.1),
+                                  color: Colors.grey.withValues(alpha:0.1),
                                 ),
                                 child: Text(
                                   widget.game.exe.compressedArchivePath ?? 'Unknown',
@@ -400,7 +400,7 @@ class _GameSettingsModalState extends State<GameSettingsModal> {
                                       ],
                                     ),
                                   );
-                                }).toList(),
+                                }),
                               ] else ...[
                                 Container(
                                   width: double.infinity,
@@ -408,7 +408,7 @@ class _GameSettingsModalState extends State<GameSettingsModal> {
                                   decoration: BoxDecoration(
                                     border: Border.all(color: Theme.of(context).dividerColor),
                                     borderRadius: BorderRadius.circular(4),
-                                    color: Colors.grey.withOpacity(0.05),
+                                    color: Colors.grey.withValues(alpha:0.05),
                                   ),
                                   child: const Text(
                                     'No save data folders configured',

@@ -8,13 +8,12 @@ import '../models/prefix_models.dart';
 import 'log_service.dart'; // Add log service import
 import 'package:http/http.dart' as http;
 import 'wine_component_installer.dart'; // Add import for WineComponentInstaller
-import 'package:dio/dio.dart';
 import '../utils/path_utils.dart'; // Import the path utility
-import 'process_service.dart'; // Added for ProcessService
+// Added for ProcessService
+import '../utils/logger.dart';
 
 class PrefixManagementService {
   final LogService _logService = LogService(); // Add log service
-  final Dio _dio = Dio(); // For potential network operations if needed in future
 
   PrefixManagementService() {
     _initializeLogService();
@@ -25,7 +24,7 @@ class PrefixManagementService {
       await _logService.initialize();
     } catch (e) {
       // If the initialization fails, we'll continue without logging
-      print('Error initializing LogService: $e');
+      logError('Error initializing LogService', e);
     }
   }
 
@@ -39,20 +38,20 @@ class PrefixManagementService {
     String effectivePrefixBaseDir;
     // final homeDir = Platform.environment['HOME']; // No longer directly needed here for default path
 
-    print('[DEBUG] scanForPrefixes called with settings.prefixDirectory: ${settings.prefixDirectory}');
+    logDebug('[DEBUG] scanForPrefixes called with settings.prefixDirectory: ${settings.prefixDirectory}');
 
     // Priority 1: User-defined absolute path in settings
     if (settings.prefixDirectory.isNotEmpty && path.isAbsolute(settings.prefixDirectory)) {
       if (await Directory(settings.prefixDirectory).exists()) {
         effectivePrefixBaseDir = settings.prefixDirectory;
-        print('[DEBUG] Using user-defined directory: $effectivePrefixBaseDir');
+        logDebug('[DEBUG] Using user-defined directory: $effectivePrefixBaseDir');
         _logService.log('Scanning for prefixes in user-defined directory: $effectivePrefixBaseDir');
       } else {
         _logService.log('User-defined prefix directory "${settings.prefixDirectory}" does not exist. Falling back to default.', LogLevel.warning);
         // Fallback to default if user-defined path is invalid
         final baseAppDataPath = await getBaseAppDataPath();
         effectivePrefixBaseDir = path.join(baseAppDataPath, 'prefixes');
-        print('[DEBUG] Fallback to default: $effectivePrefixBaseDir');
+        logDebug('[DEBUG] Fallback to default: $effectivePrefixBaseDir');
         _logService.log('Using default scan path: $effectivePrefixBaseDir due to invalid user setting.');
       }
     } else {
@@ -63,12 +62,12 @@ class PrefixManagementService {
       }
       final baseAppDataPath = await getBaseAppDataPath();
       effectivePrefixBaseDir = path.join(baseAppDataPath, 'prefixes');
-      print('[DEBUG] Using default directory: $effectivePrefixBaseDir');
+      logDebug('[DEBUG] Using default directory: $effectivePrefixBaseDir');
       _logService.log('Scanning for prefixes in default directory: $effectivePrefixBaseDir');
     }
 
-    print('[DEBUG] Final effectivePrefixBaseDir: $effectivePrefixBaseDir');
-    print('[DEBUG] Directory exists: ${await Directory(effectivePrefixBaseDir).exists()}');
+    logDebug('[DEBUG] Final effectivePrefixBaseDir: $effectivePrefixBaseDir');
+    logDebug('[DEBUG] Directory exists: ${await Directory(effectivePrefixBaseDir).exists()}');
 
     if (!await Directory(effectivePrefixBaseDir).exists()) {
       _logService.log('Base prefix directory for scanning does not exist: $effectivePrefixBaseDir');
@@ -90,15 +89,15 @@ class PrefixManagementService {
 
     for (final typeSubdir in typeSubdirs) {
       final typeDirPath = path.join(effectivePrefixBaseDir, typeSubdir);
-      print('[DEBUG] Checking type subdirectory: $typeDirPath');
+      logDebug('[DEBUG] Checking type subdirectory: $typeDirPath');
       
       if (!Directory(typeDirPath).existsSync()) {
-        print('[DEBUG] Subdirectory does not exist: $typeDirPath');
+        logDebug('[DEBUG] Subdirectory does not exist: $typeDirPath');
         _logService.log('Skipping non-existent subdirectory: $typeDirPath');
         continue;
       }
 
-      print('[DEBUG] Scanning subdirectory: $typeDirPath');
+      logDebug('[DEBUG] Scanning subdirectory: $typeDirPath');
       _logService.log('Scanning subdirectory: $typeDirPath');
       
       // Get all directories in this type subdirectory
@@ -115,11 +114,11 @@ class PrefixManagementService {
         
         // Skip if we've already processed this path
         if (processedPaths.contains(dirPath)) {
-          print('[DEBUG] Already processed: $dirPath');
+          logDebug('[DEBUG] Already processed: $dirPath');
           continue;
         }
         
-        print('[DEBUG] Found directory: $dirPath');
+        logDebug('[DEBUG] Found directory: $dirPath');
         _logService.log('Checking directory: $dirPath');
         
         // Check if this directory has a pfx subdirectory with Wine files
@@ -132,7 +131,7 @@ class PrefixManagementService {
         // If this directory has a pfx subdirectory with Wine files, 
         // mark both the parent and pfx paths as processed and only process the parent
         if (hasPfxWineFiles && Directory(pfxDir).existsSync()) {
-          print('[DEBUG] Found Proton prefix structure: $dirPath with pfx subdirectory');
+          logDebug('[DEBUG] Found Proton prefix structure: $dirPath with pfx subdirectory');
           _logService.log('Found Proton prefix structure with pfx subdirectory: $dirPath');
           
           // Mark both paths as processed to avoid duplicate detection
@@ -142,23 +141,23 @@ class PrefixManagementService {
           // Process the parent directory (it will internally use the pfx path for the actual prefix)
           try {
             final WinePrefix? prefix = await _processDirectory(dirPath, typeSubdir);
-            print('[DEBUG] _processDirectory returned: ${prefix?.name ?? 'null'}');
+            logDebug('[DEBUG] _processDirectory returned: ${prefix?.name ?? 'null'}');
             if (prefix != null) {
               // Validate the prefix before adding
               final bool isValid = await _validatePrefix(prefix);
-              print('[DEBUG] Prefix validation result: $isValid for ${prefix.name}');
+              logDebug('[DEBUG] Prefix validation result: $isValid for ${prefix.name}');
               if (isValid) {
                 prefixes.add(prefix);
-                print('[DEBUG] Added valid prefix: ${prefix.name}');
+                logDebug('[DEBUG] Added valid prefix: ${prefix.name}');
                 _logService.log('Added prefix: ${prefix.name}, type: ${prefix.type.name}, arch: ${prefix.architecture}, path: ${prefix.path}');
               } else {
                 invalidPrefixes.add(prefix);
-                print('[DEBUG] Prefix marked as invalid: ${prefix.name}');
+                logDebug('[DEBUG] Prefix marked as invalid: ${prefix.name}');
                 _logService.log('Found invalid prefix: ${prefix.name} at ${prefix.path}', LogLevel.warning);
               }
             }
           } catch (e) {
-            print('[DEBUG] Error processing directory $dirPath: $e');
+            logDebug('[DEBUG] Error processing directory $dirPath: $e');
             _logService.log('Error processing directory $dirPath: $e', LogLevel.error);
           }
         } else {
@@ -167,23 +166,23 @@ class PrefixManagementService {
           
           try {
             final WinePrefix? prefix = await _processDirectory(dirPath, typeSubdir);
-            print('[DEBUG] _processDirectory returned: ${prefix?.name ?? 'null'}');
+            logDebug('[DEBUG] _processDirectory returned: ${prefix?.name ?? 'null'}');
             if (prefix != null) {
               // Validate the prefix before adding
               final bool isValid = await _validatePrefix(prefix);
-              print('[DEBUG] Prefix validation result: $isValid for ${prefix.name}');
+              logDebug('[DEBUG] Prefix validation result: $isValid for ${prefix.name}');
               if (isValid) {
                 prefixes.add(prefix);
-                print('[DEBUG] Added valid prefix: ${prefix.name}');
+                logDebug('[DEBUG] Added valid prefix: ${prefix.name}');
                 _logService.log('Added prefix: ${prefix.name}, type: ${prefix.type.name}, arch: ${prefix.architecture}, path: ${prefix.path}');
               } else {
                 invalidPrefixes.add(prefix);
-                print('[DEBUG] Prefix marked as invalid: ${prefix.name}');
+                logDebug('[DEBUG] Prefix marked as invalid: ${prefix.name}');
                 _logService.log('Found invalid prefix: ${prefix.name} at ${prefix.path}', LogLevel.warning);
               }
             }
           } catch (e) {
-            print('[DEBUG] Error processing directory $dirPath: $e');
+            logDebug('[DEBUG] Error processing directory $dirPath: $e');
             _logService.log('Error processing directory $dirPath: $e', LogLevel.error);
           }
         }
@@ -196,7 +195,7 @@ class PrefixManagementService {
       await _cleanupInvalidPrefixes(invalidPrefixes);
     }
 
-    print('[DEBUG] Scan complete. Found ${prefixes.length} valid prefixes.');
+    logDebug('[DEBUG] Scan complete. Found ${prefixes.length} valid prefixes.');
     _logService.log('Scan complete. Found ${prefixes.length} valid prefixes.');
     return prefixes;
   }
@@ -206,28 +205,28 @@ class PrefixManagementService {
     try {
       final homeDir = Platform.environment['HOME'];
       if (homeDir == null || homeDir.isEmpty) {
-        print('[DEBUG] HOME environment variable not found, skipping default Wine prefix scan');
+        logDebug('[DEBUG] HOME environment variable not found, skipping default Wine prefix scan');
         _logService.log('HOME environment variable not found, skipping default Wine prefix scan', LogLevel.warning);
         return;
       }
 
       final defaultWinePrefixPath = path.join(homeDir, '.wine');
-      print('[DEBUG] Checking for default Wine prefix at: $defaultWinePrefixPath');
+      logDebug('[DEBUG] Checking for default Wine prefix at: $defaultWinePrefixPath');
       _logService.log('Checking for default Wine prefix at: $defaultWinePrefixPath');
 
       if (!Directory(defaultWinePrefixPath).existsSync()) {
-        print('[DEBUG] Default Wine prefix not found at: $defaultWinePrefixPath');
+        logDebug('[DEBUG] Default Wine prefix not found at: $defaultWinePrefixPath');
         _logService.log('Default Wine prefix not found at: $defaultWinePrefixPath');
         return;
       }
 
-      print('[DEBUG] Found default Wine prefix directory: $defaultWinePrefixPath');
+      logDebug('[DEBUG] Found default Wine prefix directory: $defaultWinePrefixPath');
       _logService.log('Found default Wine prefix directory: $defaultWinePrefixPath');
 
       // Check if this prefix is already in our managed prefixes (avoid duplicates)
       final alreadyExists = prefixes.any((p) => p.path == defaultWinePrefixPath);
       if (alreadyExists) {
-        print('[DEBUG] Default Wine prefix already exists in managed prefixes, skipping');
+        logDebug('[DEBUG] Default Wine prefix already exists in managed prefixes, skipping');
         _logService.log('Default Wine prefix already exists in managed prefixes, skipping');
         return;
       }
@@ -240,27 +239,27 @@ class PrefixManagementService {
           name: 'default-wine-prefix',
         );
         
-        print('[DEBUG] Processed default Wine prefix: ${namedDefaultPrefix.name}');
+        logDebug('[DEBUG] Processed default Wine prefix: ${namedDefaultPrefix.name}');
         
         // Validate the prefix before adding
         final bool isValid = await _validatePrefix(namedDefaultPrefix);
-        print('[DEBUG] Default Wine prefix validation result: $isValid');
+        logDebug('[DEBUG] Default Wine prefix validation result: $isValid');
         
         if (isValid) {
           prefixes.add(namedDefaultPrefix);
-          print('[DEBUG] Added valid default Wine prefix: ${namedDefaultPrefix.name}');
+          logDebug('[DEBUG] Added valid default Wine prefix: ${namedDefaultPrefix.name}');
           _logService.log('Added default Wine prefix: ${namedDefaultPrefix.name}, type: ${namedDefaultPrefix.type.name}, arch: ${namedDefaultPrefix.architecture}, path: ${namedDefaultPrefix.path}');
         } else {
           invalidPrefixes.add(namedDefaultPrefix);
-          print('[DEBUG] Default Wine prefix marked as invalid: ${namedDefaultPrefix.name}');
+          logDebug('[DEBUG] Default Wine prefix marked as invalid: ${namedDefaultPrefix.name}');
           _logService.log('Found invalid default Wine prefix: ${namedDefaultPrefix.name} at ${namedDefaultPrefix.path}', LogLevel.warning);
         }
       } else {
-        print('[DEBUG] Failed to process default Wine prefix directory');
+        logDebug('[DEBUG] Failed to process default Wine prefix directory');
         _logService.log('Failed to process default Wine prefix directory: $defaultWinePrefixPath', LogLevel.warning);
       }
     } catch (e) {
-      print('[DEBUG] Error scanning default Wine prefix: $e');
+      logDebug('[DEBUG] Error scanning default Wine prefix: $e');
       _logService.log('Error scanning default Wine prefix: $e', LogLevel.error);
     }
   }
@@ -268,11 +267,11 @@ class PrefixManagementService {
   /// Validates a prefix to ensure it's usable
   Future<bool> _validatePrefix(WinePrefix prefix) async {
     try {
-      print('[DEBUG] Validating prefix: ${prefix.name} at ${prefix.path}');
+      logDebug('[DEBUG] Validating prefix: ${prefix.name} at ${prefix.path}');
       
       // Check 1: Prefix directory must exist and contain essential Wine files
       if (!Directory(prefix.path).existsSync()) {
-        print('[DEBUG] Validation failed: Prefix directory does not exist: ${prefix.path}');
+        logDebug('[DEBUG] Validation failed: Prefix directory does not exist: ${prefix.path}');
         _logService.log('Prefix directory does not exist: ${prefix.path}', LogLevel.warning);
         return false;
       }
@@ -282,22 +281,20 @@ class PrefixManagementService {
       final userReg = File(path.join(prefix.path, 'user.reg'));
       final driveC = Directory(path.join(prefix.path, 'drive_c'));
       
-      print('[DEBUG] Essential files check:');
-      print('[DEBUG] - system.reg exists: ${systemReg.existsSync()}');
-      print('[DEBUG] - user.reg exists: ${userReg.existsSync()}');
-      print('[DEBUG] - drive_c exists: ${driveC.existsSync()}');
+      _logService.log('Essential files check:');
+    _logService.log('Checking files - system.reg: ${systemReg.existsSync()}, user.reg: ${userReg.existsSync()}, drive_c: ${driveC.existsSync()}');
       
       if (!systemReg.existsSync() && !userReg.existsSync() && !driveC.existsSync()) {
-        print('[DEBUG] Validation failed: Prefix missing essential Wine files: ${prefix.path}');
+        logDebug('[DEBUG] Validation failed: Prefix missing essential Wine files: ${prefix.path}');
         _logService.log('Prefix missing essential Wine files: ${prefix.path}', LogLevel.warning);
         return false;
       }
 
       // Check 2: Build path must exist (if specified)
       if (prefix.wineBuildPath.isNotEmpty) {
-        print('[DEBUG] Checking build path: ${prefix.wineBuildPath}');
+        logDebug('[DEBUG] Checking build path: ${prefix.wineBuildPath}');
         if (!Directory(prefix.wineBuildPath).existsSync()) {
-          print('[DEBUG] Validation failed: Build path does not exist: ${prefix.wineBuildPath}');
+          logDebug('[DEBUG] Validation failed: Build path does not exist: ${prefix.wineBuildPath}');
           _logService.log('Build path does not exist: ${prefix.wineBuildPath}', LogLevel.warning);
           return false;
         }
@@ -311,7 +308,7 @@ class PrefixManagementService {
             // Try proton.sh as alternative
             expectedExecutable = path.join(prefix.wineBuildPath, 'proton.sh');
             if (!File(expectedExecutable).existsSync()) {
-              print('[DEBUG] Validation failed: Proton script not found in build path: ${prefix.wineBuildPath}');
+              logDebug('[DEBUG] Validation failed: Proton script not found in build path: ${prefix.wineBuildPath}');
               _logService.log('Proton script not found in build path: ${prefix.wineBuildPath}', LogLevel.warning);
               return false;
             }
@@ -319,46 +316,46 @@ class PrefixManagementService {
         } else {
           // For Wine, check for wine executable
           expectedExecutable = path.join(prefix.wineBuildPath, 'bin', 'wine');
-          print('[DEBUG] Checking for wine executable: $expectedExecutable');
+          logDebug('[DEBUG] Checking for wine executable: $expectedExecutable');
           if (!File(expectedExecutable).existsSync()) {
-            print('[DEBUG] Validation failed: Wine executable not found in build path: $expectedExecutable');
+            logDebug('[DEBUG] Validation failed: Wine executable not found in build path: $expectedExecutable');
             _logService.log('Wine executable not found in build path: $expectedExecutable', LogLevel.warning);
             return false;
           }
-          print('[DEBUG] Wine executable found: $expectedExecutable');
+          logDebug('[DEBUG] Wine executable found: $expectedExecutable');
         }
       } else if (prefix.type == PrefixType.wine) {
         // For Wine prefixes without a build path (like default ~/.wine), check if system Wine is available
-        print('[DEBUG] No build path specified, checking for system Wine availability');
+        logDebug('[DEBUG] No build path specified, checking for system Wine availability');
         try {
           final result = await Process.run('which', ['wine']);
           if (result.exitCode == 0) {
-            print('[DEBUG] System Wine found: ${result.stdout.toString().trim()}');
+            logDebug('[DEBUG] System Wine found: ${result.stdout.toString().trim()}');
             _logService.log('System Wine found for prefix ${prefix.name}: ${result.stdout.toString().trim()}');
           } else {
-            print('[DEBUG] Validation failed: System Wine not found and no build path specified');
+            logDebug('[DEBUG] Validation failed: System Wine not found and no build path specified');
             _logService.log('System Wine not found and no build path specified for prefix: ${prefix.name}', LogLevel.warning);
             return false;
           }
         } catch (e) {
-          print('[DEBUG] Error checking for system Wine: $e');
+          logDebug('[DEBUG] Error checking for system Wine: $e');
           _logService.log('Error checking for system Wine for prefix ${prefix.name}: $e', LogLevel.warning);
           return false;
         }
       }
 
       // Check 3: Architecture must be valid
-      print('[DEBUG] Checking architecture: ${prefix.architecture}');
+      logDebug('[DEBUG] Checking architecture: ${prefix.architecture}');
       if (prefix.architecture != 'win32' && prefix.architecture != 'win64') {
-        print('[DEBUG] Validation failed: Invalid architecture: ${prefix.architecture}');
+        logDebug('[DEBUG] Validation failed: Invalid architecture: ${prefix.architecture}');
         _logService.log('Invalid architecture: ${prefix.architecture}', LogLevel.warning);
         return false;
       }
 
-      print('[DEBUG] Validation passed for prefix: ${prefix.name}');
+      logDebug('[DEBUG] Validation passed for prefix: ${prefix.name}');
       return true;
     } catch (e) {
-      print('[DEBUG] Validation error for prefix ${prefix.name}: $e');
+      logDebug('[DEBUG] Validation error for prefix ${prefix.name}: $e');
       _logService.log('Error validating prefix ${prefix.name}: $e', LogLevel.error);
       return false;
     }
@@ -489,7 +486,7 @@ class PrefixManagementService {
       environmentVariables: {},
     );
 
-    print('[DEBUG] _processDirectory returned: $prefixName');
+    logDebug('[DEBUG] _processDirectory returned: $prefixName');
     return prefix;
   }
 
@@ -998,7 +995,6 @@ class PrefixManagementService {
     try {
       progressCallback?.call('Installing VKD3D-Proton to Kronek Proton prefix: ${prefix.name}');
       final env = await _prepareEnvironment(prefix);
-      final winePath = env['WINE'] ?? 'wine';
       
       // Download the latest version of VKD3D from GitHub
       const specificVersion = 'v2.14.1';

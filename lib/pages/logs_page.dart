@@ -6,10 +6,9 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:file_saver/file_saver.dart';
-import 'package:cross_file/cross_file.dart';
 
 class LogsPage extends StatefulWidget {
-  const LogsPage({Key? key}) : super(key: key);
+  const LogsPage({super.key});
 
   @override
   State<LogsPage> createState() => _LogsPageState();
@@ -28,24 +27,11 @@ class _LogsPageState extends State<LogsPage> {
   }
 
   // Filter logs based on level and search query
-  List<LogEntry> _getFilteredLogs() {
-    final allLogs = _logService.getLogs();
-    return allLogs.where((log) {
-      // Filter by level
-      if (log.level.index < _filterLevel.index) {
-        return false;
-      }
-
-      // Filter by search query
-      if (_searchQuery.isEmpty) {
-        return true;
-      }
-      return log.message.toLowerCase().contains(_searchQuery.toLowerCase());
-    }).toList();
-  }
-
   // Export logs to a file
   Future<void> _exportLogs() async {
+    // Capture context before async operations
+    final capturedContext = context;
+    
     try {
       // Get all logs as text
       final logs = _logService.getLogs();
@@ -60,8 +46,8 @@ class _LogsPageState extends State<LogsPage> {
         final tempDir = await getTemporaryDirectory();
         final file = File('${tempDir.path}/wine_prefix_manager_logs.txt');
         await file.writeAsString(logsText);
-        // Use shareXFiles instead of shareFiles
-        await Share.shareXFiles([XFile(file.path)], text: 'Wine Prefix Manager Logs');
+        // Use SharePlus instead of deprecated Share  
+        await SharePlus.instance.share(ShareParams(text: logsText, subject: 'Wine Prefix Manager Logs'));
       } else {
         // For desktop platforms, save to file
         await FileSaver.instance.saveFile(
@@ -69,14 +55,18 @@ class _LogsPageState extends State<LogsPage> {
           bytes: Uint8List.fromList(logsText.codeUnits),
           mimeType: MimeType.text,
         );
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Logs exported successfully')),
-        );
+        if (capturedContext.mounted) {
+          ScaffoldMessenger.of(capturedContext).showSnackBar(
+            const SnackBar(content: Text('Logs exported successfully')),
+          );
+        }
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to export logs: $e')),
-      );
+      if (capturedContext.mounted) {
+        ScaffoldMessenger.of(capturedContext).showSnackBar(
+          SnackBar(content: Text('Failed to export logs: $e')),
+        );
+      }
     }
   }
 
@@ -337,7 +327,7 @@ class _LogsPageState extends State<LogsPage> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
-                  color: _getLevelColor(log.level, theme).withOpacity(0.1),
+                  color: _getLevelColor(log.level, theme).withValues(alpha:0.1),
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text(

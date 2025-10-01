@@ -15,14 +15,14 @@ class ExecutableListTile extends StatelessWidget {
   final ExeContextActionCallback onDeleteExe; // Needs context for dialog
 
   const ExecutableListTile({
-    Key? key,
+    super.key,
     required this.prefix,
     required this.exe,
     required this.isRunning,
     required this.onRunExe,
     required this.onKillProcess,
     required this.onDeleteExe,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

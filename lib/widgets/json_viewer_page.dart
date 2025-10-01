@@ -6,10 +6,10 @@ import 'package:flutter/services.dart'; // For Clipboard
 class JsonViewerPage extends StatefulWidget {
   final String filePath;
 
-  const JsonViewerPage({Key? key, required this.filePath}) : super(key: key);
+  const JsonViewerPage({super.key, required this.filePath});
 
   @override
-  _JsonViewerPageState createState() => _JsonViewerPageState();
+  State<JsonViewerPage> createState() => _JsonViewerPageState();
 }
 
 class _JsonViewerPageState extends State<JsonViewerPage> {

@@ -22,7 +22,6 @@ import 'services/igdb_service.dart'; // Import IgdbService
 import 'services/ui_action_service.dart'; // Import UIActionService
 import 'services/compressed_game_service.dart'; // Import CompressedGameService
 import 'services/power_management_service.dart';
-import 'services/iso_mounting_service.dart'; // Add import for IsoMountingService
 
 // Widgets & Pages
 // import 'widgets/custom_title_bar.dart'; // Removed import
@@ -35,7 +34,9 @@ import 'widgets/env_variables_dialog.dart'; // Add import for environment variab
 import 'pages/game_details_page.dart'; // Add import for GameDetailsPage
 import 'widgets/about_screen.dart'; // Correct import for AboutScreen
 import 'pages/files_and_backup_page.dart'; // Add import for FilesAndBackupPage
-import 'pages/iso_mounting_page.dart'; // Add import for IsoMountingPage
+
+// Utils
+import 'utils/logger.dart';
 
 // Constants
 // const String appTitle = 'Wine Prefix Manager'; // Removed
@@ -50,7 +51,7 @@ void main() async {
   } catch (e) {
     // .env file not found or couldn't be loaded - this is fine for production
     // where environment variables are set directly
-    print('Note: .env file not found or could not be loaded. Using system environment variables.');
+    logInfo('Note: .env file not found or could not be loaded. Using system environment variables.');
   }
 
   // Configure window options
@@ -95,7 +96,6 @@ void main() async {
         Provider(create: (_) => PrefixManagementService()),
         Provider(create: (_) => PrefixCreationService()),
         Provider(create: (_) => CompressedGameService()),
-        ChangeNotifierProvider(create: (_) => IsoMountingService()), // Changed to ChangeNotifierProvider
         Provider<PowerManagementService>(
           create: (context) => PowerManagementService(context.read<LogService>()),
         ),
@@ -110,8 +110,6 @@ void main() async {
           processService: Provider.of<ProcessService>(context, listen: false),
           prefixProvider: Provider.of<PrefixProvider>(context, listen: false), // Inject PrefixProvider
           settings: Provider.of<SettingsProvider>(context, listen: false).settings, // Get settings from provider
-          // Inject PrefixManagementService into UIActionService if needed later
-          prefixManagementService: Provider.of<PrefixManagementService>(context, listen: false),
         )),
       ],
       child: const MyApp(),
@@ -129,7 +127,6 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> {
   late final Settings _settings;
   late final LogService _logService;
-  late final IsoMountingService _isoService; // Add ISO mounting service
   // Removed IgdbService and PrefixProvider instance variables as they are mainly used via UIActionService now
   // late final IgdbService _igdbService;
   // late final PrefixProvider _prefixProvider;
@@ -140,7 +137,6 @@ class _MyAppState extends State<MyApp> {
     final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
     _settings = settingsProvider.settings;
     _logService = Provider.of<LogService>(context, listen: false);
-    _isoService = Provider.of<IsoMountingService>(context, listen: false); // Initialize ISO service
     // _igdbService = Provider.of<IgdbService>(context, listen: false); // No longer needed here
     final prefixProvider = Provider.of<PrefixProvider>(context, listen: false); // Get provider instance
 
@@ -156,7 +152,6 @@ class _MyAppState extends State<MyApp> {
       }
     });
 
-
     // FIX: Use _logService.log instead of addLog
     _logService.log('Application started.');
     // _logService.log('Theme Mode: ${_settings.themeMode.name}'); // FIX: themeMode removed from Settings
@@ -170,13 +165,8 @@ class _MyAppState extends State<MyApp> {
     _logService.log('IGDB API Base URL: ${_settings.igdbApiBaseUrl}');
   }
 
-  // Add dispose method to cleanup mounted ISOs
   @override
   void dispose() {
-    // Cleanup all mounted ISOs when app closes
-    _isoService.cleanupAllMountedIsos().catchError((e) {
-      _logService.log('Error cleaning up mounted ISOs on app exit: $e', LogLevel.error);
-    });
     super.dispose();
   }
 
@@ -269,9 +259,6 @@ class _MainScaffoldState extends State<MainScaffold> {
   late final UIActionService _uiActionService;
   final Map<String, int> _runningProcesses = {}; // State for running processes
   
-  // Global key to access navigator
-  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
-  
   // Method to switch tabs - can be accessed from outside via a callback
   void navigateToTab(int index) {
     setState(() {
@@ -340,15 +327,15 @@ class _MainScaffoldState extends State<MainScaffold> {
           onRenamePrefix: (ctx, pfx, newName) async {
             try {
               await prefixProvider.renamePrefix(pfx, newName);
-              if (mounted) {
-                ScaffoldMessenger.of(ctx).showSnackBar(
+              if (mounted && context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(content: Text('Prefix renamed to "$newName"')),
                 );
               }
             } catch (e) {
-              if (mounted) {
-                ScaffoldMessenger.of(ctx).showSnackBar(
-                  SnackBar(content: Text('Error renaming prefix: $e'), backgroundColor: Theme.of(ctx).colorScheme.error),
+              if (mounted && context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Error renaming prefix: $e'), backgroundColor: Theme.of(context).colorScheme.error),
                 );
               }
             }
@@ -358,15 +345,15 @@ class _MainScaffoldState extends State<MainScaffold> {
               await prefixManagementService.applyControllerFix(pfx, onStatusUpdate: (status) {
                 logService.log('Controller Fix: $status');
               });
-              if (mounted) {
-                ScaffoldMessenger.of(ctx).showSnackBar(
+              if (mounted && context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(content: Text('Controller fixes applied to "${pfx.name}"')),
                 );
               }
             } catch (e) {
-              if (mounted) {
-                ScaffoldMessenger.of(ctx).showSnackBar(
-                  SnackBar(content: Text('Error applying controller fixes: $e'), backgroundColor: Theme.of(ctx).colorScheme.error),
+              if (mounted && context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Error applying controller fixes: $e'), backgroundColor: Theme.of(context).colorScheme.error),
                 );
               }
             }
@@ -381,9 +368,11 @@ class _MainScaffoldState extends State<MainScaffold> {
               );
             } catch (e) {
               logService.log('Error running executable ${exe.name}: $e', LogLevel.error);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Error running ${exe.name}: $e')),
-              );
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Error running ${exe.name}: $e')),
+                );
+              }
             }
           },
           onKillProcess: (pfx, exe) async {
@@ -394,9 +383,11 @@ class _MainScaffoldState extends State<MainScaffold> {
                 logService.log('Kill signal sent to ${exe.name} (PID: $pid)');
               } else {
                 logService.log('Failed to send kill signal to ${exe.name} (PID: $pid)', LogLevel.error);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Failed to kill process for ${exe.name}')),
-                );
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Failed to kill process for ${exe.name}')),
+                  );
+                }
               }
             } else {
                logService.log('Process for ${exe.name} not found in running list.', LogLevel.warning);
@@ -421,11 +412,8 @@ class _MainScaffoldState extends State<MainScaffold> {
         // Combined Files & Backup Manager - tabbed interface
         return const FilesAndBackupPage();
       case 3:
-        // ISO/CD Management page
-        return const IsoMountingPage();
-      case 4:
         return const LogsPage();
-      case 5:
+      case 4:
         return const AboutScreen();
       default:
         return HomePage(onNavigateToTab: navigateToTab);
@@ -437,7 +425,7 @@ class _MainScaffoldState extends State<MainScaffold> {
     final theme = Theme.of(context);
     final isDarkMode = theme.brightness == Brightness.dark;
     final selectedColor = isDarkMode ? theme.colorScheme.primary : theme.colorScheme.onPrimary;
-    final unselectedColor = isDarkMode ? theme.colorScheme.onSurface.withOpacity(0.7) : theme.colorScheme.onSurface.withOpacity(0.6);
+    final unselectedColor = isDarkMode ? theme.colorScheme.onSurface.withValues(alpha:0.7) : theme.colorScheme.onSurface.withValues(alpha:0.6);
     final railBackgroundColor = theme.colorScheme.surface;
 
     final GlobalKey<ScaffoldState> scaffoldKey = GlobalKey<ScaffoldState>();
@@ -455,7 +443,7 @@ class _MainScaffoldState extends State<MainScaffold> {
                   onDestinationSelected: _onItemTapped,
                   labelType: NavigationRailLabelType.selected,
                   backgroundColor: railBackgroundColor,
-                  indicatorColor: theme.colorScheme.primaryContainer.withOpacity(0.3),
+                  indicatorColor: theme.colorScheme.primaryContainer.withValues(alpha:0.3),
                   selectedIconTheme: IconThemeData(color: selectedColor),
                   unselectedIconTheme: IconThemeData(color: unselectedColor),
                   selectedLabelTextStyle: TextStyle(color: selectedColor, fontWeight: FontWeight.bold),
@@ -475,11 +463,6 @@ class _MainScaffoldState extends State<MainScaffold> {
                       icon: Icon(Icons.folder_copy_outlined),
                       selectedIcon: Icon(Icons.folder_copy),
                       label: Text('Files & Backup'),
-                    ),
-                    NavigationRailDestination(
-                      icon: Icon(Icons.album_outlined),
-                      selectedIcon: Icon(Icons.album),
-                      label: Text('ISO/CD'),
                     ),
                     NavigationRailDestination(
                       icon: Icon(Icons.article_outlined),

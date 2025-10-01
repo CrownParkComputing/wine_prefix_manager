@@ -24,9 +24,9 @@ class HomePage extends StatefulWidget {
   final Function(int)? onNavigateToTab;
 
   const HomePage({
-    Key? key,
+    super.key,
     this.onNavigateToTab,
-  }) : super(key: key);
+  });
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -140,10 +140,12 @@ class _HomePageState extends State<HomePage> with WindowListener {
       setState(() {
         _gameLaunchStates[entry.exe.path] = GameLaunchState.idle;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text('Failed to launch ${entry.exe.name}. Check logs.')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(this.context).showSnackBar(
+          SnackBar(
+              content: Text('Failed to launch ${entry.exe.name}. Check logs.')),
+        );
+      }
     }
   }
 
@@ -203,20 +205,6 @@ class _HomePageState extends State<HomePage> with WindowListener {
   // Flag to toggle welcome screen - REMOVED
   // bool _showWelcomeScreen = true;
 
-  void _navigateToManagePrefixesTab() {
-    // Use the callback to navigate to the Manage tab (index 1)
-    if (widget.onNavigateToTab != null) {
-      widget.onNavigateToTab!(1); // Index 1 is the Manage tab
-    }
-  }
-
-  void _navigateToSettingsTab() {
-    // Use the callback to navigate to the Settings tab (index 2)
-    if (widget.onNavigateToTab != null) {
-      widget.onNavigateToTab!(2); // Index 2 is the Settings tab
-    }
-  }
-
   // Add method to refresh game data
   Future<void> _refreshGames(BuildContext context) async {
     if (_isRefreshing) return; // Don't refresh if already refreshing
@@ -225,10 +213,15 @@ class _HomePageState extends State<HomePage> with WindowListener {
       _isRefreshing = true;
     });
 
+    // Capture context and services before async operations
+    final capturedContext = this.context;
+    final logService = Provider.of<LogService>(capturedContext, listen: false);
+
     try {
       // Get the prefix provider and force a reload
       final prefixProvider =
-          Provider.of<PrefixProvider>(context, listen: false);
+          Provider.of<PrefixProvider>(capturedContext, listen: false);
+      
       await prefixProvider.loadPrefixes(forceReload: true);
 
       // Clear any "not working" flags for executables that now exist
@@ -252,21 +245,19 @@ class _HomePageState extends State<HomePage> with WindowListener {
       }
 
       // Log the refresh action
-      final logService = Provider.of<LogService>(context, listen: false);
       logService.log('Game library refreshed successfully');
 
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+      if (capturedContext.mounted) {
+        ScaffoldMessenger.of(capturedContext).showSnackBar(
           const SnackBar(content: Text('Game library refreshed')),
         );
       }
     } catch (e) {
       // Log any errors
-      final logService = Provider.of<LogService>(context, listen: false);
       logService.log('Error refreshing game library: $e', LogLevel.error);
 
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+      if (capturedContext.mounted) {
+        ScaffoldMessenger.of(capturedContext).showSnackBar(
           const SnackBar(content: Text('Failed to refresh game library')),
         );
       }
@@ -497,12 +488,14 @@ class _HomePageState extends State<HomePage> with WindowListener {
         settingsProvider.settings.copyWith(coverSize: newSize);
     await settingsProvider.updateSettings(updatedSettings);
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Cover size changed to ${newSize.name}'),
-        duration: const Duration(seconds: 1),
-      ),
-    );
+    if (mounted) {
+      ScaffoldMessenger.of(this.context).showSnackBar(
+        SnackBar(
+          content: Text('Cover size changed to ${newSize.name}'),
+          duration: const Duration(seconds: 1),
+        ),
+      );
+    }
   }
 
   void _showGameLibrarySettings(BuildContext context) {
@@ -627,9 +620,11 @@ class _GameLibrarySettingsDialogState
         _gameLibraryPathController.text = selectedDirectory ?? '';
       });
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error selecting directory: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error selecting directory: $e')),
+        );
+      }
     }
   }
 
@@ -671,7 +666,7 @@ class _GameLibrarySettingsDialogState
                 ),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<CoverSize>(
-                  value: _selectedCoverSize,
+                  initialValue: _selectedCoverSize,
                   decoration: const InputDecoration(
                     labelText: 'Cover Size',
                   ),

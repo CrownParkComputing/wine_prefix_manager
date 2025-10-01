@@ -8,10 +8,10 @@ class PrefixCreationFormForType extends StatelessWidget {
   final PrefixType prefixType;
 
   const PrefixCreationFormForType({
-    Key? key,
+    super.key,
     required this.settings,
     required this.prefixType,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

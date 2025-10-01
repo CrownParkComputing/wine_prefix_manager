@@ -5,7 +5,7 @@ import 'file_manager_page.dart';
 import 'backup_manager_page.dart';
 
 class FilesAndBackupPage extends StatefulWidget {
-  const FilesAndBackupPage({Key? key}) : super(key: key);
+  const FilesAndBackupPage({super.key});
 
   @override
   State<FilesAndBackupPage> createState() => _FilesAndBackupPageState();
@@ -39,7 +39,7 @@ class _FilesAndBackupPageState extends State<FilesAndBackupPage> with SingleTick
         bottom: TabBar(
           controller: _tabController,
           labelColor: theme.colorScheme.primary,
-          unselectedLabelColor: theme.colorScheme.onSurface.withOpacity(0.6),
+          unselectedLabelColor: theme.colorScheme.onSurface.withValues(alpha:0.6),
           indicatorColor: theme.colorScheme.primary,
           tabs: const [
             Tab(
