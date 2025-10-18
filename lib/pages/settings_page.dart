@@ -10,6 +10,7 @@ import '../services/power_management_service.dart'; // Import PowerManagementSer
 import '../theme/theme_provider.dart';
 import '../providers/settings_provider.dart';
 import '../widgets/json_viewer_page.dart'; // Import the JSON viewer
+import '../widgets/category_management_dialog.dart'; // Import the category management
 import '../utils/logger.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -46,7 +47,7 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     // Initialize controllers with empty strings
     _prefixDirController = TextEditingController();
     _gameLibraryPathController = TextEditingController();
@@ -193,9 +194,11 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
     String? selectedDirectory = await FilePicker.platform.getDirectoryPath(
       dialogTitle: 'Select Prefix Directory',
     );
-    setState(() {
-      _prefixDirController.text = selectedDirectory;
-    });
+    if (selectedDirectory != null) {
+      setState(() {
+        _prefixDirController.text = selectedDirectory;
+      });
+    }
       }
 
   Future<void> _pickGameLibraryPath() async {
@@ -210,9 +213,11 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
           : (_settings?.prefixDirectory ?? Platform.environment['HOME']), // Default to prefix or home
     );
 
-    setState(() {
-      _gameLibraryPathController.text = selectedFile;
-    });
+    if (selectedFile != null) {
+      setState(() {
+        _gameLibraryPathController.text = selectedFile;
+      });
+    }
       }
 
   Future<void> _pickBackupPath() async {
@@ -434,6 +439,57 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
     );
   }
 
+  Widget _buildCategoriesTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Game Categories',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Manage categories for organizing your game library.',
+            style: TextStyle(color: Colors.grey),
+          ),
+          const SizedBox(height: 24),
+          
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  ListTile(
+                    leading: const Icon(Icons.category, color: Colors.blue),
+                    title: const Text('Manage Categories'),
+                    subtitle: const Text('Create, edit, delete and reorder game categories'),
+                    trailing: const Icon(Icons.arrow_forward_ios),
+                    onTap: () {
+                      showDialog(
+                        context: context,
+                        builder: (context) => const CategoryManagementDialog(),
+                      );
+                    },
+                  ),
+                  const Divider(),
+                  ListTile(
+                    leading: const Icon(Icons.info_outline, color: Colors.orange),
+                    title: const Text('About Categories'),
+                    subtitle: const Text(
+                      'Categories help organize your games. Each game can be assigned to a category for better library management.',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildApiSettingsTab() {
     return const SingleChildScrollView(
       padding: EdgeInsets.all(16.0),
@@ -530,6 +586,7 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
               tabs: const [
                 Tab(icon: Icon(Icons.settings), text: 'General'),
                 Tab(icon: Icon(Icons.api), text: 'APIs & URLs'),
+                Tab(icon: Icon(Icons.category), text: 'Categories'),
               ],
             ),
       ),
@@ -542,6 +599,7 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
                 children: [
                   _buildGeneralSettingsTab(),
                   _buildApiSettingsTab(),
+                  _buildCategoriesTab(),
                 ],
               ),
             ),

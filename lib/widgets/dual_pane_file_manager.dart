@@ -7,6 +7,8 @@ import 'package:provider/provider.dart';
 import '../models/prefix_models.dart';
 import '../models/settings.dart';
 import '../services/file_operations_service.dart';
+import '../services/backup_service.dart';
+import '../services/archive_service.dart';
 
 enum FileManagerAction {
   copy,
@@ -108,8 +110,6 @@ class _DualPaneFileManagerState extends State<DualPaneFileManager> {
   }
 
   void _initializeManager() {
-    final settings = Provider.of<Settings>(context, listen: false);
-    
     // Initialize favorite paths with common locations
     _initializeFavoritePaths();
     
@@ -344,6 +344,9 @@ class _DualPaneFileManagerState extends State<DualPaneFileManager> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Dual Pane File Manager'),
+        backgroundColor: Colors.blueGrey[800],
+        foregroundColor: Colors.white,
+        elevation: 2,
         actions: [
           IconButton(
             icon: const Icon(Icons.star_border),
@@ -385,12 +388,31 @@ class _DualPaneFileManagerState extends State<DualPaneFileManager> {
           if (operationInProgress)
             LinearProgressIndicator(
               value: operationProgress,
-              backgroundColor: Colors.grey[300],
+              backgroundColor: Colors.blueGrey[100],
+              valueColor: AlwaysStoppedAnimation<Color>(Colors.blueGrey[600]!),
             ),
           if (operationInProgress)
-            Padding(
+            Container(
               padding: const EdgeInsets.all(8.0),
-              child: Text(operationStatus),
+              color: Colors.blueGrey[50],
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    operationStatus,
+                    style: TextStyle(
+                      color: Colors.blueGrey[700],
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
             ),
           // Main dual pane content
           Expanded(
@@ -411,8 +433,14 @@ class _DualPaneFileManagerState extends State<DualPaneFileManager> {
                 ),
                 // Divider
                 Container(
-                  width: 1,
-                  color: Colors.grey[300],
+                  width: 2,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Colors.blueGrey[200]!, Colors.blueGrey[400]!, Colors.blueGrey[200]!],
+                    ),
+                  ),
                 ),
                 // Right Pane
                 Expanded(
@@ -479,31 +507,36 @@ class _DualPaneFileManagerState extends State<DualPaneFileManager> {
   Widget _buildPaneHeader(PaneType pane, String path) {
     return Container(
       padding: const EdgeInsets.all(8.0),
-      color: activePaneType == pane ? Colors.blue[50] : Colors.grey[100],
+      decoration: BoxDecoration(
+        color: activePaneType == pane ? Colors.blue[600] : Colors.blueGrey[700],
+        border: Border(
+          bottom: BorderSide(color: Colors.blueGrey[300]!, width: 1),
+        ),
+      ),
       child: Row(
         children: [
           IconButton(
-            icon: const Icon(Icons.arrow_back),
+            icon: const Icon(Icons.arrow_back, color: Colors.white),
             onPressed: () => _goBack(pane),
             tooltip: 'Back',
           ),
           IconButton(
-            icon: const Icon(Icons.arrow_forward),
+            icon: const Icon(Icons.arrow_forward, color: Colors.white),
             onPressed: () => _goForward(pane),
             tooltip: 'Forward',
           ),
           IconButton(
-            icon: const Icon(Icons.arrow_upward),
+            icon: const Icon(Icons.arrow_upward, color: Colors.white),
             onPressed: () => _goUp(pane),
             tooltip: 'Up',
           ),
           IconButton(
-            icon: const Icon(Icons.home),
+            icon: const Icon(Icons.home, color: Colors.white),
             onPressed: () => _navigateToPath(pane, Platform.environment['HOME'] ?? '/'),
             tooltip: 'Home',
           ),
           PopupMenuButton<String>(
-            icon: const Icon(Icons.star),
+            icon: const Icon(Icons.star, color: Colors.white),
             tooltip: 'Favorite Paths',
             onSelected: (path) => _navigateToPath(pane, path),
             itemBuilder: (context) => [
@@ -544,7 +577,11 @@ class _DualPaneFileManagerState extends State<DualPaneFileManager> {
           Expanded(
             child: Text(
               path,
-              style: const TextStyle(fontFamily: 'monospace'),
+              style: const TextStyle(
+                fontFamily: 'monospace',
+                color: Colors.white,
+                fontWeight: FontWeight.w500,
+              ),
               overflow: TextOverflow.ellipsis,
             ),
           ),
@@ -571,7 +608,12 @@ class _DualPaneFileManagerState extends State<DualPaneFileManager> {
   Widget _buildSortHeader(PaneType pane, SortBy sortBy, bool sortAscending) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-      color: Colors.grey[200],
+      decoration: BoxDecoration(
+        color: Colors.blueGrey[100],
+        border: Border(
+          bottom: BorderSide(color: Colors.blueGrey[300]!, width: 1),
+        ),
+      ),
       child: Row(
         children: [
           _buildSortButton('Name', SortBy.name, pane, sortBy, sortAscending),
@@ -597,7 +639,8 @@ class _DualPaneFileManagerState extends State<DualPaneFileManager> {
             label,
             style: TextStyle(
               fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-              color: isSelected ? Colors.blue : Colors.black,
+              color: isSelected ? Colors.blue[700] : Colors.blueGrey[800],
+              fontSize: 13,
             ),
           ),
           if (isSelected)
@@ -706,7 +749,12 @@ class _DualPaneFileManagerState extends State<DualPaneFileManager> {
     
     return Container(
       padding: const EdgeInsets.all(8.0),
-      color: Colors.grey[100],
+      decoration: BoxDecoration(
+        color: Colors.blueGrey[50],
+        border: Border(
+          top: BorderSide(color: Colors.blueGrey[200]!, width: 1),
+        ),
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -715,7 +763,10 @@ class _DualPaneFileManagerState extends State<DualPaneFileManager> {
               padding: const EdgeInsets.only(bottom: 8.0),
               child: Text(
                 '$selectedCount item${selectedCount == 1 ? '' : 's'} selected in ${activePaneType == PaneType.left ? 'left' : 'right'} pane',
-                style: const TextStyle(fontWeight: FontWeight.bold),
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.blueGrey[800],
+                ),
               ),
             ),
           Row(
@@ -756,6 +807,42 @@ class _DualPaneFileManagerState extends State<DualPaneFileManager> {
                   label: const Text('Add to Library'),
                 ),
               ),
+              Tooltip(
+                message: 'Backup selected files/folders with zstd compression',
+                child: ElevatedButton.icon(
+                  onPressed: hasSelection ? _backupSelectedFiles : null,
+                  icon: const Icon(Icons.backup),
+                  label: const Text('Backup'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange[600],
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ),
+              Tooltip(
+                message: 'Extract selected archives',
+                child: ElevatedButton.icon(
+                  onPressed: _hasSelectedArchives() ? _extractSelectedArchives : null,
+                  icon: const Icon(Icons.unarchive),
+                  label: const Text('Extract'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green[600],
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ),
+              Tooltip(
+                message: 'Create archive from selected files',
+                child: ElevatedButton.icon(
+                  onPressed: hasSelection ? _createArchiveFromSelected : null,
+                  icon: const Icon(Icons.archive),
+                  label: const Text('Archive'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.purple[600],
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ),
             ],
           ),
           if (hasSelection)
@@ -766,14 +853,14 @@ class _DualPaneFileManagerState extends State<DualPaneFileManager> {
                 children: [
                   TextButton.icon(
                     onPressed: () => _selectAll(activePaneType),
-                    icon: const Icon(Icons.select_all, size: 16),
-                    label: const Text('Select All'),
+                    icon: Icon(Icons.select_all, size: 16, color: Colors.blueGrey[700]),
+                    label: Text('Select All', style: TextStyle(color: Colors.blueGrey[700])),
                   ),
                   const SizedBox(width: 16),
                   TextButton.icon(
                     onPressed: () => _clearSelection(activePaneType),
-                    icon: const Icon(Icons.deselect, size: 16),
-                    label: const Text('Clear Selection'),
+                    icon: Icon(Icons.deselect, size: 16, color: Colors.blueGrey[700]),
+                    label: Text('Clear Selection', style: TextStyle(color: Colors.blueGrey[700])),
                   ),
                 ],
               ),
@@ -891,6 +978,346 @@ class _DualPaneFileManagerState extends State<DualPaneFileManager> {
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Copy error: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  void _backupSelectedFiles() async {
+    final sourceFiles = activePaneType == PaneType.left ? leftSelectedFiles : rightSelectedFiles;
+    
+    if (sourceFiles.isEmpty) return;
+    
+    // Show backup dialog to choose backup directory and name
+    final result = await showDialog<Map<String, String>>(
+      context: context,
+      builder: (context) => _BackupDialog(
+        selectedFiles: sourceFiles.toList(),
+      ),
+    );
+    
+    if (result == null) return;
+    
+    final backupDir = result['backupDir']!;
+    final backupName = result['backupName']!;
+    
+    setState(() {
+      operationInProgress = true;
+      operationProgress = 0.0;
+      operationStatus = 'Preparing backup...';
+    });
+    
+    try {
+      final backupResult = await BackupService.createBackup(
+        sourcePaths: sourceFiles.toList(),
+        backupDir: backupDir,
+        backupName: backupName,
+        onProgress: (progress) {
+          setState(() {
+            operationProgress = progress;
+          });
+        },
+        onStatus: (status) {
+          setState(() {
+            operationStatus = status;
+          });
+        },
+      );
+      
+      setState(() {
+        operationInProgress = false;
+        if (activePaneType == PaneType.left) {
+          leftSelectedFiles.clear();
+        } else {
+          rightSelectedFiles.clear();
+        }
+      });
+      
+      if (backupResult.success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Backup created successfully: ${p.basename(backupResult.backupPath!)}'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        // Show option to open backup location
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Backup saved to: ${backupResult.backupPath!}'),
+            action: SnackBarAction(
+              label: 'Open Location',
+              onPressed: () {
+                _navigateToPath(activePaneType == PaneType.left ? PaneType.right : PaneType.left, p.dirname(backupResult.backupPath!));
+              },
+            ),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Backup failed: ${backupResult.error}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() {
+        operationInProgress = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Backup error: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  bool _hasSelectedArchives() {
+    final sourceFiles = activePaneType == PaneType.left ? leftSelectedFiles : rightSelectedFiles;
+    return sourceFiles.any((filePath) => ArchiveService.isArchiveFile(filePath));
+  }
+
+  void _extractSelectedArchives() async {
+    final sourceFiles = activePaneType == PaneType.left ? leftSelectedFiles : rightSelectedFiles;
+    final archives = sourceFiles.where((filePath) => ArchiveService.isArchiveFile(filePath)).toList();
+    
+    if (archives.isEmpty) return;
+
+    // Get destination directory (opposite pane or user choice)
+    final destinationPath = activePaneType == PaneType.left ? rightPath : leftPath;
+    
+    // Show extraction dialog
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.unarchive, color: Colors.green),
+            SizedBox(width: 8),
+            Text('Extract Archives'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Extract ${archives.length} archive${archives.length == 1 ? '' : 's'} to:'),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: Colors.grey[300]!),
+              ),
+              child: Text(
+                destinationPath,
+                style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+              ),
+            ),
+            const SizedBox(height: 8),
+            ...archives.take(3).map((archive) => 
+              Text('• ${p.basename(archive)}', style: const TextStyle(fontSize: 12))
+            ),
+            if (archives.length > 3)
+              Text('... and ${archives.length - 3} more', 
+                style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic)),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.of(context).pop(true),
+            icon: const Icon(Icons.unarchive),
+            label: const Text('Extract'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green[600],
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() {
+      operationInProgress = true;
+      operationProgress = 0.0;
+      operationStatus = 'Preparing extraction...';
+    });
+
+    try {
+      int completed = 0;
+      int totalArchives = archives.length;
+      List<String> extractedPaths = [];
+
+      for (final archivePath in archives) {
+        final result = await ArchiveService.extractArchive(
+          archivePath: archivePath,
+          extractToDir: destinationPath,
+          onProgress: (progress) {
+            setState(() {
+              operationProgress = (completed + progress) / totalArchives;
+            });
+          },
+          onStatus: (status) {
+            setState(() {
+              operationStatus = '${p.basename(archivePath)}: $status';
+            });
+          },
+        );
+
+        if (result.success && result.outputPath != null) {
+          extractedPaths.add(result.outputPath!);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to extract ${p.basename(archivePath)}: ${result.error}'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+
+        completed++;
+      }
+
+      setState(() {
+        operationInProgress = false;
+        if (activePaneType == PaneType.left) {
+          leftSelectedFiles.clear();
+        } else {
+          rightSelectedFiles.clear();
+        }
+      });
+
+      // Refresh destination pane
+      _refreshPane(activePaneType == PaneType.left ? PaneType.right : PaneType.left);
+
+      if (extractedPaths.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Successfully extracted ${extractedPaths.length} archive${extractedPaths.length == 1 ? '' : 's'}'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() {
+        operationInProgress = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Extraction error: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  void _createArchiveFromSelected() async {
+    final sourceFiles = activePaneType == PaneType.left ? leftSelectedFiles : rightSelectedFiles;
+    
+    if (sourceFiles.isEmpty) return;
+    
+    // Show archive creation dialog
+    final result = await showDialog<Map<String, String>>(
+      context: context,
+      builder: (context) => _ArchiveCreationDialog(
+        selectedFiles: sourceFiles.toList(),
+      ),
+    );
+    
+    if (result == null) return;
+    
+    final outputPath = result['outputPath']!;
+    final archiveType = result['archiveType']!;
+    
+    setState(() {
+      operationInProgress = true;
+      operationProgress = 0.0;
+      operationStatus = 'Creating ${archiveType.toUpperCase()} archive...';
+    });
+    
+    try {
+      ArchiveResult archiveResult;
+      
+      switch (archiveType) {
+        case 'zip':
+          archiveResult = await ArchiveService.createZip(
+            sourcePaths: sourceFiles.toList(),
+            outputPath: outputPath,
+            onProgress: (progress) {
+              setState(() {
+                operationProgress = progress;
+              });
+            },
+            onStatus: (status) {
+              setState(() {
+                operationStatus = status;
+              });
+            },
+          );
+          break;
+        case 'rar':
+          archiveResult = await ArchiveService.createRar(
+            sourcePaths: sourceFiles.toList(),
+            outputPath: outputPath,
+            onProgress: (progress) {
+              setState(() {
+                operationProgress = progress;
+              });
+            },
+            onStatus: (status) {
+              setState(() {
+                operationStatus = status;
+              });
+            },
+          );
+          break;
+        default:
+          throw 'Unsupported archive type: $archiveType';
+      }
+      
+      setState(() {
+        operationInProgress = false;
+        if (activePaneType == PaneType.left) {
+          leftSelectedFiles.clear();
+        } else {
+          rightSelectedFiles.clear();
+        }
+      });
+      
+      if (archiveResult.success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Archive created successfully: ${p.basename(outputPath)}'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        // Navigate to archive location in opposite pane
+        _navigateToPath(activePaneType == PaneType.left ? PaneType.right : PaneType.left, p.dirname(outputPath));
+        _refreshPane(activePaneType == PaneType.left ? PaneType.right : PaneType.left);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Archive creation failed: ${archiveResult.error}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() {
+        operationInProgress = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Archive creation error: $e'),
+          backgroundColor: Colors.red,
+        ),
       );
     }
   }
@@ -1604,6 +2031,477 @@ class _ManageFavoritesDialogState extends State<_ManageFavoritesDialog> {
         );
       }
     }
+  }
+}
+
+class _BackupDialog extends StatefulWidget {
+  final List<String> selectedFiles;
+
+  const _BackupDialog({
+    required this.selectedFiles,
+  });
+
+  @override
+  State<_BackupDialog> createState() => _BackupDialogState();
+}
+
+class _BackupDialogState extends State<_BackupDialog> {
+  final _nameController = TextEditingController();
+  final _dirController = TextEditingController();
+  String _selectedDirectory = '';
+
+  @override
+  void initState() {
+    super.initState();
+    // Default backup directory to home/Backups
+    final homeDir = Platform.environment['HOME'] ?? '/';
+    _selectedDirectory = p.join(homeDir, 'Backups');
+    _dirController.text = _selectedDirectory;
+    
+    // Default backup name based on selection
+    if (widget.selectedFiles.length == 1) {
+      _nameController.text = p.basenameWithoutExtension(widget.selectedFiles.first);
+    } else {
+      _nameController.text = 'backup_${widget.selectedFiles.length}_items';
+    }
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _dirController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _selectBackupDirectory() async {
+    final selectedDir = await showDialog<String>(
+      context: context,
+      builder: (context) => _DirectoryPickerDialog(
+        initialPath: _selectedDirectory,
+      ),
+    );
+    
+    if (selectedDir != null) {
+      setState(() {
+        _selectedDirectory = selectedDir;
+        _dirController.text = selectedDir;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Row(
+        children: [
+          Icon(Icons.backup, color: Colors.orange),
+          SizedBox(width: 8),
+          Text('Create Backup'),
+        ],
+      ),
+      content: SizedBox(
+        width: 400,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Creating backup of ${widget.selectedFiles.length} item${widget.selectedFiles.length == 1 ? '' : 's'}:',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: Colors.grey[300]!),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: widget.selectedFiles.take(3).map((file) => 
+                  Text(
+                    p.basename(file),
+                    style: const TextStyle(fontSize: 12),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ).toList()
+                  ..addAll(widget.selectedFiles.length > 3 ? [
+                    Text(
+                      '... and ${widget.selectedFiles.length - 3} more',
+                      style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+                    )
+                  ] : []),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _nameController,
+              decoration: const InputDecoration(
+                labelText: 'Backup Name',
+                hintText: 'Enter backup name (without extension)',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _dirController,
+              decoration: InputDecoration(
+                labelText: 'Backup Directory',
+                hintText: 'Select backup destination',
+                border: const OutlineInputBorder(),
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.folder_open),
+                  onPressed: _selectBackupDirectory,
+                ),
+              ),
+              readOnly: true,
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.blue[50],
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: Colors.blue[200]!),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.info_outline, size: 16, color: Colors.blue),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Backup will be compressed using zstd compression (.tar.zst)',
+                      style: TextStyle(fontSize: 12, color: Colors.blue),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton.icon(
+          onPressed: _nameController.text.trim().isNotEmpty && _selectedDirectory.isNotEmpty
+              ? () {
+                  Navigator.of(context).pop({
+                    'backupName': _nameController.text.trim(),
+                    'backupDir': _selectedDirectory,
+                  });
+                }
+              : null,
+          icon: const Icon(Icons.backup),
+          label: const Text('Create Backup'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.orange[600],
+            foregroundColor: Colors.white,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ArchiveCreationDialog extends StatefulWidget {
+  final List<String> selectedFiles;
+
+  const _ArchiveCreationDialog({
+    required this.selectedFiles,
+  });
+
+  @override
+  State<_ArchiveCreationDialog> createState() => _ArchiveCreationDialogState();
+}
+
+class _ArchiveCreationDialogState extends State<_ArchiveCreationDialog> {
+  final _nameController = TextEditingController();
+  final _dirController = TextEditingController();
+  String _selectedDirectory = '';
+  String _selectedType = 'zip';
+
+  @override
+  void initState() {
+    super.initState();
+    // Default archive directory to current directory
+    if (widget.selectedFiles.isNotEmpty) {
+      _selectedDirectory = p.dirname(widget.selectedFiles.first);
+      _dirController.text = _selectedDirectory;
+    }
+    
+    // Default archive name based on selection
+    if (widget.selectedFiles.length == 1) {
+      _nameController.text = p.basenameWithoutExtension(widget.selectedFiles.first);
+    } else {
+      _nameController.text = 'archive_${widget.selectedFiles.length}_items';
+    }
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _dirController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _selectOutputDirectory() async {
+    final selectedDir = await showDialog<String>(
+      context: context,
+      builder: (context) => _DirectoryPickerDialog(
+        initialPath: _selectedDirectory,
+      ),
+    );
+    
+    if (selectedDir != null) {
+      setState(() {
+        _selectedDirectory = selectedDir;
+        _dirController.text = selectedDir;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Row(
+        children: [
+          Icon(Icons.archive, color: Colors.purple),
+          SizedBox(width: 8),
+          Text('Create Archive'),
+        ],
+      ),
+      content: SizedBox(
+        width: 400,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Creating archive from ${widget.selectedFiles.length} item${widget.selectedFiles.length == 1 ? '' : 's'}:',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: Colors.grey[300]!),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: widget.selectedFiles.take(3).map((file) => 
+                  Text(
+                    p.basename(file),
+                    style: const TextStyle(fontSize: 12),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ).toList()
+                  ..addAll(widget.selectedFiles.length > 3 ? [
+                    Text(
+                      '... and ${widget.selectedFiles.length - 3} more',
+                      style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+                    )
+                  ] : []),
+              ),
+            ),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<String>(
+              value: _selectedType,
+              decoration: const InputDecoration(
+                labelText: 'Archive Type',
+                border: OutlineInputBorder(),
+              ),
+              items: const [
+                DropdownMenuItem(value: 'zip', child: Text('ZIP (.zip)')),
+                DropdownMenuItem(value: 'rar', child: Text('RAR (.rar)')),
+              ],
+              onChanged: (value) {
+                if (value != null) {
+                  setState(() {
+                    _selectedType = value;
+                  });
+                }
+              },
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _nameController,
+              decoration: InputDecoration(
+                labelText: 'Archive Name',
+                hintText: 'Enter archive name (without extension)',
+                border: const OutlineInputBorder(),
+                suffixText: '.$_selectedType',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _dirController,
+              decoration: InputDecoration(
+                labelText: 'Output Directory',
+                hintText: 'Select output destination',
+                border: const OutlineInputBorder(),
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.folder_open),
+                  onPressed: _selectOutputDirectory,
+                ),
+              ),
+              readOnly: true,
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton.icon(
+          onPressed: _nameController.text.trim().isNotEmpty && _selectedDirectory.isNotEmpty
+              ? () {
+                  final outputPath = p.join(_selectedDirectory, '${_nameController.text.trim()}.$_selectedType');
+                  Navigator.of(context).pop({
+                    'outputPath': outputPath,
+                    'archiveType': _selectedType,
+                  });
+                }
+              : null,
+          icon: const Icon(Icons.archive),
+          label: const Text('Create Archive'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.purple[600],
+            foregroundColor: Colors.white,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _DirectoryPickerDialog extends StatefulWidget {
+  final String initialPath;
+
+  const _DirectoryPickerDialog({
+    required this.initialPath,
+  });
+
+  @override
+  State<_DirectoryPickerDialog> createState() => _DirectoryPickerDialogState();
+}
+
+class _DirectoryPickerDialogState extends State<_DirectoryPickerDialog> {
+  late String currentPath;
+  List<Directory> directories = [];
+
+  @override
+  void initState() {
+    super.initState();
+    currentPath = widget.initialPath;
+    _loadDirectories();
+  }
+
+  Future<void> _loadDirectories() async {
+    try {
+      final dir = Directory(currentPath);
+      final entities = await dir.list().toList();
+      setState(() {
+        directories = entities
+            .where((e) => e is Directory)
+            .cast<Directory>()
+            .toList()
+          ..sort((a, b) => p.basename(a.path).toLowerCase().compareTo(p.basename(b.path).toLowerCase()));
+      });
+    } catch (e) {
+      setState(() {
+        directories = [];
+      });
+    }
+  }
+
+  void _navigateToParent() {
+    final parent = p.dirname(currentPath);
+    if (parent != currentPath) {
+      setState(() {
+        currentPath = parent;
+      });
+      _loadDirectories();
+    }
+  }
+
+  void _navigateToDirectory(String path) {
+    setState(() {
+      currentPath = path;
+    });
+    _loadDirectories();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Select Backup Directory'),
+      content: SizedBox(
+        width: 400,
+        height: 400,
+        child: Column(
+          children: [
+            // Current path
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.arrow_upward),
+                    onPressed: p.dirname(currentPath) != currentPath ? _navigateToParent : null,
+                    tooltip: 'Go up',
+                  ),
+                  Expanded(
+                    child: Text(
+                      currentPath,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            // Directory list
+            Expanded(
+              child: ListView.builder(
+                itemCount: directories.length,
+                itemBuilder: (context, index) {
+                  final dir = directories[index];
+                  return ListTile(
+                    leading: const Icon(Icons.folder, color: Colors.blue),
+                    title: Text(p.basename(dir.path)),
+                    onTap: () => _navigateToDirectory(dir.path),
+                    dense: true,
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: () => Navigator.of(context).pop(currentPath),
+          child: const Text('Select'),
+        ),
+      ],
+    );
   }
 }
 

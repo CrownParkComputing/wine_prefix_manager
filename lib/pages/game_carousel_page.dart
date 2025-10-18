@@ -826,49 +826,68 @@ class _GameCarouselPageState extends State<GameCarouselPage> {
   Widget _buildLaunchButton(BuildContext context, GameEntry game, GameLaunchState launchState) {
     switch (launchState) {
       case GameLaunchState.running:
-        return ElevatedButton.icon(
-          onPressed: () => widget.onStopGame(game),
-          icon: const Icon(Icons.stop, size: 18),
-          label: const Text('Stop', style: TextStyle(fontSize: 16)),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.red,
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(25),
-            ),
+        return Container(
+          decoration: BoxDecoration(
+            color: Colors.red,
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.red.withOpacity(0.3),
+                blurRadius: 8,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: IconButton(
+            onPressed: () => widget.onStopGame(game),
+            icon: const Icon(Icons.stop, color: Colors.white, size: 28),
+            tooltip: 'Stop Game',
+            padding: const EdgeInsets.all(12),
           ),
         );
       case GameLaunchState.launching:
-        return ElevatedButton.icon(
-          onPressed: null,
-          icon: const SizedBox(
-            width: 18,
-            height: 18,
-            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+        return Container(
+          decoration: BoxDecoration(
+            color: Colors.grey,
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.grey.withOpacity(0.3),
+                blurRadius: 8,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
-          label: const Text('Launching...', style: TextStyle(fontSize: 16)),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.grey,
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(25),
+          child: const Padding(
+            padding: EdgeInsets.all(16),
+            child: SizedBox(
+              width: 28,
+              height: 28,
+              child: CircularProgressIndicator(
+                strokeWidth: 3,
+                color: Colors.white,
+              ),
             ),
           ),
         );
       default:
-        return ElevatedButton.icon(
-          onPressed: () => widget.onLaunchGame(game.prefix, game.exe),
-          icon: const Icon(Icons.play_arrow, size: 18),
-          label: const Text('Launch', style: TextStyle(fontSize: 16)),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.green,
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(25),
-            ),
+        return Container(
+          decoration: BoxDecoration(
+            color: Colors.green,
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.green.withOpacity(0.3),
+                blurRadius: 8,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: IconButton(
+            onPressed: () => widget.onLaunchGame(game.prefix, game.exe),
+            icon: const Icon(Icons.play_arrow, color: Colors.white, size: 28),
+            tooltip: 'Launch Game',
+            padding: const EdgeInsets.all(12),
           ),
         );
     }

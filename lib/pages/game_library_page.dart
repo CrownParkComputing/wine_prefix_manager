@@ -6,8 +6,8 @@ import '../models/settings.dart';
 import '../widgets/game_card.dart'; // Import GameCard for GameLaunchState
 import '../widgets/game_info_modal.dart'; // Import GameInfoModal
 import '../widgets/game_settings_modal.dart'; // Import GameSettingsModal
-import '../services/ui_action_service.dart'; // Import UIActionService for addExecutableToPrefix
-import 'package:provider/provider.dart'; // Import Provider to access UIActionService
+import '../widgets/category_management_dialog.dart'; // Import CategoryManagementDialog
+import '../services/category_service.dart'; // Import CategoryService
 import '../pages/home_page.dart'; // Import for ViewMode enum
 
 class GameLibraryPage extends StatelessWidget {
@@ -63,15 +63,15 @@ class GameLibraryPage extends StatelessWidget {
         ? games.where((game) => game.exe.category == selectedGenre).toList()
         : games;
 
-    // Group filtered games by prefix with error handling
-    Map<WinePrefix, List<GameEntry>> groupedGames;
+    // Group filtered games by category with error handling
+    Map<String, List<GameEntry>> groupedGames;
     try {
-      groupedGames = groupBy<GameEntry, WinePrefix>(
+      groupedGames = groupBy<GameEntry, String>(
         filteredGames,
-        (game) => game.prefix,
+        (game) => game.exe.category ?? 'Uncategorized',
       );
     } catch (e) {
-      // If grouping fails (e.g., during prefix operations), show loading state
+      // If grouping fails, show loading state
       return Scaffold(
         appBar: AppBar(
           title: const Text('Game Library'),
@@ -82,9 +82,25 @@ class GameLibraryPage extends StatelessWidget {
       );
     }
 
-    // Sort prefixes by name for consistent order
-    final sortedPrefixes = groupedGames.keys.toList()
-      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    // Sort categories using CategoryService order, with Uncategorized at the end
+    final categoryOrder = CategoryService.getAllCategories();
+    final categoryOrderMap = {for (int i = 0; i < categoryOrder.length; i++) categoryOrder[i].name: i};
+    
+    final sortedCategories = groupedGames.keys.toList()
+      ..sort((a, b) {
+        // Handle Uncategorized specially - always put it last
+        if (a == 'Uncategorized' && b != 'Uncategorized') return 1;
+        if (b == 'Uncategorized' && a != 'Uncategorized') return -1;
+        if (a == 'Uncategorized' && b == 'Uncategorized') return 0;
+        
+        // Use CategoryService order for defined categories
+        final orderA = categoryOrderMap[a] ?? 999;
+        final orderB = categoryOrderMap[b] ?? 999;
+        final result = orderA.compareTo(orderB);
+        
+        // If both have same order (or both undefined), sort alphabetically
+        return result != 0 ? result : a.toLowerCase().compareTo(b.toLowerCase());
+      });
 
     return Scaffold(
       appBar: AppBar(
@@ -110,6 +126,17 @@ class GameLibraryPage extends StatelessWidget {
             icon: Icon(isDarkMode ? Icons.light_mode : Icons.dark_mode),
             tooltip: isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode',
             onPressed: onToggleTheme,
+          ),
+          // Category management button
+          IconButton(
+            icon: const Icon(Icons.category),
+            tooltip: 'Manage Categories',
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (context) => const CategoryManagementDialog(),
+              );
+            },
           ),
           // Settings button (always shown)
           IconButton(
@@ -171,48 +198,28 @@ class GameLibraryPage extends StatelessWidget {
                       ],
                     ),
                   )
-                : ListView.builder( // Use ListView for prefix groups
+                : ListView.builder( // Use ListView for category groups
                     padding: const EdgeInsets.symmetric(vertical: 8.0),
-                    itemCount: sortedPrefixes.length,
+                    itemCount: sortedCategories.length,
                     itemBuilder: (context, index) {
-                      final prefix = sortedPrefixes[index];
-                      final gamesInPrefix = groupedGames[prefix]!;
+                      final category = sortedCategories[index];
+                      final gamesInCategory = groupedGames[category]!;
 
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Prefix Header with Add Executable Button
+                          // Category Header
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  prefix.name,
-                                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                    color: Theme.of(context).colorScheme.primary,
-                                  ),
-                                ),
-                                // Add buttons for this prefix
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    // Add EXE button
-                                    IconButton(
-                                      icon: const Icon(Icons.add),
-                                      tooltip: 'Add Executable',
-                                      onPressed: () {
-                                        final navigatorContext = Navigator.of(context).context;
-                                        _addExecutableToPrefix(navigatorContext, prefix);
-                                      },
-                                    ),
-                                  ],
-                                ),
-                              ],
+                            child: Text(
+                              category,
+                              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
                             ),
                           ),
-                          // Grid for games within this prefix
+                          // Grid for games within this category
                           GridView.builder(
                             padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
                             shrinkWrap: true, // Important for GridView inside ListView
@@ -223,9 +230,9 @@ class GameLibraryPage extends StatelessWidget {
                               crossAxisSpacing: 16,
                               mainAxisSpacing: 16,
                             ),
-                            itemCount: gamesInPrefix.length,
+                            itemCount: gamesInCategory.length,
                             itemBuilder: (context, gameIndex) {
-                              final game = gamesInPrefix[gameIndex];
+                              final game = gamesInCategory[gameIndex];
                               // Get the launch state for this specific game
                               final launchState = gameLaunchStates[game.exe.path] ?? GameLaunchState.idle;
 
@@ -245,7 +252,7 @@ class GameLibraryPage extends StatelessWidget {
                               );
                             },
                           ),
-                          const Divider(height: 24, thickness: 1, indent: 16, endIndent: 16), // Separator between prefixes
+                          const Divider(height: 24, thickness: 1, indent: 16, endIndent: 16), // Separator between categories
                         ],
                       );
                     },
@@ -291,18 +298,7 @@ class GameLibraryPage extends StatelessWidget {
     }
   }
 
-  // Method to add executable to a specific prefix - uses the same UIActionService method
-  // that's used in the prefix management screen
-  void _addExecutableToPrefix(BuildContext context, WinePrefix prefix) {
-    // Find uiActionService from the context
-    final uiActionService = Provider.of<UIActionService>(context, listen: false);
-    
-    // Make sure we're using the primary navigator context for dialogs
-    final navigatorContext = Navigator.of(context).context;
-    
-    // Use the navigator's root context for showing dialogs
-    uiActionService.addExecutableToPrefix(navigatorContext, prefix);
-  }
+
 
   void _showGameInfo(BuildContext context, GameEntry game) {
     showDialog(

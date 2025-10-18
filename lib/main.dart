@@ -22,6 +22,7 @@ import 'services/igdb_service.dart'; // Import IgdbService
 import 'services/ui_action_service.dart'; // Import UIActionService
 import 'services/compressed_game_service.dart'; // Import CompressedGameService
 import 'services/power_management_service.dart';
+import 'services/category_service.dart'; // Import CategoryService
 
 // Widgets & Pages
 // import 'widgets/custom_title_bar.dart'; // Removed import
@@ -35,9 +36,23 @@ import 'widgets/env_variables_dialog.dart'; // Add import for environment variab
 import 'pages/game_details_page.dart'; // Add import for GameDetailsPage
 import 'widgets/about_screen.dart'; // Correct import for AboutScreen
 import 'pages/files_and_backup_page.dart'; // Add import for FilesAndBackupPage
+import 'pages/settings_page.dart';
 
 // Utils
 import 'utils/logger.dart';
+import 'utils/path_utils.dart';
+
+/// Migrate legacy string-based categories to new CategoryService
+Future<void> _migrateLegacyCategories(Settings settings) async {
+  try {
+    // Import any old categories from settings that don't exist in CategoryService
+    if (settings.categories.isNotEmpty) {
+      await CategoryService.importFromStringList(settings.categories);
+    }
+  } catch (e) {
+    logError('Failed to migrate legacy categories: $e');
+  }
+}
 
 // Constants
 // const String appTitle = 'Wine Prefix Manager'; // Removed
@@ -77,6 +92,13 @@ void main() async {
   final themeProvider = ThemeProvider(); // FIX: Use default constructor
   final logService = LogService(); // Create LogService instance
   await logService.initialize(); // Initialize LogService
+  
+  // Initialize CategoryService with the app data directory
+  final baseAppDataPath = await getBaseAppDataPath();
+  await CategoryService.initialize(baseAppDataPath);
+  
+  // Migrate old string-based categories to new CategoryService
+  await _migrateLegacyCategories(settings);
 
   runApp(
     MultiProvider(
@@ -509,6 +531,8 @@ class _MainScaffoldState extends State<MainScaffold> {
       case 3:
         return const LogsPage();
       case 4:
+        return const SettingsPage();
+      case 5:
         return const AboutScreen();
       default:
         return HomePage(onNavigateToTab: navigateToTab);
@@ -563,6 +587,11 @@ class _MainScaffoldState extends State<MainScaffold> {
                       icon: Icon(Icons.article_outlined),
                       selectedIcon: Icon(Icons.article),
                       label: Text('Logs'),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.settings_outlined),
+                      selectedIcon: Icon(Icons.settings),
+                      label: Text('Settings'),
                     ),
                     NavigationRailDestination(
                       icon: Icon(Icons.info_outline),

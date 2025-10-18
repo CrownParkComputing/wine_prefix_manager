@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import '../models/prefix_models.dart';
-import '../providers/settings_provider.dart';
+import '../services/category_service.dart';
 import 'package:file_picker/file_picker.dart';
 
 class GameSettingsModal extends StatefulWidget {
@@ -238,11 +237,11 @@ class _GameSettingsModalState extends State<GameSettingsModal> {
                     _buildSettingsCard('Category', [
                       Padding(
                         padding: const EdgeInsets.all(12.0),
-                        child: Consumer<SettingsProvider>(
-                          builder: (context, settingsProvider, child) {
-                            final categories = settingsProvider.settings.categories;
+                        child: Builder(
+                          builder: (context) {
+                            final categories = CategoryService.getAllCategories();
                             return DropdownButtonFormField<String?>(
-                              initialValue: _selectedCategory,
+                              value: _selectedCategory,
                               decoration: const InputDecoration(
                                 border: OutlineInputBorder(),
                                 labelText: 'Game Category',
@@ -253,8 +252,27 @@ class _GameSettingsModalState extends State<GameSettingsModal> {
                                   child: Text('Uncategorized'),
                                 ),
                                 ...categories.map((category) => DropdownMenuItem<String?>(
-                                  value: category,
-                                  child: Text(category),
+                                  value: category.name,
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        width: 16,
+                                        height: 16,
+                                        margin: const EdgeInsets.only(right: 8),
+                                        decoration: BoxDecoration(
+                                          color: _parseColor(category.color),
+                                          borderRadius: BorderRadius.circular(3),
+                                        ),
+                                        child: Center(
+                                          child: Text(
+                                            category.icon,
+                                            style: const TextStyle(fontSize: 10),
+                                          ),
+                                        ),
+                                      ),
+                                      Text(category.name),
+                                    ],
+                                  ),
                                 )),
                               ],
                               onChanged: (value) {
@@ -569,5 +587,13 @@ class _GameSettingsModalState extends State<GameSettingsModal> {
         ],
       ),
     );
+  }
+
+  Color _parseColor(String colorString) {
+    try {
+      return Color(int.parse(colorString.replaceFirst('#', '0xFF')));
+    } catch (e) {
+      return Colors.blue;
+    }
   }
 } 
