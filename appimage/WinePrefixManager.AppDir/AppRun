@@ -1,4 +1,6 @@
 #!/bin/bash
-APPDIR="$(dirname "$(readlink -f "$0")")"
-export PATH="$APPDIR:$PATH"
-exec "$APPDIR/wine_prefix_manager" "$@"
+SELF=$(readlink -f "$0")
+HERE=${SELF%/*}
+export LD_LIBRARY_PATH="${HERE}/lib:${LD_LIBRARY_PATH}"
+cd "${HERE}"
+exec "${HERE}/wine_prefix_manager" "$@"
