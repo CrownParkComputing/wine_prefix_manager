@@ -9,6 +9,8 @@ import '../providers/prefix_provider.dart'; // Import the PrefixProvider
 // import 'prefix_management_page.dart'; // Not directly used here
 // import '../providers/window_control_provider.dart'; // No longer needed here
 import 'game_library_page.dart'; // Import GameLibraryPage
+import 'game_list_view_page.dart'; // Import GameListViewPage
+import 'game_carousel_page.dart'; // Import GameCarouselPage
 import '../widgets/game_card.dart'; // Import GameCard for GameLaunchState
 import '../services/ui_action_service.dart'; // Import UIActionService
 import '../services/process_service.dart'; // Import ProcessService for stop logic
@@ -19,6 +21,8 @@ import '../services/igdb_service.dart'; // Import IgdbService
 import '../widgets/game_search_dialog.dart'; // Import GameSearchDialog
 import '../models/igdb_models.dart'; // Import IgdbGame model
 import '../theme/theme_provider.dart'; // Import ThemeProvider
+
+enum ViewMode { grid, list, carousel }
 
 class HomePage extends StatefulWidget {
   final Function(int)? onNavigateToTab;
@@ -40,6 +44,8 @@ class _HomePageState extends State<HomePage> with WindowListener {
   final Map<String, GameLaunchState> _gameLaunchStates = {};
   // Add state for tracking refresh status
   bool _isRefreshing = false;
+  // Add state for view mode (grid, list, carousel)
+  ViewMode _viewMode = ViewMode.grid;
 
   @override
   void initState() {
@@ -426,82 +432,165 @@ class _HomePageState extends State<HomePage> with WindowListener {
         // Make UIActionService available to the GameLibraryPage
         Provider.value(value: uiActionService),
       ],
-      child: GameLibraryPage(
-        games: allGames,
-        // Pass callback functions for the modals
-        onUpdateMetadata: (game) => _updateGameMetadata(context, game),
-        onSaveLaunchOptions: (game, options) async {
-          final prefixProvider =
-              Provider.of<PrefixProvider>(context, listen: false);
-          final updatedExe = game.exe.copyWith(launchOptions: options);
-          await prefixProvider.updateExecutable(game.prefix, updatedExe);
-        },
-        onChangeCategory: (game, category) async {
-          final prefixProvider =
-              Provider.of<PrefixProvider>(context, listen: false);
-          final updatedExe = game.exe.copyWith(category: category);
-          await prefixProvider.updateExecutable(game.prefix, updatedExe);
-        },
-        onToggleWorkingStatus: (game, notWorking) async {
-          final prefixProvider =
-              Provider.of<PrefixProvider>(context, listen: false);
-          final updatedExe = game.exe.copyWith(notWorking: notWorking);
-          await prefixProvider.updateExecutable(game.prefix, updatedExe);
-        },
-        onDelete: (game) => _deleteGame(context, game),
-        onUpdateCompressedGame: (game, updatedExe) =>
-            _updateCompressedGame(context, game, updatedExe),
-        onLaunchGame: (prefix, exe) =>
-            _launchGame(context, GameEntry(prefix: prefix, exe: exe)),
-        onGenreSelected: (genre) {
-          setState(() {
-            _selectedGenre = genre;
-          });
-        },
-        selectedGenre: _selectedGenre,
-        coverSize: settingsProvider.settings.coverSize,
-        gameLaunchStates: _gameLaunchStates,
-        onStopGame: (game) => _stopGame(context, game),
-        onRefresh: () => _refreshGames(context),
-        isRefreshing: _isRefreshing,
-        // Pass additional callbacks for the header actions
-        onShowSettings: () => _showGameLibrarySettings(context),
-        onToggleTheme: () => themeProvider.toggleTheme(),
-        onToggleCoverSize: () => _toggleCoverSize(context, settingsProvider),
-        isDarkMode: themeProvider.isDarkMode,
-      ),
+      child: _buildView(allGames, uiActionService, settingsProvider, themeProvider),
     );
   }
 
-  void _toggleCoverSize(
-      BuildContext context, SettingsProvider settingsProvider) async {
-    final currentSize = settingsProvider.settings.coverSize;
-    CoverSize newSize;
-
-    switch (currentSize) {
-      case CoverSize.small:
-        newSize = CoverSize.medium;
-        break;
-      case CoverSize.medium:
-        newSize = CoverSize.large;
-        break;
-      case CoverSize.large:
-        newSize = CoverSize.small;
-        break;
+  Widget _buildView(List<GameEntry> allGames, UIActionService uiActionService, SettingsProvider settingsProvider, ThemeProvider themeProvider) {
+    switch (_viewMode) {
+      case ViewMode.list:
+        return GameListViewPage(
+            games: allGames,
+            onLaunchGame: (prefix, exe) =>
+                _launchGame(context, GameEntry(prefix: prefix, exe: exe)),
+            onSaveLaunchOptions: (game, options) async {
+              final prefixProvider =
+                  Provider.of<PrefixProvider>(context, listen: false);
+              final updatedExe = game.exe.copyWith(launchOptions: options);
+              await prefixProvider.updateExecutable(game.prefix, updatedExe);
+            },
+            onChangeCategory: (game, category) async {
+              final prefixProvider =
+                  Provider.of<PrefixProvider>(context, listen: false);
+              final updatedExe = game.exe.copyWith(category: category);
+              await prefixProvider.updateExecutable(game.prefix, updatedExe);
+            },
+            onToggleWorkingStatus: (game, notWorking) async {
+              final prefixProvider =
+                  Provider.of<PrefixProvider>(context, listen: false);
+              final updatedExe = game.exe.copyWith(notWorking: notWorking);
+              await prefixProvider.updateExecutable(game.prefix, updatedExe);
+            },
+            onUpdateMetadata: (game) => _updateGameMetadata(context, game),
+            onDelete: (game) => _deleteGame(context, game),
+            onUpdateCompressedGame: (game, updatedExe) =>
+                _updateCompressedGame(context, game, updatedExe),
+            onGenreSelected: (genre) {
+              setState(() {
+                _selectedGenre = genre;
+              });
+            },
+            selectedGenre: _selectedGenre,
+            coverSize: settingsProvider.settings.coverSize,
+            currentViewMode: _viewMode,
+            gameLaunchStates: _gameLaunchStates,
+            onStopGame: (game) => _stopGame(context, game),
+            onRefresh: () => _refreshGames(context),
+            isRefreshing: _isRefreshing,
+            onShowSettings: () => _showGameLibrarySettings(context),
+            onToggleTheme: () => themeProvider.toggleTheme(),
+            onToggleViewMode: () => _toggleViewMode(),
+            isDarkMode: themeProvider.isDarkMode,
+          );
+      case ViewMode.carousel:
+        return GameCarouselPage(
+            games: allGames,
+            // Pass callback functions for the modals
+            onUpdateMetadata: (game) => _updateGameMetadata(context, game),
+            onSaveLaunchOptions: (game, options) async {
+              final prefixProvider =
+                  Provider.of<PrefixProvider>(context, listen: false);
+              final updatedExe = game.exe.copyWith(launchOptions: options);
+              await prefixProvider.updateExecutable(game.prefix, updatedExe);
+            },
+            onChangeCategory: (game, category) async {
+              final prefixProvider =
+                  Provider.of<PrefixProvider>(context, listen: false);
+              final updatedExe = game.exe.copyWith(category: category);
+              await prefixProvider.updateExecutable(game.prefix, updatedExe);
+            },
+            onToggleWorkingStatus: (game, notWorking) async {
+              final prefixProvider =
+                  Provider.of<PrefixProvider>(context, listen: false);
+              final updatedExe = game.exe.copyWith(notWorking: notWorking);
+              await prefixProvider.updateExecutable(game.prefix, updatedExe);
+            },
+            onDelete: (game) => _deleteGame(context, game),
+            onUpdateCompressedGame: (game, updatedExe) =>
+                _updateCompressedGame(context, game, updatedExe),
+            onLaunchGame: (prefix, exe) =>
+                _launchGame(context, GameEntry(prefix: prefix, exe: exe)),
+            onGenreSelected: (genre) {
+              setState(() {
+                _selectedGenre = genre;
+              });
+            },
+            selectedGenre: _selectedGenre,
+            coverSize: settingsProvider.settings.coverSize,
+            currentViewMode: _viewMode,
+            gameLaunchStates: _gameLaunchStates,
+            onStopGame: (game) => _stopGame(context, game),
+            onRefresh: () => _refreshGames(context),
+            isRefreshing: _isRefreshing,
+            // Pass additional callbacks for the header actions
+            onShowSettings: () => _showGameLibrarySettings(context),
+            onToggleTheme: () => themeProvider.toggleTheme(),
+            onToggleViewMode: () => _toggleViewMode(),
+            isDarkMode: themeProvider.isDarkMode,
+          );
+      case ViewMode.grid:
+        return GameLibraryPage(
+            games: allGames,
+            // Pass callback functions for the modals
+            onUpdateMetadata: (game) => _updateGameMetadata(context, game),
+            onSaveLaunchOptions: (game, options) async {
+              final prefixProvider =
+                  Provider.of<PrefixProvider>(context, listen: false);
+              final updatedExe = game.exe.copyWith(launchOptions: options);
+              await prefixProvider.updateExecutable(game.prefix, updatedExe);
+            },
+            onChangeCategory: (game, category) async {
+              final prefixProvider =
+                  Provider.of<PrefixProvider>(context, listen: false);
+              final updatedExe = game.exe.copyWith(category: category);
+              await prefixProvider.updateExecutable(game.prefix, updatedExe);
+            },
+            onToggleWorkingStatus: (game, notWorking) async {
+              final prefixProvider =
+                  Provider.of<PrefixProvider>(context, listen: false);
+              final updatedExe = game.exe.copyWith(notWorking: notWorking);
+              await prefixProvider.updateExecutable(game.prefix, updatedExe);
+            },
+            onDelete: (game) => _deleteGame(context, game),
+            onUpdateCompressedGame: (game, updatedExe) =>
+                _updateCompressedGame(context, game, updatedExe),
+            onLaunchGame: (prefix, exe) =>
+                _launchGame(context, GameEntry(prefix: prefix, exe: exe)),
+            onGenreSelected: (genre) {
+              setState(() {
+                _selectedGenre = genre;
+              });
+            },
+            selectedGenre: _selectedGenre,
+            coverSize: settingsProvider.settings.coverSize,
+            currentViewMode: _viewMode,
+            gameLaunchStates: _gameLaunchStates,
+            onStopGame: (game) => _stopGame(context, game),
+            onRefresh: () => _refreshGames(context),
+            isRefreshing: _isRefreshing,
+            // Pass additional callbacks for the header actions
+            onShowSettings: () => _showGameLibrarySettings(context),
+            onToggleTheme: () => themeProvider.toggleTheme(),
+            onToggleViewMode: () => _toggleViewMode(),
+            isDarkMode: themeProvider.isDarkMode,
+          );
     }
+  }
 
-    final updatedSettings =
-        settingsProvider.settings.copyWith(coverSize: newSize);
-    await settingsProvider.updateSettings(updatedSettings);
-
-    if (mounted) {
-      ScaffoldMessenger.of(this.context).showSnackBar(
-        SnackBar(
-          content: Text('Cover size changed to ${newSize.name}'),
-          duration: const Duration(seconds: 1),
-        ),
-      );
-    }
+  void _toggleViewMode() {
+    setState(() {
+      switch (_viewMode) {
+        case ViewMode.grid:
+          _viewMode = ViewMode.list;
+          break;
+        case ViewMode.list:
+          _viewMode = ViewMode.carousel;
+          break;
+        case ViewMode.carousel:
+          _viewMode = ViewMode.grid;
+          break;
+      }
+    });
   }
 
   void _showGameLibrarySettings(BuildContext context) {

@@ -8,6 +8,7 @@ import '../widgets/game_info_modal.dart'; // Import GameInfoModal
 import '../widgets/game_settings_modal.dart'; // Import GameSettingsModal
 import '../services/ui_action_service.dart'; // Import UIActionService for addExecutableToPrefix
 import 'package:provider/provider.dart'; // Import Provider to access UIActionService
+import '../pages/home_page.dart'; // Import for ViewMode enum
 
 class GameLibraryPage extends StatelessWidget {
   final List<GameEntry> games;
@@ -21,13 +22,14 @@ class GameLibraryPage extends StatelessWidget {
   final Function(String?)? onGenreSelected;
   final String? selectedGenre;
   final CoverSize coverSize;
+  final ViewMode currentViewMode;
   final Map<String, GameLaunchState> gameLaunchStates;
   final Function(GameEntry) onStopGame;
   final VoidCallback? onRefresh;
   final bool isRefreshing;
   final VoidCallback? onShowSettings;
   final VoidCallback? onToggleTheme;
-  final VoidCallback? onToggleCoverSize;
+  final VoidCallback? onToggleViewMode;
   final bool isDarkMode;
 
   const GameLibraryPage({
@@ -43,13 +45,14 @@ class GameLibraryPage extends StatelessWidget {
     this.onGenreSelected,
     this.selectedGenre,
     this.coverSize = CoverSize.medium,
+    this.currentViewMode = ViewMode.grid,
     required this.gameLaunchStates,
     required this.onStopGame,
     this.onRefresh,
     this.isRefreshing = false,
     this.onShowSettings,
     this.onToggleTheme,
-    this.onToggleCoverSize,
+    this.onToggleViewMode,
     this.isDarkMode = false,
   });
 
@@ -90,46 +93,42 @@ class GameLibraryPage extends StatelessWidget {
         elevation: 0,
         backgroundColor: Theme.of(context).colorScheme.surface,
         actions: [
-          // Cover size toggle button
-          if (onToggleCoverSize != null)
-            IconButton(
-              icon: Icon(
-                coverSize == CoverSize.small
-                    ? Icons.grid_view
-                    : coverSize == CoverSize.medium
-                        ? Icons.view_module
-                        : Icons.view_comfy,
-              ),
-              tooltip: 'Toggle Cover Size (${coverSize.name})',
-              onPressed: onToggleCoverSize,
+          // View mode toggle button (always shown)
+          IconButton(
+            icon: Icon(
+              currentViewMode == ViewMode.grid
+                  ? Icons.grid_view
+                  : currentViewMode == ViewMode.list
+                      ? Icons.view_list
+                      : Icons.view_carousel,
             ),
-          // Theme toggle button
-          if (onToggleTheme != null)
-            IconButton(
-              icon: Icon(isDarkMode ? Icons.light_mode : Icons.dark_mode),
-              tooltip: isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode',
-              onPressed: onToggleTheme,
-            ),
-          // Settings button
-          if (onShowSettings != null)
-            IconButton(
-              icon: const Icon(Icons.settings_outlined),
-              tooltip: 'Game Library Settings',
-              onPressed: onShowSettings,
-            ),
-          // Refresh button
-          if (onRefresh != null)
-            IconButton(
-              icon: isRefreshing 
-                ? const SizedBox(
-                    width: 24, 
-                    height: 24, 
-                    child: CircularProgressIndicator(strokeWidth: 2)
-                  ) 
-                : const Icon(Icons.refresh),
-              tooltip: 'Refresh Game Library',
-              onPressed: isRefreshing ? null : onRefresh,
-            ),
+            tooltip: 'Switch View (${currentViewMode.name})',
+            onPressed: onToggleViewMode,
+          ),
+          // Theme toggle button (always shown)
+          IconButton(
+            icon: Icon(isDarkMode ? Icons.light_mode : Icons.dark_mode),
+            tooltip: isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode',
+            onPressed: onToggleTheme,
+          ),
+          // Settings button (always shown)
+          IconButton(
+            icon: const Icon(Icons.settings_outlined),
+            tooltip: 'Game Library Settings',
+            onPressed: onShowSettings,
+          ),
+          // Refresh button (always shown)
+          IconButton(
+            icon: isRefreshing 
+              ? const SizedBox(
+                  width: 24, 
+                  height: 24, 
+                  child: CircularProgressIndicator(strokeWidth: 2)
+                ) 
+              : const Icon(Icons.refresh),
+            tooltip: 'Refresh Game Library',
+            onPressed: isRefreshing ? null : onRefresh,
+          ),
         ],
       ),
       body: Column(

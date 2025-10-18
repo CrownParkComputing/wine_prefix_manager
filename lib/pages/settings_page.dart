@@ -193,12 +193,10 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
     String? selectedDirectory = await FilePicker.platform.getDirectoryPath(
       dialogTitle: 'Select Prefix Directory',
     );
-    if (selectedDirectory != null) {
-      setState(() {
-        _prefixDirController.text = selectedDirectory;
-      });
-    }
-    }
+    setState(() {
+      _prefixDirController.text = selectedDirectory;
+    });
+      }
 
   Future<void> _pickGameLibraryPath() async {
     // Corrected to pick a file, not a directory, for the game library path
@@ -212,12 +210,10 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
           : (_settings?.prefixDirectory ?? Platform.environment['HOME']), // Default to prefix or home
     );
 
-    if (selectedFile != null) {
-      setState(() {
-        _gameLibraryPathController.text = selectedFile;
-      });
-    }
-    }
+    setState(() {
+      _gameLibraryPathController.text = selectedFile;
+    });
+      }
 
   Future<void> _pickBackupPath() async {
     final directory = await FilePicker.platform.getDirectoryPath(

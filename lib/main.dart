@@ -29,6 +29,7 @@ import 'pages/home_page.dart';
 import 'pages/manage_prefixes_page.dart';
 // import 'pages/prefix_management_page.dart'; // Removed - functionality integrated into ManagePrefixesPage
 import 'pages/logs_page.dart';
+// Add import for GameListViewPage
 // Import RenamePrefixDialog
 import 'widgets/env_variables_dialog.dart'; // Add import for environment variables dialog
 import 'pages/game_details_page.dart'; // Add import for GameDetailsPage
@@ -378,19 +379,61 @@ class _MainScaffoldState extends State<MainScaffold> {
           onKillProcess: (pfx, exe) async {
             final pid = _runningProcesses[exe.path];
             if (pid != null) {
-              final success = await processService.killProcess(pid);
+              logService.log('Attempting to kill ${exe.name} (PID: $pid)...');
+              
+              // Try graceful termination with process tree killing first
+              bool success = await processService.killProcess(pid, killTree: true);
+              
+              if (!success) {
+                logService.log('Graceful termination failed, trying force kill...', LogLevel.warning);
+                // If graceful kill fails, try force kill
+                success = await processService.killProcess(pid, force: true, killTree: true);
+              }
+              
+              if (!success) {
+                logService.log('Individual process kill failed, trying wine-specific cleanup...', LogLevel.warning);
+                // Last resort: try to kill all wine processes for this prefix
+                success = await processService.killAllWineProcesses(pfx);
+              }
+              
               if (success) {
-                logService.log('Kill signal sent to ${exe.name} (PID: $pid)');
-              } else {
-                logService.log('Failed to send kill signal to ${exe.name} (PID: $pid)', LogLevel.error);
+                logService.log('Successfully terminated ${exe.name} (PID: $pid)');
+                // Remove from tracking immediately
+                setState(() {
+                  _runningProcesses.remove(exe.path);
+                });
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Failed to kill process for ${exe.name}')),
+                    SnackBar(
+                      content: Text('${exe.name} has been terminated'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              } else {
+                logService.log('Failed to kill ${exe.name} (PID: $pid) - all methods exhausted', LogLevel.error);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Failed to kill process for ${exe.name}. Try using system process manager.'),
+                      backgroundColor: Colors.red,
+                      duration: const Duration(seconds: 4),
+                    ),
                   );
                 }
               }
             } else {
-               logService.log('Process for ${exe.name} not found in running list.', LogLevel.warning);
+              logService.log('Process for ${exe.name} not found in running list - attempting wine cleanup...', LogLevel.warning);
+              // Try wine-specific cleanup even without PID tracking
+              final success = await processService.killAllWineProcesses(pfx);
+              if (success && mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Attempted cleanup of wine processes for ${exe.name}'),
+                    backgroundColor: Colors.orange,
+                  ),
+                );
+              }
             }
           },
           runningProcesses: _runningProcesses,
@@ -405,6 +448,58 @@ class _MainScaffoldState extends State<MainScaffold> {
             );
             if (result != null && mounted) {
               await prefixProvider.updatePrefix(pfx.copyWith(environmentVariables: result));
+            }
+          },
+          onKillAllProcesses: (ctx, pfx) async {
+            final confirmed = await showDialog<bool>(
+              context: ctx,
+              builder: (dialogContext) => AlertDialog(
+                title: const Text('Kill All Wine Processes'),
+                content: Text('Kill all Wine/Proton processes for prefix "${pfx.name}"?\n\nThis will terminate all running games and applications in this prefix.'),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(false),
+                    child: const Text('Cancel'),
+                  ),
+                  FilledButton(
+                    style: FilledButton.styleFrom(backgroundColor: Colors.red),
+                    onPressed: () => Navigator.of(dialogContext).pop(true),
+                    child: const Text('Kill All'),
+                  ),
+                ],
+              ),
+            );
+            
+            if (confirmed == true) {
+              logService.log('Attempting to kill all Wine processes for prefix: ${pfx.name}');
+              final success = await processService.killAllWineProcesses(pfx);
+              
+              if (success) {
+                logService.log('Successfully killed all Wine processes for prefix: ${pfx.name}');
+                // Clear tracking for all processes from this prefix
+                setState(() {
+                  _runningProcesses.removeWhere((path, pid) => 
+                    pfx.exeEntries.any((exe) => exe.path == path));
+                });
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Killed all Wine processes for ${pfx.name}'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              } else {
+                logService.log('Failed to kill all Wine processes for prefix: ${pfx.name}', LogLevel.error);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Failed to kill Wine processes for ${pfx.name}'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
             }
           },
         );

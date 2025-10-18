@@ -33,6 +33,7 @@ class ManagePrefixesPage extends StatefulWidget {
   final OnRenamePrefixAction onRenamePrefix;
   final PrefixContextActionCallback onApplyControllerFix;
   final PrefixContextActionCallback onEditEnvVariables;
+  final PrefixContextActionCallback? onKillAllProcesses;
 
   const ManagePrefixesPage({
     super.key,
@@ -51,6 +52,7 @@ class ManagePrefixesPage extends StatefulWidget {
     required this.onRenamePrefix,
     required this.onApplyControllerFix,
     required this.onEditEnvVariables,
+    this.onKillAllProcesses,
   });
 
   @override
@@ -319,6 +321,7 @@ class _ManagePrefixesPageState extends State<ManagePrefixesPage> with SingleTick
                     onExploreHostFiles: widget.onExploreHostFiles,
                     onApplyControllerFix: widget.onApplyControllerFix,
                     onEditEnvVariables: widget.onEditEnvVariables,
+                    onKillAllProcesses: widget.onKillAllProcesses,
                   ),
                   if (prefix.exeEntries.isNotEmpty) ...[
                     const Divider(height: 1, indent: 16, endIndent: 16),

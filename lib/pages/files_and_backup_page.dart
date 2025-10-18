@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/prefix_provider.dart';
-import 'file_manager_page.dart';
+import 'enhanced_file_manager_page.dart';
 import 'backup_manager_page.dart';
 
 class FilesAndBackupPage extends StatefulWidget {
@@ -67,7 +67,7 @@ class _FilesAndBackupPageState extends State<FilesAndBackupPage> with SingleTick
     return Consumer<PrefixProvider>(
       builder: (context, prefixProvider, child) {
         final games = prefixProvider.getAllGamesFromPrefixes();
-        return FileManagerPage(
+        return EnhancedFileManagerPage(
           game: games.isNotEmpty ? games.first : null,
         );
       },

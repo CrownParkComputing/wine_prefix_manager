@@ -106,7 +106,7 @@ class ProcessService {
         try {
           // Extract the game and get the real executable path
           final extractedExePath =
-              await _compressedGameService?.extractGameForLaunch(exe);
+              await _compressedGameService!.extractGameForLaunch(exe);
 
           // Create a temporary ExeEntry for the extracted game
           actualExe = exe.copyWith(
@@ -604,11 +604,24 @@ class ProcessService {
   }
 
   /// Kills a process by its PID.
-  Future<bool> killProcess(int pid) async {
+  /// If [force] is true, uses SIGKILL (-9) instead of SIGTERM (-15)
+  /// If [killTree] is true, kills the entire process tree including children
+  Future<bool> killProcess(int pid, {bool force = false, bool killTree = false}) async {
     try {
+      if (killTree) {
+        return await killProcessTree(pid, force: force);
+      }
+      
       final shell = Shell();
-      // Attempting to kill PID
-      await shell.run('kill $pid');
+      final signal = force ? '-KILL' : '-TERM';
+      // Attempting to kill PID with signal
+      await shell.run('kill $signal $pid');
+      
+      // Wait a moment for graceful termination if using SIGTERM
+      if (!force) {
+        await Future.delayed(const Duration(milliseconds: 500));
+      }
+      
       // Kill command issued for PID
       return true;
     } catch (e) {
@@ -623,6 +636,142 @@ class ProcessService {
         // Process PID likely already terminated
         return true;
       }
+    }
+  }
+
+  /// Kills an entire process tree starting from the given PID.
+  /// This is particularly useful for Wine/Proton processes which spawn multiple children.
+  Future<bool> killProcessTree(int pid, {bool force = false}) async {
+    try {
+      final shell = Shell();
+      
+      // Get all child processes recursively
+      final childPids = await _getChildProcesses(pid);
+      
+      // Kill children first (bottom-up approach)
+      for (final childPid in childPids.reversed) {
+        try {
+          final signal = force ? '-KILL' : '-TERM';
+          await shell.run('kill $signal $childPid');
+        } catch (e) {
+          // Continue killing other children even if one fails
+        }
+      }
+      
+      // Finally kill the parent process
+      final signal = force ? '-KILL' : '-TERM';
+      await shell.run('kill $signal $pid');
+      
+      // Wait for graceful termination if using SIGTERM
+      if (!force) {
+        await Future.delayed(const Duration(milliseconds: 1000));
+        
+        // Check if main process still exists, force kill if needed
+        try {
+          await Process.run('kill', ['-0', pid.toString()]);
+          // Process still exists, force kill it
+          await shell.run('kill -KILL $pid');
+        } catch (e) {
+          // Process is gone, success
+        }
+      }
+      
+      return true;
+    } catch (e) {
+      // Error killing process tree
+      return false;
+    }
+  }
+
+  /// Gets all child process IDs for a given parent PID.
+  Future<List<int>> _getChildProcesses(int parentPid) async {
+    try {
+      // Use pgrep to find child processes
+      final result = await Process.run('pgrep', ['-P', parentPid.toString()]);
+      
+      if (result.exitCode != 0) {
+        return []; // No children found
+      }
+      
+      final childPids = <int>[];
+      final lines = result.stdout.toString().trim().split('\n');
+      
+      for (final line in lines) {
+        if (line.trim().isNotEmpty) {
+          final pid = int.tryParse(line.trim());
+          if (pid != null) {
+            childPids.add(pid);
+            // Recursively get grandchildren
+            final grandchildren = await _getChildProcesses(pid);
+            childPids.addAll(grandchildren);
+          }
+        }
+      }
+      
+      return childPids;
+    } catch (e) {
+      // Error finding child processes, return empty list
+      return [];
+    }
+  }
+
+  /// Kills all Wine/Proton processes for a specific prefix.
+  /// This is useful when normal process tracking fails.
+  Future<bool> killAllWineProcesses(WinePrefix prefix) async {
+    try {
+      final shell = Shell();
+      
+      // Kill wineserver for the specific prefix
+      try {
+        final envShell = Shell(environment: {'WINEPREFIX': prefix.path});
+        await envShell.run('wineserver -k');
+      } catch (e) {
+        // wineserver might not be available or already stopped
+      }
+      
+      // Find and kill wine processes using this prefix
+      final result = await Process.run('ps', ['aux']);
+      if (result.exitCode == 0) {
+        final lines = result.stdout.toString().split('\n');
+        final pidsToKill = <int>[];
+        
+        for (final line in lines) {
+          if (line.contains(prefix.path) && 
+              (line.contains('wine') || line.contains('proton'))) {
+            final parts = line.trim().split(RegExp(r'\s+'));
+            if (parts.length > 1) {
+              final pid = int.tryParse(parts[1]);
+              if (pid != null) {
+                pidsToKill.add(pid);
+              }
+            }
+          }
+        }
+        
+        // Kill found processes
+        for (final pid in pidsToKill) {
+          try {
+            await shell.run('kill -TERM $pid');
+          } catch (e) {
+            // Continue with other processes
+          }
+        }
+        
+        // Wait and force kill remaining processes
+        await Future.delayed(const Duration(seconds: 2));
+        for (final pid in pidsToKill) {
+          try {
+            await Process.run('kill', ['-0', pid.toString()]);
+            await shell.run('kill -KILL $pid');
+          } catch (e) {
+            // Process already gone
+          }
+        }
+      }
+      
+      return true;
+    } catch (e) {
+      return false;
     }
   }
 }

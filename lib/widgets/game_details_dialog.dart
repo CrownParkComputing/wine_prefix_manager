@@ -539,14 +539,11 @@ class _GameDetailsDialogState extends State<GameDetailsDialog>
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(8.0),
                             child: isLocal
-                                ? (path != null
-                                    ? Image.file(File(path),
+                                ? (Image.file(File(path!),
                                         fit: BoxFit.contain,
                                         errorBuilder: (_, __, ___) =>
-                                            const Icon(Icons.broken_image))
-                                    : const Icon(Icons.broken_image))
-                                : (path != null
-                                    ? Image.network(path,
+                                            const Icon(Icons.broken_image)))
+                                : (Image.network(path!,
                                         fit: BoxFit.contain,
                                         loadingBuilder:
                                             (context, child, loadingProgress) {
@@ -558,8 +555,7 @@ class _GameDetailsDialogState extends State<GameDetailsDialog>
                                                   CircularProgressIndicator());
                                         },
                                         errorBuilder: (_, __, ___) =>
-                                            const Icon(Icons.broken_image))
-                                    : const Icon(Icons.broken_image)),
+                                            const Icon(Icons.broken_image))),
                           ),
                         ),
                       );

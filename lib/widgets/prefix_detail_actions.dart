@@ -23,6 +23,7 @@ class PrefixDetailActions extends StatelessWidget {
   final PrefixContextActionCallback onRenamePrefix; // Added callback for rename
   final PrefixContextActionCallback onApplyControllerFix; // Added callback for controller fix
   final PrefixContextActionCallback onEditEnvVariables; // Added callback for environment variables
+  final PrefixContextActionCallback? onKillAllProcesses; // Optional callback for killing all processes
 
   const PrefixDetailActions({
     super.key,
@@ -39,6 +40,7 @@ class PrefixDetailActions extends StatelessWidget {
     required this.onRenamePrefix, // Added rename callback
     required this.onApplyControllerFix, // Added controller fix callback
     required this.onEditEnvVariables, // Added env variables callback
+    this.onKillAllProcesses, // Optional kill all processes callback
   });
 
   @override
@@ -107,6 +109,13 @@ class PrefixDetailActions extends StatelessWidget {
             label: 'Rename Prefix',
             onPressed: () => onRenamePrefix(context, prefix),
             isDestructive: false, 
+          ),
+          ActionButton(
+            icon: Icons.clear_all_outlined,
+            label: 'Kill Wine Processes',
+            tooltip: 'Kill all Wine/Proton processes for this prefix',
+            onPressed: () => onKillAllProcesses?.call(context, prefix),
+            isDestructive: true,
           ),
           ActionButton(
             icon: Icons.delete_forever_outlined,

@@ -38,12 +38,52 @@ class ExecutableListTile extends StatelessWidget {
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          IconButton(
-            icon: Icon(isRunning ? Icons.stop_circle_outlined : Icons.play_circle_outline),
-            tooltip: isRunning ? 'Stop' : 'Run',
-            color: isRunning ? Colors.red : Colors.green,
-            onPressed: () => isRunning ? onKillProcess(prefix, exe) : onRunExe(prefix, exe),
-          ),
+          if (isRunning) 
+            // Show dropdown menu for running processes with kill options
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.stop_circle_outlined, color: Colors.red),
+              tooltip: 'Stop Process',
+              onSelected: (String value) {
+                switch (value) {
+                  case 'graceful':
+                    onKillProcess(prefix, exe);
+                    break;
+                  case 'force':
+                    // This will be handled by the enhanced kill logic in main.dart
+                    onKillProcess(prefix, exe);
+                    break;
+                }
+              },
+              itemBuilder: (BuildContext context) => [
+                const PopupMenuItem<String>(
+                  value: 'graceful',
+                  child: Row(
+                    children: [
+                      Icon(Icons.stop_outlined, size: 18),
+                      SizedBox(width: 8),
+                      Text('Stop Process'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem<String>(
+                  value: 'force',
+                  child: Row(
+                    children: [
+                      Icon(Icons.power_off, size: 18, color: Colors.red),
+                      SizedBox(width: 8),
+                      Text('Force Kill'),
+                    ],
+                  ),
+                ),
+              ],
+            )
+          else
+            IconButton(
+              icon: const Icon(Icons.play_circle_outline),
+              tooltip: 'Run',
+              color: Colors.green,
+              onPressed: () => onRunExe(prefix, exe),
+            ),
           IconButton(
             icon: const Icon(Icons.delete),
             tooltip: 'Delete Executable',
